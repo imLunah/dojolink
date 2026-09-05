@@ -213,6 +213,7 @@ function AddLocationModal({ onClose, onAdded }) {
 function EditLocationModal({ loc, onClose, onSaved }) {
   const [name, setName] = useState(loc.name);
   const [code, setCode] = useState(loc.center_code || '');
+  const [address, setAddress] = useState(loc.address || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -220,9 +221,10 @@ function EditLocationModal({ loc, onClose, onSaved }) {
     e.preventDefault();
     const nextName = name.trim();
     const nextCode = code.trim().toUpperCase();
+    const nextAddress = address.trim();
     if (!nextName) return setError('Name cannot be empty.');
     if (!nextCode) return setError('A center code is required.');
-    if (nextName === loc.name && nextCode === (loc.center_code || '')) return onClose();
+    if (nextName === loc.name && nextCode === (loc.center_code || '') && nextAddress === (loc.address || '')) return onClose();
 
     setSaving(true);
     setError('');
@@ -230,6 +232,9 @@ function EditLocationModal({ loc, onClose, onSaved }) {
       const result = await api.patch(`/admin/locations/${loc.id}`, {
         name: nextName,
         center_code: nextCode,
+        // Always sent, so clearing the box clears the column. The route reads
+        // "key present" as "change it" and a blank string as "remove it".
+        address: nextAddress,
       });
       onSaved(result);
     } catch (err) {
@@ -275,6 +280,25 @@ function EditLocationModal({ loc, onClose, onSaved }) {
               digits.
             </p>
           </div>
+          <div>
+            <label className="block text-ninja-muted text-xs font-ninja font-semibold uppercase tracking-wide mb-1">
+              Address
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              maxLength={200}
+              placeholder="123 Main St, Yorba Linda, CA 92886"
+              autoComplete="street-address"
+              className="w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-lg px-3 py-2 font-ninja text-sm focus:outline-none focus:border-ninja-blue"
+            />
+            <p className="text-ninja-muted font-ninja text-xs mt-1.5">
+              One line, the way you would write it on a flyer. Parents get a
+              Get directions button on an event; without this it searches the
+              center by name instead.
+            </p>
+          </div>
           {error && <p className="text-ninja-red text-xs font-ninja">{error}</p>}
           <div className="flex gap-3">
             <button type="submit" disabled={saving} className="flex-1 bg-ninja-blue text-white font-ninja font-semibold rounded-xl py-2 text-sm hover:opacity-90 disabled:opacity-50 transition-opacity">
@@ -285,6 +309,200 @@ function EditLocationModal({ loc, onClose, onSaved }) {
             </button>
           </div>
         </form>
+      </motion.div>
+    </div>
+  );
+}
+
+function calcAge(birthday) {
+  if (!birthday) return null;
+  const dob = new Date(String(birthday).split('T')[0] + 'T00:00:00');
+  if (Number.isNaN(dob.getTime())) return null;
+  return Math.floor((Date.now() - dob) / (365.25 * 24 * 60 * 60 * 1000));
+}
+
+// Ninjas from other centers on this center's roster.
+//
+// A ninja has a home center and can be shared with others (student_locations).
+// This is where a director pulls one in: search every other center by name,
+// add, and the ninja appears on this center's roster, board and reports while
+// staying exactly where they were everywhere else. Removing here only removes
+// the share; the home center is the only one that can archive them, from the
+// roster page, with its own confirm.
+function SharedNinjasModal({ loc, onClose, onChanged }) {
+  const [shared, setShared] = useState(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/admin/locations/${loc.id}/students/shared`)
+      .then((rows) => { if (!cancelled) setShared(rows); })
+      .catch(() => { if (!cancelled) setShared([]); });
+    return () => { cancelled = true; };
+  }, [loc.id]);
+
+  // Search as they type, but not on every keystroke.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      api.get(`/admin/locations/${loc.id}/students/search?q=${encodeURIComponent(q)}`)
+        .then((rows) => { if (!cancelled) setResults(rows); })
+        .catch(() => { if (!cancelled) setResults([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, loc.id]);
+
+  const add = async (student) => {
+    setBusyId(student.id);
+    setError('');
+    try {
+      const row = await api.post(`/admin/locations/${loc.id}/students`, { studentId: student.id });
+      setShared((prev) => [...(prev || []), row].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+      setResults((prev) => prev.filter((r) => r.id !== student.id));
+      onChanged?.(1);
+    } catch (err) {
+      setError(err?.message || 'Could not add that ninja.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = async (student) => {
+    setBusyId(student.id);
+    setError('');
+    try {
+      await api.delete(`/admin/locations/${loc.id}/students/${student.id}`);
+      setShared((prev) => (prev || []).filter((r) => r.id !== student.id));
+      setConfirmId(null);
+      onChanged?.(-1);
+    } catch (err) {
+      setError(err?.message || 'Could not remove that ninja.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const Row = ({ s, action }) => (
+    <div className="flex items-center gap-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-ninja-navy font-ninja font-semibold text-sm truncate">{s.full_name}</p>
+        <p className="text-ninja-muted font-ninja text-xs truncate">
+          {calcAge(s.birthday) !== null ? `Age ${calcAge(s.birthday)} · ` : ''}
+          Home: {s.home_location_name}
+          {Array.isArray(s.programs) && s.programs.length > 0 ? ` · ${s.programs.join(', ')}` : ''}
+        </p>
+      </div>
+      {action}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto bg-black/40 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
+      >
+        <h2 className="text-ninja-navy font-ninja font-bold text-lg">Ninjas from other centers</h2>
+        <p className="text-ninja-muted font-ninja text-xs mt-1 mb-4">
+          Add a ninja who calls another center home to {loc.name}'s roster. They
+          stay on their home roster too. Removing them here only takes them off
+          {' '}{loc.name}.
+        </p>
+
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search ninjas at other centers by name"
+          autoFocus
+          className="w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-lg px-3 py-2 font-ninja text-sm focus:outline-none focus:border-ninja-blue"
+        />
+
+        {query.trim().length >= 2 && (
+          <div className="mt-2 rounded-xl border border-ninja-border divide-y divide-ninja-border px-3 max-h-56 overflow-y-auto">
+            {searching && results.length === 0 && (
+              <p className="text-ninja-muted font-ninja text-xs py-3">Searching…</p>
+            )}
+            {!searching && results.length === 0 && (
+              <p className="text-ninja-muted font-ninja text-xs py-3">No ninja by that name at another center.</p>
+            )}
+            {results.map((s) => (
+              <Row key={s.id} s={s} action={
+                <button
+                  type="button"
+                  onClick={() => add(s)}
+                  disabled={busyId === s.id}
+                  className="text-xs font-ninja font-semibold bg-ninja-blue text-white rounded-lg px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {busyId === s.id ? 'Adding…' : 'Add'}
+                </button>
+              } />
+            ))}
+          </div>
+        )}
+
+        <div className="mt-5">
+          <p className="text-ninja-muted text-xs font-ninja font-semibold uppercase tracking-wide mb-1">
+            Shared with {loc.name}
+          </p>
+          {shared === null && <p className="text-ninja-muted font-ninja text-xs py-2">Loading…</p>}
+          {shared && shared.length === 0 && (
+            <p className="text-ninja-muted font-ninja text-xs py-2">Nobody from another center yet.</p>
+          )}
+          {shared && shared.length > 0 && (
+            <div className="rounded-xl border border-ninja-border divide-y divide-ninja-border px-3 max-h-64 overflow-y-auto">
+              {shared.map((s) => (
+                <Row key={s.id} s={s} action={
+                  confirmId === s.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => remove(s)}
+                        disabled={busyId === s.id}
+                        className="text-xs font-ninja font-semibold bg-ninja-red text-white rounded-lg px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+                      >
+                        {busyId === s.id ? 'Removing…' : 'Remove'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmId(null)}
+                        className="text-xs font-ninja text-ninja-muted hover:text-ninja-navy px-2 py-1.5"
+                      >
+                        Keep
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(s.id)}
+                      className="text-xs font-ninja text-ninja-muted hover:text-ninja-red transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )
+                } />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <p className="text-ninja-red text-xs font-ninja mt-3">{error}</p>}
+
+        <div className="mt-5">
+          <button type="button" onClick={onClose} className="w-full bg-ninja-bg text-ninja-navy font-ninja font-semibold rounded-xl py-2 text-sm border border-ninja-border hover:bg-ninja-border transition-colors">
+            Done
+          </button>
+        </div>
       </motion.div>
     </div>
   );
@@ -364,6 +582,7 @@ export default function LocationsPage() {
   const [createdData, setCreatedData] = useState(null);
   const [editLoc, setEditLoc] = useState(null);
   const [deleteLoc, setDeleteLoc] = useState(null);
+  const [sharedLoc, setSharedLoc] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
 
   const load = async () => {
@@ -471,6 +690,12 @@ export default function LocationsPage() {
                     >
                       Edit
                     </button>
+                    <button
+                      onClick={() => setSharedLoc(loc)}
+                      className="text-xs font-ninja text-ninja-muted hover:text-ninja-blue transition-colors"
+                    >
+                      Ninjas
+                    </button>
                     {isAdmin && (
                       <>
                         <button
@@ -509,6 +734,15 @@ export default function LocationsPage() {
           onSaved={(updated) => {
             setLocations((prev) => prev.map((l) => l.id === updated.id ? { ...l, ...updated } : l));
             setEditLoc(null);
+          }}
+        />
+      )}
+      {sharedLoc && (
+        <SharedNinjasModal
+          loc={sharedLoc}
+          onClose={() => setSharedLoc(null)}
+          onChanged={(delta) => {
+            setLocations((prev) => prev.map((l) => l.id === sharedLoc.id ? { ...l, student_count: Math.max(0, (l.student_count || 0) + delta) } : l));
           }}
         />
       )}

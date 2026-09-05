@@ -11,18 +11,9 @@ import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR }
 
 
 
-// Type is free text. These are just suggestions + known colors; anything else
-// falls back to a neutral chip. Avoids the pinned program hues (JR purple, VR
-// teal) so calendar chips never read as a program.
-export const TYPE_SUGGESTIONS = ['Game Building', 'Tournament', 'Parents Night', 'Field Trip', 'Holiday'];
-const TYPE_COLOR = {
-  'game building': '#2563eb',
-  'tournament':    '#f59e0b',
-  'parents night': '#ec4899',
-  'field trip':    '#10b981',
-  'holiday':       '#ef4444',
-};
-export const colorFor = (type) => TYPE_COLOR[(type || '').trim().toLowerCase()] || '#64748b';
+// Type suggestions + colors live in lib/eventTypes.js: the parent portal's
+// featured-event banner shares them without pulling this whole calendar in.
+import { TYPE_SUGGESTIONS, colorFor } from '../../lib/eventTypes';
 
 // Birthdays sit on the same grid as events but must not read as one, so they get
 // a tinted chip + cake glyph instead of a solid bar. The ink comes from a custom

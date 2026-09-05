@@ -24,7 +24,7 @@ export const MARKDOWN_COMPONENTS = {
   li: ({ children }) => <li className="leading-relaxed pl-0.5">{children}</li>,
   strong: ({ children }) => <strong className="font-bold text-gray-900 dark:text-white">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
-  a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="underline decoration-amber-400 underline-offset-2">{children}</a>,
+  a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="underline decoration-amber-400 underline-offset-2 hover:opacity-70 transition-opacity">{children}</a>,
   // Drop images entirely. These renderers show untrusted parent-authored notes
   // in staff context — a remote <img> would be a tracking-pixel exfil channel
   // (CSP still allows the *.supabase.co wildcard). Notes are text-only anyway.

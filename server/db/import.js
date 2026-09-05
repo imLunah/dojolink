@@ -4,6 +4,7 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const fs = require('fs');
 const { parse } = require('csv-parse/sync');
 const pool = require('./pool');
+const { addMembership } = require('../lib/studentScope');
 
 const BELT_MAP = {
   'White Belt': 'White',
@@ -74,7 +75,8 @@ async function run() {
 
     // Check if student already exists at this location
     const { rows: existing } = await pool.query(
-      'SELECT id FROM students WHERE LOWER(full_name) = LOWER($1) AND location_id = $2 AND active = true',
+      `SELECT id FROM students WHERE LOWER(full_name) = LOWER($1) AND active = true
+         AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)`,
       [fullName, locationId]
     );
 
@@ -90,6 +92,10 @@ async function run() {
         [fullName, birthday, locationId, parentName || null, parentEmail, parentPhone]
       );
       studentId = inserted[0].id;
+      // Home and membership go in together. Every read of "is this ninja at
+      // this center" asks student_locations alone, so a student row without
+      // the membership row is a ninja who exists on nobody's roster.
+      await addMembership(pool, studentId, locationId);
       added++;
       console.log(`  ADDED: ${fullName} (${program}${beltLevel ? ', ' + beltLevel : ''})`);
     }

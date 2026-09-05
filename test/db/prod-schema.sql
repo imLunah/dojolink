@@ -426,6 +426,43 @@ ALTER SEQUENCE public.curriculum_modules_id_seq OWNED BY public.curriculum_modul
 -- Name: daily_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
+CREATE TABLE public.parent_profiles (
+    id integer NOT NULL,
+    email text NOT NULL,
+    first_name text NOT NULL,
+    last_name text NOT NULL,
+    phone text,
+    relationship text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT parent_profiles_email_lower CHECK ((email = lower(email))),
+    CONSTRAINT parent_profiles_relationship_check CHECK (((relationship IS NULL) OR (relationship = ANY (ARRAY['Mom'::text, 'Dad'::text, 'Guardian'::text, 'Grandparent'::text, 'Other'::text]))))
+);
+
+CREATE SEQUENCE public.parent_profiles_id_seq AS integer START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+ALTER SEQUENCE public.parent_profiles_id_seq OWNED BY public.parent_profiles.id;
+ALTER TABLE ONLY public.parent_profiles ALTER COLUMN id SET DEFAULT nextval('public.parent_profiles_id_seq'::regclass);
+ALTER TABLE ONLY public.parent_profiles ADD CONSTRAINT parent_profiles_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.parent_profiles ADD CONSTRAINT parent_profiles_email_key UNIQUE (email);
+
+
+CREATE TABLE public.account_deletions (
+    id integer NOT NULL,
+    role text NOT NULL,
+    location_id integer,
+    reason text NOT NULL,
+    details text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT account_deletions_role_check CHECK ((role = ANY (ARRAY['parent'::text, 'sensei'::text, 'manager'::text]))),
+    CONSTRAINT account_deletions_reason_check CHECK ((reason = ANY (ARRAY['leaving'::text, 'not_useful'::text, 'privacy'::text, 'broken'::text, 'other'::text])))
+);
+
+CREATE SEQUENCE public.account_deletions_id_seq AS integer START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+ALTER SEQUENCE public.account_deletions_id_seq OWNED BY public.account_deletions.id;
+ALTER TABLE ONLY public.account_deletions ALTER COLUMN id SET DEFAULT nextval('public.account_deletions_id_seq'::regclass);
+ALTER TABLE ONLY public.account_deletions ADD CONSTRAINT account_deletions_pkey PRIMARY KEY (id);
+
+
 CREATE TABLE public.daily_assignments (
     id integer NOT NULL,
     student_id integer NOT NULL,
@@ -434,7 +471,8 @@ CREATE TABLE public.daily_assignments (
     completed boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
     program text,
-    CONSTRAINT daily_assignments_program_check CHECK (((program IS NULL) OR (program = ANY (ARRAY['CREATE'::text, 'Robotics Academy'::text, 'AI Academy'::text, 'JR'::text, 'Silver'::text, 'Gold Unity'::text, 'Gold Godot'::text]))))
+    checked_in_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT daily_assignments_program_check CHECK (((program IS NULL) OR (program = ANY (ARRAY['CREATE'::text, 'Robotics Academy'::text, 'AI Academy'::text, 'JR'::text, 'VR Coding'::text]))))
 );
 
 
@@ -582,7 +620,7 @@ CREATE TABLE public.progress_logs (
     sub_program text,
     module_name text,
     lesson_name text,
-    CONSTRAINT progress_logs_program_check CHECK (((program IS NULL) OR (program = ANY (ARRAY['CREATE'::text, 'Robotics Academy'::text, 'AI Academy'::text, 'JR'::text, 'Silver'::text, 'Gold Unity'::text, 'Gold Godot'::text]))))
+    CONSTRAINT progress_logs_program_check CHECK (((program IS NULL) OR (program = ANY (ARRAY['CREATE'::text, 'Robotics Academy'::text, 'AI Academy'::text, 'JR'::text, 'VR Coding'::text]))))
 );
 
 
@@ -673,7 +711,7 @@ CREATE TABLE public.student_programs (
     last_lesson_name text,
     last_session_date date,
     percent_complete integer DEFAULT 0,
-    CONSTRAINT student_programs_program_check CHECK ((program = ANY (ARRAY['CREATE'::text, 'Robotics Academy'::text, 'AI Academy'::text, 'JR'::text, 'Silver'::text, 'Gold Unity'::text, 'Gold Godot'::text]))),
+    CONSTRAINT student_programs_program_check CHECK ((program = ANY (ARRAY['CREATE'::text, 'Robotics Academy'::text, 'AI Academy'::text, 'JR'::text, 'VR Coding'::text]))),
     CONSTRAINT student_programs_project_status_check CHECK ((project_status = ANY (ARRAY['Started'::text, 'Working On'::text, 'Completed'::text])))
 );
 
@@ -2073,6 +2111,21 @@ ALTER TABLE public.user_locations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 --
+--
+-- Migration 027 (student_locations), appended after the dump was taken so the
+-- test database matches production. Re-dump prod-schema.sql to fold it in.
+--
+CREATE TABLE IF NOT EXISTS public.student_locations (
+    student_id integer NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    location_id integer NOT NULL REFERENCES public.locations(id) ON DELETE CASCADE,
+    added_by integer REFERENCES public.users(id) ON DELETE SET NULL,
+    added_at timestamp with time zone DEFAULT now() NOT NULL,
+    PRIMARY KEY (student_id, location_id)
+);
+CREATE INDEX IF NOT EXISTS idx_student_locations_location ON public.student_locations USING btree (location_id);
+ALTER TABLE public.student_locations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY deny_all ON public.student_locations AS RESTRICTIVE FOR ALL USING (false) WITH CHECK (false);
+
 -- PostgreSQL database dump complete
 --
 

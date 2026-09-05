@@ -1,8 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
+const { deleteStaffUser, DELETION_REASONS, cleanDetails } = require('../lib/deleteStaffUser');
 const router = express.Router();
-const { requireManager, requireSensei } = require('../middleware/auth');
+const { requireAuth, requireManager, requireSensei } = require('../middleware/auth');
 
 // Membership = the centers a user belongs to: their home (users.location_id) plus any
 // user_locations rows. Backfill guarantees the home row exists, but we union home in
@@ -34,6 +35,63 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test', // integration tests log in many times from one IP
   message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+});
+
+// POST /api/auth/delete-account — a staff member deletes their own account.
+//
+// Username and password again, typed, because a signed-in session is not the
+// same as the person being sure: a shared tablet left open must not be able
+// to erase someone. Admin accounts are refused here; an admin deleting
+// themselves could take the last key to the system with them. The deletion
+// itself is the director's permanent delete (deleteStaffUser), so a ninja's
+// logs survive with "Deleted user" as the author, and the session dies with
+// the row.
+const deleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many attempts. Try again in 15 minutes.' },
+});
+router.post('/delete-account', requireAuth, deleteLimiter, async (req, res) => {
+  const pool = req.app.get('db');
+  const { username, password, reason, details } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'Enter your username and password to confirm.' });
+  if (!DELETION_REASONS.includes(reason)) return res.status(400).json({ error: 'Choose a reason.' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, username, role, location_id, password_hash FROM users WHERE id = $1',
+      [req.session.userId]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'Account not found' });
+    if (user.role === 'admin') return res.status(403).json({ error: "Admin accounts can't be deleted from here." });
+    const sameUser = String(username).trim().toLowerCase() === String(user.username).toLowerCase();
+    const match = sameUser && await bcrypt.compare(String(password), user.password_hash);
+    if (!match) return res.status(401).json({ error: "That username and password don't match this account." });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'INSERT INTO account_deletions (role, location_id, reason, details) VALUES ($1, $2, $3, $4)',
+        [user.role, user.location_id, reason, cleanDetails(details)]
+      );
+      await deleteStaffUser(client, user.id);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    req.session.destroy(() => res.json({ ok: true }));
+  } catch (err) {
+    console.error('Delete account error:', err);
+    res.status(500).json({ error: 'Failed to delete your account' });
+  }
 });
 
 // POST /api/auth/login

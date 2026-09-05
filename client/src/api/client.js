@@ -12,7 +12,11 @@ async function request(path, options = {}) {
   });
   if (!res.ok) {
     if (res.status === 401 && !SILENT_401_PATHS.includes(path)) {
-      window.dispatchEvent(new CustomEvent('session_expired'));
+      // The path rides along because both shells listen on this one event and
+      // a person can hold BOTH sessions at once — a director is also a parent.
+      // Without it, a parent-side 401 raises the staff modal over the parent
+      // portal, and the button on it signs out the wrong account.
+      window.dispatchEvent(new CustomEvent('session_expired', { detail: { path } }));
     }
     const err = await res.json().catch(() => ({ error: res.statusText }));
     const error = new Error(err.error || 'Request failed');

@@ -53,9 +53,6 @@ const PROGRAMS = [
   'AI Academy',
   'JR',
   'VR Coding',
-  'Silver',
-  'Gold Unity',
-  'Gold Godot',
 ];
 
 // Raised when the upstream session is no longer good. Callers turn this into a

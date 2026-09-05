@@ -19,17 +19,26 @@ export const BELTS = [
 
 export const PROJECTS = ['Build 1', 'Build 2', 'Build 3', 'Build 4', 'Build 5', 'Solve 1', 'Solve 2', 'Solve 3', 'Solve 4', 'Solve 5', 'Adventure'];
 export const STATUSES = ['Started', 'Working On', 'Completed'];
-export const PROGRAMS = ['CREATE', 'Robotics Academy', 'AI Academy', 'JR', 'VR Coding', 'Silver', 'Gold Unity', 'Gold Godot'];
+// The programs a ninja can be enrolled in.
+//
+// Silver, Gold Unity and Gold Godot were here and are gone (session 49). They
+// were the advanced tracks as MEMBERSHIPS, and they duplicated the top of the
+// CREATE ladder, which already runs Bronze, Silver, Platinum and Gold as belts
+// with their own projects. Nobody was ever enrolled in any of the three except
+// one test record. Note that `Silver` remains a BELT in BELTS above and 17
+// levels of it are seeded in `server/db/seed_belt_projects.js`: what was
+// removed is the program of the same name, not the rank.
+export const PROGRAMS = ['CREATE', 'Robotics Academy', 'AI Academy', 'JR', 'VR Coding'];
 
 export const PROGRAM_LOGOS = {
   'CREATE':           '/programs/create_logo.webp',
   'JR':               '/programs/jr_logo.webp',
-  'Robotics Academy': '/programs/robotics_logo.webp',
-  'AI Academy':       '/programs/ai_logo.webp',
+  // PNG, not webp, and not by preference: these two were recut from the
+  // official lockups (badge only, wordmark dropped) and there is no webp
+  // encoder on the machine that cut them. Convert whenever one is to hand.
+  'Robotics Academy': '/programs/robotics_logo.png',
+  'AI Academy':       '/programs/ai_logo.png',
   'VR Coding':        '/programs/vr_coding_logo.webp',
-  'Silver':           '/programs/silver_logo.webp',
-  'Gold Unity':       '/programs/gold_unity_logo.webp',
-  'Gold Godot':       '/programs/gold_godot_logo.webp',
 };
 
 // Wide banner art for the programs that have it. Anything absent falls back to

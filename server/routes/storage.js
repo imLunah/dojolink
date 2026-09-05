@@ -50,6 +50,23 @@ router.post('/club-cover/:clubId', requireManager, requireOwnLocation, async (re
   }
 });
 
+// POST /api/storage/event-image — authorize a banner image upload for an
+// event listing. Pathed by location, not listing id, so the image can be
+// uploaded before the listing exists; the attach happens on
+// PATCH /api/event-listings/:id/image, which enforces the same prefix.
+router.post('/event-image', requireManager, requireOwnLocation, async (req, res) => {
+  if (!guard(req, res)) return;
+  const ext = IMAGE_EXT[req.body?.contentType];
+  if (!ext) return res.status(400).json({ error: 'Only image files are allowed.' });
+  try {
+    const path = `event-listings/${req.session.activeLocationId}/${Date.now()}-${rand()}.${ext}`;
+    res.json({ bucket: BUCKET, ...(await storage.createSignedUploadUrl(BUCKET, path)) });
+  } catch (err) {
+    console.error('Event image upload-url error:', err);
+    res.status(500).json({ error: 'Failed to prepare upload' });
+  }
+});
+
 // POST /api/storage/club-resource — authorize a club resource file upload.
 router.post('/club-resource', requireSensei, requireOwnLocation, async (req, res) => {
   if (!guard(req, res)) return;

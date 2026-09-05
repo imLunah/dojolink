@@ -12,7 +12,7 @@ router.get('/overview', requireManager, async (req, res) => {
       pool.query(`
         SELECT COUNT(*)::int AS count
         FROM students s
-        WHERE s.location_id = $1 AND s.active = true
+        WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1) AND s.active = true
       `, [locationId]),
 
       // Students per program
@@ -20,7 +20,7 @@ router.get('/overview', requireManager, async (req, res) => {
         SELECT sp.program, COUNT(DISTINCT sp.student_id)::int AS count
         FROM student_programs sp
         JOIN students s ON sp.student_id = s.id
-        WHERE s.location_id = $1 AND s.active = true
+        WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1) AND s.active = true
         GROUP BY sp.program
         ORDER BY sp.program ASC
       `, [locationId]),
@@ -30,7 +30,7 @@ router.get('/overview', requireManager, async (req, res) => {
         SELECT sp.belt_level, COUNT(*)::int AS count
         FROM student_programs sp
         JOIN students s ON sp.student_id = s.id
-        WHERE s.location_id = $1 AND s.active = true AND sp.program = 'CREATE' AND sp.belt_level IS NOT NULL
+        WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1) AND s.active = true AND sp.program = 'CREATE' AND sp.belt_level IS NOT NULL
         GROUP BY sp.belt_level
         ORDER BY sp.belt_level ASC
       `, [locationId]),
@@ -46,7 +46,7 @@ router.get('/overview', requireManager, async (req, res) => {
                     WHERE ca.student_id = s.id)
                ) AS last_session
         FROM students s
-        WHERE s.location_id = $1 AND s.active = true
+        WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1) AND s.active = true
           AND NOT EXISTS (
             SELECT 1 FROM progress_logs pl
             WHERE pl.student_id = s.id AND pl.session_date >= CURRENT_DATE - INTERVAL '30 days'
@@ -69,7 +69,7 @@ router.get('/overview', requireManager, async (req, res) => {
         -- LEFT, so a belt-up logged by someone who has since been deleted still
         -- appears. An inner join would drop the advancement, not just the name.
         LEFT JOIN users u ON pl.sensei_id = u.id
-        WHERE s.location_id = $1
+        WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1)
           AND pl.belt_level_at IN ('White','Yellow','Orange','Green','Blue','Purple','Brown','Red','Black')
           AND pl.session_date >= CURRENT_DATE - INTERVAL '30 days'
         ORDER BY pl.student_id, pl.program, pl.belt_level_at, pl.session_date DESC
@@ -106,7 +106,7 @@ router.get('/attendance', requireManager, async (req, res) => {
              COUNT(DISTINCT da.student_id)::int AS count
       FROM daily_assignments da
       JOIN students s ON da.student_id = s.id
-      WHERE s.location_id = $1
+      WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1)
         AND da.session_date <= CURRENT_DATE
         ${all ? '' : 'AND da.session_date >= CURRENT_DATE - ($2::int - 1)'}
       GROUP BY da.session_date

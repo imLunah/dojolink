@@ -362,11 +362,7 @@ function DesktopBeltJourney({ enrollment }) {
                 />
               )}
               <div className="flex-shrink-0" style={{ width: size, height: size }}>
-                <img
-                  src={`/belts/belt-${b.name.toLowerCase()}.png`}
-                  alt={b.name}
-                  className={`w-full h-full object-contain ${!isPast && !isCurrent ? 'opacity-25 grayscale' : ''}`}
-                />
+                <BeltIcon belt={b.name} dimmed={!isPast && !isCurrent} className="w-full h-full" style={{ width: '100%', height: '100%' }} />
               </div>
             </React.Fragment>
           );

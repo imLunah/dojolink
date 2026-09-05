@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DojoLink | Dojo management for staff and parents</title>
+    <title>DojoLink</title>
     <meta name="description" content="Private studio management app. Staff check in ninjas, track belt progress, and run clubs. Parents follow their child's journey. Sign in required." />
     <link rel="canonical" href="https://www.dojolink.app/" />
     <link rel="icon" type="image/svg+xml" href="/logo/favicon.svg" />
@@ -43,7 +43,7 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://www.dojolink.app/og-preview.jpg" />
-    <script>try{if(localStorage.getItem('dj-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+    <script>try{if(localStorage.getItem('dj-theme')==='dark'&&location.pathname.indexOf('/parent')!==0)document.documentElement.classList.add('dark')}catch(e){}</script>
   </head>
   <body>
     <div id="root"></div>

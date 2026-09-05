@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
+const { addMembership } = require('../lib/studentScope');
 
 // Experimental: read today's booked roster out of the studio management system
 // so the check-in board starts populated.
@@ -809,7 +810,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
               ) AS programs
          FROM students s
          LEFT JOIN student_programs sp ON sp.student_id = s.id
-        WHERE s.location_id = $1 AND s.active = true
+        WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1) AND s.active = true
         GROUP BY s.id`,
       [locationId]
     );
@@ -961,6 +962,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
             row._details.parent_phone,
           ]
         );
+        await addMembership(client, inserted[0].id, locationId, req.session.userId);
         added += 1;
 
         // A ninja with no resolvable program is still worth having. The director
@@ -996,7 +998,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
                   parent_name = COALESCE(NULLIF(parent_name, ''), $3),
                   parent_email = COALESCE(NULLIF(parent_email, ''), $4),
                   parent_phone = COALESCE(NULLIF(parent_phone, ''), $5)
-            WHERE id = $1 AND location_id = $6`,
+            WHERE id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $6)`,
           [row.id, v.birthday || null, v.parent_name || null, v.parent_email || null, v.parent_phone || null, locationId]
         );
         filled += 1;
@@ -1021,7 +1023,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
         if (!row.participant_id || !row.id) continue;
         const { rowCount } = await client.query(
           `UPDATE students SET mystudio_participant_id = $1
-            WHERE id = $2 AND location_id = $3 AND mystudio_participant_id IS DISTINCT FROM $1`,
+            WHERE id = $2 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $3) AND mystudio_participant_id IS DISTINCT FROM $1`,
           [row.participant_id, row.id, locationId]
         );
         linkedCount += rowCount;
@@ -1064,7 +1066,7 @@ router.post('/link', requireManager, requireOwnLocation, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `UPDATE students SET mystudio_participant_id = $1
-        WHERE id = $2 AND location_id = $3 AND active = true`,
+        WHERE id = $2 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $3) AND active = true`,
       [participantId, studentId, req.session.activeLocationId]
     );
     if (!rowCount) return res.status(404).json({ error: 'Ninja not found at this location' });

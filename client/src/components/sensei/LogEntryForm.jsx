@@ -6,10 +6,14 @@ import Button from '../ui/Button';
 import LazyMarkdownEditor from '../shared/LazyMarkdownEditor';
 import BeltProgressFields from './BeltProgressFields';
 import { useCurriculum } from '../../context/CurriculumContext';
-import { STATUSES, createProjectOptions } from '../../utils/beltConfig';
+import { BELTS, STATUSES, UPPER_BELTS, createProjectOptions, getLevels } from '../../utils/beltConfig';
 import { createEntryFromLog, lessonEntryFromLog, logPayload } from '../../lib/logDraft';
 
-const emptyCreateEntry = { project: '', status: '', isCustom: false, customProject: '' };
+// `belt` and `sublevel` are this row's own scope, blank while it follows the
+// belt and level chosen above the rows. A ninja who finished a level, or a
+// whole belt, and carried on in the same class fills them in on the second
+// project rather than needing a second check-in to record it.
+const emptyCreateEntry = { project: '', status: '', isCustom: false, customProject: '', belt: '', sublevel: '' };
 const emptyEntry = { subProgram: '', moduleName: '', lessonName: '', customModule: '', customLesson: '', status: '' };
 
 // Stable row ids so React keys survive add/remove (index keys bleed row DOM state).
@@ -24,9 +28,38 @@ function getSectionLabel(index, total) {
   return index % 2 === 0 ? `Build ${num}` : `Solve ${num}`;
 }
 
+const SCOPE_SELECT =
+  'w-full bg-white border border-ninja-border text-ninja-navy rounded-lg px-3 py-1.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue transition-colors';
+
 export function CreateProjectRow({ entry, index, total, beltLevel, beltSublevel, beltProjects, onChange, onRemove }) {
+  // The belt and level this row is on. A row that has taken a belt of its own
+  // does NOT inherit the session's level: level 3 of Brown means nothing on
+  // Bronze, and inheriting it would file the project under a level the belt
+  // does not have.
+  const sessionSublevel = beltSublevel ? String(beltSublevel) : '';
+  const rowBelt = entry.belt || beltLevel;
+  const rowSublevel = entry.belt ? (entry.sublevel || '') : (entry.sublevel || sessionSublevel);
+
   const { options: projectOptions, needsSublevel, showLabels } =
-    createProjectOptions({ beltLevel, beltSublevel, beltProjects });
+    createProjectOptions({ beltLevel: rowBelt, beltSublevel: rowSublevel, beltProjects });
+
+  // Black and the bonus tracks name their projects outright, so they get no
+  // level step here for the same reason the session's own fields skip it.
+  const scopeLevels = UPPER_BELTS.includes(rowBelt) ? [] : getLevels(rowBelt);
+  // The first project is the session's own, described by the fields above it.
+  // Added ones carry their own scope. A row that already has one keeps the
+  // fields even if it becomes the first, so an override can never go silent.
+  const showScope = index > 0 || !!(entry.belt || entry.sublevel);
+
+  // Changing scope invalidates whatever project was under it.
+  const setScope = (field, value) => {
+    if (value === (field === 'belt' ? rowBelt : rowSublevel)) return;
+    onChange(field, value);
+    if (field === 'belt') onChange('sublevel', '');
+    onChange('project', '');
+    onChange('isCustom', false);
+    onChange('customProject', '');
+  };
 
   return (
     <div className="relative border border-ninja-border rounded-xl p-4 bg-ninja-bg space-y-3">
@@ -46,12 +79,43 @@ export function CreateProjectRow({ entry, index, total, beltLevel, beltSublevel,
         </div>
       )}
 
+      {showScope && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-ninja-muted text-xs font-ninja font-semibold mb-1 uppercase tracking-wide">
+              Belt
+            </label>
+            <select value={rowBelt} onChange={(e) => setScope('belt', e.target.value)} className={SCOPE_SELECT}>
+              {/* Clearing the override puts the row back on the session's own
+                  belt, which is the way out of a wrong pick. */}
+              <option value="">{beltLevel ? 'Same as above' : 'Select belt...'}</option>
+              {BELTS.map((b) => (
+                <option key={b.name} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          {scopeLevels.length > 0 && (
+            <div>
+              <label className="block text-ninja-muted text-xs font-ninja font-semibold mb-1 uppercase tracking-wide">
+                Level
+              </label>
+              <select value={rowSublevel} onChange={(e) => setScope('sublevel', e.target.value)} className={SCOPE_SELECT}>
+                <option value="">Select level...</option>
+                {scopeLevels.map((lv) => (
+                  <option key={lv} value={String(lv)}>Level {lv}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
         <label className="block text-ninja-muted text-sm font-ninja font-semibold mb-1 uppercase tracking-wide">
           Project
         </label>
         {needsSublevel ? (
-          <p className="text-ninja-muted font-ninja text-sm italic">Select a sublevel above to see projects.</p>
+          <p className="text-ninja-muted font-ninja text-sm italic">Select a level above to see projects.</p>
         ) : entry.isCustom ? (
           <div className="space-y-1.5">
             <input
@@ -308,6 +372,14 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // The note editor takes its content when it mounts and never reads the prop
+  // again, so clearing `notes` in state leaves the old words on screen: the
+  // class you switched away from writing its notes into the one you switched
+  // to, and a form that reads as filled in while it holds nothing. Bumping
+  // this remounts the editor, which is the only way to hand it new content.
+  const [notesKey, setNotesKey] = useState(0);
+  const resetNotes = (value) => { setNotes(value); setNotesKey((n) => n + 1); };
+
   const isCreate = program === 'CREATE';
   // An edit stays on the day it was logged; only a new session takes the
   // pending check-in's date.
@@ -318,17 +390,18 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
 
   // Switching class, or switching which log is being edited, starts over.
   //
-  // During render rather than in an effect: the note editor reads its content
-  // once when it mounts and never looks at the prop again, so a seed that
-  // arrives an effect later leaves the previous session's notes sitting in a
-  // form that has otherwise moved on. Guarded by what is being logged, so
-  // nothing clobbers what is being typed.
+  // During render rather than in an effect, so no frame is ever painted with a
+  // half-swapped form. Handing the note editor its new content takes more than
+  // a changed prop, which is what resetNotes is for. Guarded by what is being
+  // logged, so nothing clobbers what is being typed.
   const seedKey = `${program}:${editLog?.id ?? 'new'}`;
   const [seeded, setSeeded] = useState(seedKey);
   if (seedKey !== seeded) {
     setSeeded(seedKey);
     const next = seed();
-    setNotes(next.notes);
+    // A different class is a different note. Switching program starts one
+    // afresh rather than carrying the last one across.
+    resetNotes(next.notes);
     setBeltLevel(next.beltLevel);
     setBeltSublevel(next.beltSublevel);
     setCreateEntries(next.createEntries);
@@ -359,8 +432,11 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
   const addCreateEntry = () => setCreateEntries((prev) => [...prev, newCreateEntry()]);
   const removeCreateEntry = (index) => setCreateEntries((prev) => prev.filter((_, i) => i !== index));
 
+  // Changing the session's belt or level resets the rows, overrides included:
+  // a second project scoped to the belt they were on is not the one they are on
+  // now, and leaving it behind would attach it to a session it never belonged to.
   const handleBeltClearProjects = () => {
-    setCreateEntries((prev) => prev.map((e) => ({ ...e, project: '', isCustom: false, customProject: '' })));
+    setCreateEntries((prev) => prev.map((e) => ({ ...e, project: '', isCustom: false, customProject: '', belt: '', sublevel: '' })));
   };
 
   const handleSubmit = async (e) => {
@@ -404,10 +480,19 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
       if (isCreate) {
         const filledCreateEntries = createEntries
           .filter((e) => e.isCustom ? e.customProject : e.project)
-          .map((e) => ({
-            project_at: e.isCustom ? (e.customProject || null) : (e.project || null),
-            status: e.status || null,
-          }));
+          .map((e) => {
+            // Each project is written at the belt and level it was worked on,
+            // so a session that crossed either boundary reads back as what
+            // happened instead of all of it being filed under one snapshot.
+            const belt = e.belt || beltLevel;
+            const sub = e.belt ? e.sublevel : (e.sublevel || beltSublevel);
+            return {
+              project_at: e.isCustom ? (e.customProject || null) : (e.project || null),
+              status: e.status || null,
+              belt_level_at: belt || null,
+              belt_sublevel_at: sub ? parseInt(sub) : null,
+            };
+          });
         const lastCE = filledCreateEntries[filledCreateEntries.length - 1];
 
         payload = {
@@ -415,8 +500,11 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
           program,
           session_date: sessionDate,
           notes: notes.trim(),
-          belt_level_at: beltLevel || null,
-          belt_sublevel_at: beltSublevel ? parseInt(beltSublevel) : null,
+          // Where the ninja is left standing, which is the last project written:
+          // the same rule the project and status already follow, so the belt,
+          // the level and the project cannot disagree about where they got to.
+          belt_level_at: lastCE ? lastCE.belt_level_at : (beltLevel || null),
+          belt_sublevel_at: lastCE ? lastCE.belt_sublevel_at : (beltSublevel ? parseInt(beltSublevel) : null),
           project_at: lastCE?.project_at || null,
           status_at: lastCE?.status || null,
           update_student: true,
@@ -457,7 +545,7 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
 
       const log = await api.post('/progress', payload);
       setSuccess(true);
-      setNotes('');
+      resetNotes('');
       setLessonEntries([newLessonEntry()]);
       setCreateEntries([newCreateEntry()]);
       onLogged && onLogged(log);
@@ -543,6 +631,7 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
           Session Notes *
         </label>
         <LazyMarkdownEditor
+          key={notesKey}
           value={notes}
           onChange={setNotes}
           placeholder="What did the ninja work on today? Any breakthroughs or challenges?"

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { PRESET_AVATARS } from '../lib/avatars';
+import StaffBadge from '../components/shared/StaffBadge';
 
 // First-run onboarding for a brand-new account (must_reset_password = true).
 // Flow: Welcome → confirm name → pick avatar → set username + password → hand off.
@@ -63,6 +64,21 @@ export default function WelcomePage() {
   const fullName = `${first.trim()} ${last.trim()}`.trim();
   const firstName = first.trim() || 'there';
 
+  // What the badge prints. It follows the form live: the name as it is typed,
+  // the avatar as it is picked, and on the credentials step the card turns
+  // over to print the username on the back.
+  const roleLabel = user?.role === 'manager' ? 'Director' : user?.role === 'admin' ? 'Admin' : 'Sensei';
+  const badge = (
+    <StaffBadge
+      name={fullName}
+      username={username}
+      avatar={avatar}
+      role={roleLabel}
+      center={user?.activeLocation?.name}
+      side={step === 3 ? 'back' : 'front'}
+    />
+  );
+
   const pwChecks = useMemo(() => ({
     len: password.length >= 6,
     upper: /[A-Z]/.test(password),
@@ -119,7 +135,14 @@ export default function WelcomePage() {
       {/* Dark scrim so dark-theme text stays legible over the bright scene */}
       <div className="absolute inset-0 bg-gradient-to-b from-ninja-bg/70 via-ninja-bg/85 to-ninja-bg lg:from-ninja-bg/60 lg:via-ninja-bg/70 lg:to-ninja-bg/85" />
 
-      <div className="relative flex-1 lg:flex-none flex flex-col max-w-md w-full mx-auto px-6 pt-[max(env(safe-area-inset-top),28px)] pb-[max(env(safe-area-inset-bottom),28px)] lg:my-10 lg:px-10 lg:py-10 lg:rounded-3xl lg:border lg:border-ninja-border lg:bg-ninja-bg/75 lg:backdrop-blur-xl lg:shadow-2xl">
+      <div className="relative flex-1 lg:flex-none flex flex-col max-w-md lg:max-w-4xl w-full mx-auto px-6 pt-[max(env(safe-area-inset-top),28px)] pb-[max(env(safe-area-inset-bottom),28px)] lg:my-10 lg:px-10 lg:py-10 lg:rounded-3xl lg:border lg:border-ninja-border lg:bg-ninja-bg/75 lg:backdrop-blur-xl lg:shadow-2xl lg:grid lg:grid-cols-[380px,minmax(0,1fr)] lg:gap-10 lg:items-center">
+        {/* The badge. Desktop keeps it beside every step; on the phone a
+            smaller one sits above the form once there is something to print. */}
+        <div className="hidden lg:flex items-center justify-center">
+          {badge}
+        </div>
+
+        <div className="flex flex-col flex-1 min-h-0 lg:flex-none">
         {/* Progress */}
         <div className="flex items-center gap-1.5 py-2">
           {STEPS.map((stepName, i) => (
@@ -131,6 +154,24 @@ export default function WelcomePage() {
             />
           ))}
         </div>
+
+        {/* Phone: the badge appears where there is room for it. The name-edit
+            and credentials forms bring the keyboard up under a fixed-height
+            shell, and a card plus a keyboard plus three inputs does not fit —
+            desktop keeps the badge through every step, including the flip. */}
+        {step > 0 && step < 3 && !editingName && (
+          <div className="lg:hidden flex justify-center">
+            <StaffBadge
+              name={fullName}
+              username={username}
+              avatar={avatar}
+              role={roleLabel}
+              center={user?.activeLocation?.name}
+              side={step === 3 ? 'back' : 'front'}
+              scale={0.42}
+            />
+          </div>
+        )}
 
         <div className="flex-1 min-h-0 lg:flex-none lg:h-[460px] relative overflow-hidden">
           <AnimatePresence mode="popLayout" custom={dir} initial={false}>
@@ -376,6 +417,7 @@ export default function WelcomePage() {
               {saving ? 'Setting up…' : 'Finish setup'}
             </motion.button>
           )}
+        </div>
         </div>
       </div>
     </div>

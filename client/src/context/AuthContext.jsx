@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { invalidateCurriculumCache } from './CurriculumContext';
-import ModalPortal from '../components/ui/ModalPortal';
+import SessionTimeoutModal from '../components/ui/SessionTimeoutModal';
 
 export const AuthContext = createContext(null);
 
@@ -35,9 +35,12 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Listen for 401s fired by api/client.js — only show modal if already logged in
+  // Listen for 401s fired by api/client.js — only show modal if already logged
+  // in, and only for a request that was on the staff side. A parent-portal 401
+  // is the parent session dying, not this one.
   useEffect(() => {
-    const handler = () => {
+    const handler = (e) => {
+      if (String(e?.detail?.path || '').startsWith('/parent/')) return;
       if (user) setSessionExpired(true);
     };
     window.addEventListener('session_expired', handler);
@@ -83,25 +86,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-function SessionTimeoutModal({ onDismiss }) {
-  return (
-    <ModalPortal><div className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center p-4 overflow-y-auto bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
-        <div className="text-4xl mb-3">⏱️</div>
-        <h2 className="text-lg font-bold font-ninja text-ninja-navy mb-2">Session Timed Out</h2>
-        <p className="text-ninja-muted font-ninja text-sm leading-relaxed mb-5">
-          Your session has expired. Please sign in again to continue.
-        </p>
-        <button
-          onClick={onDismiss}
-          className="w-full bg-ninja-blue hover:opacity-90 text-white font-ninja font-bold py-2.5 rounded-xl transition-opacity"
-        >
-          Sign In Again
-        </button>
-      </div>
-    </div></ModalPortal>
-  );
-}
 
 export function useAuth() {
   return useContext(AuthContext);

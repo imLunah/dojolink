@@ -18,6 +18,7 @@ import Layout from '../components/layout/Layout';
 import Button from '../components/ui/Button';
 import CropModal from '../components/ui/CropModal';
 import LazyMarkdownEditor from '../components/shared/LazyMarkdownEditor';
+import Linkify from '../components/shared/Linkify';
 import { Pin, MARKDOWN_COMPONENTS } from '../components/shared/PinnedNote';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -176,7 +177,7 @@ function SessionComment({ comment }) {
     <div className="flex gap-2">
       <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
       <div className="min-w-0">
-        <p className="text-ninja-navy font-ninja text-sm break-words">{comment.body}</p>
+        <p className="text-ninja-navy font-ninja text-sm break-words"><Linkify>{comment.body}</Linkify></p>
         <p className="text-ninja-muted font-ninja text-xs mt-0.5">
           {authorName(comment.user_name)} · {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </p>

@@ -6,7 +6,7 @@ import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
 import { api } from '../../api/client';
 import { BELTS, PROGRAM_LOGOS } from '../../utils/beltConfig';
 import { formatDate } from '../../utils/dateUtils';
-import BeltIcon from '../../components/ui/BeltIcon';
+import BeltIcon, { beltIconSrc } from '../../components/ui/BeltIcon';
 import { CARD } from '../../lib/surfaces';
 import { authorName } from '../../lib/authors';
 import { SkeletonCards } from '../../components/ui/Skeleton';
@@ -19,9 +19,7 @@ const ENROLLMENT_COLORS = { CREATE: '#006ADD', 'Robotics Academy': '#7c3aed', 'A
 
 // Same files BeltIcon serves. An SVG <image> inside the chart can't mount a
 // React component, so the axis ticks need the path itself.
-const BELT_IMAGES = Object.fromEntries(
-  BELT_ORDER.map((name) => [name, `/belts/belt-${name.toLowerCase()}.png`])
-);
+const BELT_IMAGES = Object.fromEntries(BELT_ORDER.map((name) => [name, beltIconSrc(name)]));
 
 function StatCard({ label, value, sub }) {
   return (

@@ -17,13 +17,14 @@ import { ReactionPicker, ReactionChips, RowActions, StripButton, IN_STRIP_MENU, 
 import LazyMarkdownEditor from './LazyMarkdownEditor';
 import MarkdownView from './MarkdownView';
 import { authorName } from '../../lib/authors';
+import Linkify from './Linkify';
 
 function LogComment({ comment }) {
   return (
     <div className="flex gap-2 mt-2">
       <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
       <div>
-        <p className="text-ninja-navy font-ninja text-sm">{comment.body}</p>
+        <p className="text-ninja-navy font-ninja text-sm"><Linkify>{comment.body}</Linkify></p>
         <p className="text-ninja-muted font-ninja text-xs mt-0.5">
           {authorName(comment.user_name)} · {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </p>
@@ -316,6 +317,31 @@ function CommentBox({ logId, onAdded, onClose }) {
 
 // `enrolledPrograms` (names) lets a log be moved to another of the ninja's
 // programs; without it the editor offers only the program the log already has.
+// Two projects worked on in one sitting are one session with one note, not two
+// copies of it. Rows are gathered into the course they belong to — the program,
+// and the course inside it where a program has them — and the note is printed
+// once, under the last line of its group.
+//
+// CREATE is one course: a session that carried a ninja from Brown into Red is
+// still one class and still one note. The note itself is part of the key, so a
+// genuinely separate session logged the same day keeps its own, and so does a
+// line whose note gets edited afterwards. The sensei is in the key too, because
+// two of them logging the same course is two sessions.
+const noteKey = (log) =>
+  [log.program || '', log.sub_program || '', log.sensei_id ?? '', log.notes || ''].join('\u001f');
+
+// Which lines open and close a group. Only ADJACENT lines are gathered: rows
+// written by one submission arrive together (one transaction, one created_at),
+// and anything that lands between them came from somewhere else and is not part
+// of the same session.
+function groupEdges(dayLogs) {
+  const keys = dayLogs.map(noteKey);
+  return new Map(dayLogs.map((log, i) => [log.id, {
+    startsGroup: i === 0 || keys[i - 1] !== keys[i],
+    endsGroup: i === dayLogs.length - 1 || keys[i + 1] !== keys[i],
+  }]));
+}
+
 export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpdated, onLogDeleted }) {
   const { user, isReadOnly } = useAuth();
   const isManager = ['manager', 'admin'].includes(user?.role);
@@ -454,6 +480,7 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
           // per-entry byline and printing nothing at all.
           const names = dayLogs.map((l) => authorName(l.sensei_name));
           const sharedSensei = names.every((n) => n === names[0]) ? names[0] : null;
+          const edges = groupEdges(dayLogs);
 
           return (
             // No padding on the card itself: the entries own it, so an entry's
@@ -473,6 +500,7 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
               <div className="pb-1">
                 {dayLogs.map((log, i) => {
                   const allComments = [...(log.comments || []), ...(localComments[log.id] || [])];
+                  const edge = edges.get(log.id);
                   const isEditing = editingId === log.id;
                   const isConfirmingDelete = confirmDeleteId === log.id;
                   const isReplying = replyingId === log.id;
@@ -480,15 +508,19 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
                   const canEdit = !isReadOnly && (isManager || log.sensei_id === user?.id);
 
                   return (
-                    // The tint runs the full width of the card and the full
-                    // height of the entry, so the whole session lights up as one
-                    // object under the pointer. It is an alpha over whatever is
-                    // behind it rather than a bg-* swap that the dark overrides
-                    // would fight.
+                    // The tint runs the full width of the card, so a line
+                    // lights up as one object under the pointer and it is the
+                    // line the action strip belongs to. It is an alpha over
+                    // whatever is behind it rather than a bg-* swap that the
+                    // dark overrides would fight.
+                    //
+                    // The padding and the rule between entries follow the
+                    // GROUP: lines of one session sit tight together with no
+                    // rule, and the next session starts a new band.
                     <div
                       key={log.id}
-                      className={`group px-4 py-3 rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
-                        i > 0 ? 'border-t border-ninja-border/60' : ''
+                      className={`group px-4 ${edge.startsGroup ? 'pt-3' : 'pt-1.5'} ${edge.endsGroup ? 'pb-3' : 'pb-0'} rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
+                        edge.startsGroup && i > 0 ? 'border-t border-ninja-border/60' : ''
                       }`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2 mb-1.5">
@@ -580,7 +612,13 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
                           onCancel={() => setEditingId(null)}
                         />
                       ) : (
-                        log.notes && <MarkdownView className="text-ninja-navy font-ninja text-sm leading-relaxed">{log.notes}</MarkdownView>
+                        // Once per session, under the last of its lines. An
+                        // edit to one line's note takes it out of the group, so
+                        // the two notes then stand apart, which is what having
+                        // said different things about them means.
+                        edge.endsGroup && log.notes && (
+                          <MarkdownView className="text-ninja-navy font-ninja text-sm leading-relaxed">{log.notes}</MarkdownView>
+                        )
                       )}
 
                       <ReactionChips

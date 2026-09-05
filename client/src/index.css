@@ -531,6 +531,10 @@ textarea:focus-visible {
    Backdrop fades; the panel scales in from center (correct origin for a
    modal — it isn't anchored to a trigger). Enter-only; it unmounts on close. */
 @keyframes modalBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Staff badge avatar swap: the old photo slides off left as the next slides in. */
+@keyframes badgeAvatarIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes badgeAvatarOut { from { transform: translateX(0); } to { transform: translateX(-100%); } }
 @keyframes modalPanelIn {
   from { opacity: 0; transform: scale(0.96); }
   to   { opacity: 1; transform: none; }
@@ -541,3 +545,34 @@ textarea:focus-visible {
   .modal-backdrop, .modal-panel { animation-duration: 1ms; }
 }
 
+/* ── Parent portal tinted cards ──
+   The page is flat, and so are these: one pale fill and a hairline, no
+   gradient, no lift. Dedicated classes rather than bg-* utilities so the
+   .dark .bg-white override cannot fight them, and each carries its own ink
+   for the text drawn on it in both themes. */
+.tint-blue  { --tint-ink: #1d4ed8; --tint-ink-soft: rgb(30 58 138 / 0.75); background: #e8f0ff; border: 1px solid #cfe0ff; }
+.tint-green { --tint-ink: #15803d; --tint-ink-soft: rgb(20 83 45 / 0.75); background: #e6f7ec; border: 1px solid #c3efd3; }
+.tint-lilac { --tint-ink: #6d28d9; --tint-ink-soft: rgb(76 29 149 / 0.7);  background: #f0ebff; border: 1px solid #ddd2ff; }
+.tint-amber { --tint-ink: #b45309; --tint-ink-soft: rgb(180 83 9 / 0.7);   background: #fff6dc; border: 1px solid #fde68a; }
+.dark .tint-blue  { --tint-ink: #8cc2ff; --tint-ink-soft: rgb(140 194 255 / 0.75); background: rgb(56 161 255 / 0.12);  border-color: rgb(56 161 255 / 0.28); }
+.dark .tint-green { --tint-ink: #4ade80; --tint-ink-soft: rgb(134 239 172 / 0.8); background: rgb(34 197 94 / 0.12);   border-color: rgb(34 197 94 / 0.28); }
+.dark .tint-lilac { --tint-ink: #c4b5fd; --tint-ink-soft: rgb(196 181 253 / 0.75); background: rgb(168 85 247 / 0.14); border-color: rgb(168 85 247 / 0.3); }
+.dark .tint-amber { --tint-ink: #fbbf24; --tint-ink-soft: rgb(251 191 36 / 0.75);  background: rgb(245 158 11 / 0.12);  border-color: rgb(245 158 11 / 0.3); }
+/* Only the INK comes from the tint. --tint-ink and --tint-ink-soft survive so
+   type can belong to one of the four colours in both themes; the pale fill and
+   the coloured hairline do not, and nothing is drawn in their place. For type
+   that wants a tint's colour while sitting straight on the page rather than in
+   a panel.
+
+   Border transparent rather than none, so the box measures the same either way
+   and nothing shifts when a surface opts out. The dark rule is two classes
+   deep because the dark tints are, and a single class would lose to them and
+   put the pale fill back after sunset. */
+.tint-ink-only { background: none; border-color: transparent; }
+.dark .tint-ink-only { background: none; border-color: transparent; }
+
+/* A white inset row inside a tinted card. */
+.tint-inset { background: #ffffff; }
+.dark .tint-inset { background: rgb(255 255 255 / 0.07); }
+/* Vibrancy for secondary text on tints and heroes: heavier, a touch tracked. */
+.v2 { font-weight: 700; letter-spacing: 0.005em; }

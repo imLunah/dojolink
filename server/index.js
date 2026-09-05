@@ -155,6 +155,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/director-tasks', require('./routes/directorTasks'));
 app.use('/api/events', require('./routes/events'));
+app.use('/api/event-listings', require('./routes/eventListings'));
 app.use('/api/releases', require('./routes/releases'));
 app.use('/api/storage', require('./routes/storage'));
 app.use('/api/onboarding', require('./routes/onboarding'));

@@ -23,12 +23,22 @@
   height: 0;
   pointer-events: none;
 }
+/* A link in the EDITOR is text you are still writing: it looks like a link so
+   you know it will be one, but the text cursor says it edits, not opens.
+   Clicking is disabled in MarkdownEditor (link.openOnClick: false). */
+.tiptap-note a {
+  color: rgb(var(--ninja-blue));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: text;
+}
 
 /* Bare editor: sits on a colored surface (sticky notes), so everything it draws
    comes off the surrounding text color instead of the blue/muted tokens. Must
    stay after the .tiptap-note rules it overrides — equal specificity. */
 .tiptap-inherit li::marker { color: currentColor; opacity: 0.5; }
 .tiptap-inherit p.is-editor-empty:first-child::before { color: currentColor; opacity: 0.45; }
+.tiptap-inherit a { color: currentColor; }
 
 /* ── Rendered note/log markdown (react-markdown) ── */
 .md-view ul { list-style: disc; padding-left: 1.25rem; margin: 0 0 0.4rem; }

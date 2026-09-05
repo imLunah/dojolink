@@ -68,7 +68,10 @@ const ACCENT = 'fill-ninja-blue';
 
 // Height comes from the caller (h-8, h-10…) and the width follows the art's own
 // ratio, so a lockup never has to be measured by hand at each size.
-export default function Logo({ variant = 'lockup', className = '', title = 'DojoLink' }) {
+// `accent` (a CSS color) pins DOJO instead of following the theme token.
+// The staff badge uses it: print on a physical card keeps its ink whatever
+// the theme does. Leave it unset everywhere the logo lives on a themed page.
+export default function Logo({ variant = 'lockup', className = '', title = 'DojoLink', accent }) {
   const art = ART[variant] || ART.lockup;
   return (
     <svg
@@ -79,7 +82,11 @@ export default function Logo({ variant = 'lockup', className = '', title = 'Dojo
       fill="currentColor"
     >
       {art.ink.map((d) => <path key={d.slice(0, 24)} d={d} />)}
-      {art.accent?.map((d) => <path key={d.slice(0, 24)} d={d} className={ACCENT} />)}
+      {art.accent?.map((d) =>
+        accent
+          ? <path key={d.slice(0, 24)} d={d} style={{ fill: accent }} />
+          : <path key={d.slice(0, 24)} d={d} className={ACCENT} />
+      )}
     </svg>
   );
 }

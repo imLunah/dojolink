@@ -54,7 +54,7 @@ export default function AdminBar() {
           everything with nothing else claiming it. */}
       <nav
         aria-label="Admin view switcher"
-        className="hidden lg:flex fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] items-center gap-1 px-2 py-1.5 rounded-2xl shadow-xl font-ninja text-xs font-bold"
+        className="hidden lg:flex fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] items-center gap-1 px-2 py-1.5 rounded-2xl shadow-xl font-ninja text-xs font-bold"
         style={pillStyle}
       >
         <span style={{ color: 'rgba(56,161,255,0.9)' }} className="px-2 tracking-widest uppercase text-[10px]">
@@ -88,7 +88,7 @@ export default function AdminBar() {
       </nav>
 
       {/* Mobile — compact pill above Report Bug button */}
-      <nav ref={ref} aria-label="Admin view switcher" className="lg:hidden fixed bottom-36 right-4 z-[9999] flex flex-col items-end gap-2">
+      <nav ref={ref} aria-label="Admin view switcher" className="lg:hidden fixed bottom-36 right-4 z-[90] flex flex-col items-end gap-2">
         <AnimatePresence>
           {open && (
             <motion.div

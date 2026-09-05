@@ -45,3 +45,10 @@ export const GLASS = 'glass-card glass-clear';
 // covering, and the two read as one grey thing with the answer somewhere
 // inside it. Glass is for what stays, not for what interrupts.
 export const CHROME = 'glass-chrome glass-edge';
+
+// The parent portal's card. Flat: white, a hairline, a soft radius, and no
+// lift at all — no shadow, no ring, no glass. The parent pages are a flat
+// page whose softness lives inside the cards (the coloured heroes, the tinted
+// lists), and a shadow or a pane under those reads as a second material
+// competing with the first. Decided on the design canvas; keep it flat.
+export const FLAT = 'bg-white border border-ninja-border rounded-[22px]';

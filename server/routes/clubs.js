@@ -523,7 +523,7 @@ router.patch('/:id/attendees', requireSensei, requireOwnLocation, async (req, re
     );
     // Validate all student_ids belong to this location before inserting
     const { rows: validStudents } = await client.query(
-      'SELECT id FROM students WHERE id = ANY($1::int[]) AND location_id = $2 AND active = true',
+      'SELECT id FROM students WHERE id = ANY($1::int[]) AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2) AND active = true',
       [student_ids, req.session.activeLocationId]
     );
     const validIds = new Set(validStudents.map((s) => s.id));

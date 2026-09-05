@@ -53,8 +53,14 @@ export default function LogProgressPage() {
     ? Object.fromEntries(countsParam.split(',').map(s => { const i = s.lastIndexOf(':'); return [s.slice(0, i), parseInt(s.slice(i + 1))]; }))
     : {};
 
-  // Sessions still waiting on a program, after the ones logged in this visit
-  const pendingCount = (p) => Math.max((programCounts[p] || 0) - (loggedHere[p] || 0), 0);
+  // Sessions still waiting on a program, after the ones logged in this visit.
+  // `counts` only ever carries the check-ins that were still open when the
+  // board built the link, so a class logged before we arrived is not in it.
+  const remainingFor = (p, logged) => Math.max((programCounts[p] || 0) - (logged[p] || 0), 0);
+  const pendingCount = (p) => remainingFor(p, loggedHere);
+  // Every check-in this ninja still owes today, across all their classes.
+  const outstanding = (logged) =>
+    Object.keys(programCounts).reduce((n, p) => n + remainingFor(p, logged), 0);
   // The board's date is the OLDEST pending check-in for that program, so it is
   // spent once we log it — after that the refetched student carries the next one.
   const sessionDateFor = (p) =>
@@ -80,15 +86,34 @@ export default function LogProgressPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Stay on the ninja after logging — going back to the board means clicking
-  // through to the same kid again to log a second program or fix a mistake.
+  // A written session sends the sensei back to Today's Board, but only once the
+  // ninja has nothing left owing. A kid booked into two classes, or carrying a
+  // make-up session, gets logged in one sitting: bouncing out between them
+  // means finding the same card again to finish the job. The board is the
+  // receipt when we do leave, since the card drops out of the default unlogged
+  // view and the counter moves. Editing an existing session never navigates,
+  // because a correction is not a step forward.
   const handleLogged = () => {
     const program = selectedProgram;
-    setLoggedHere((prev) => ({ ...prev, [program]: (prev[program] || 0) + 1 }));
+    const logged = { ...loggedHere, [program]: (loggedHere[program] || 0) + 1 };
+    setLoggedHere(logged);
     // The extra session is written; the page goes back to editing the latest.
     setLogAnotherFor(null);
+
+    if (outstanding(logged) === 0) {
+      navigate(dashboardPath);
+      return;
+    }
+
     // Refresh belt / project / last lesson so the header reflects what was just logged
     api.get(`/students/${id}`).then(setStudent).catch(() => {});
+    // That class is finished, so the form moves itself to the one that is not.
+    // Leaving it parked on a class with nothing left to write is how the second
+    // check-in gets missed.
+    if (remainingFor(program, logged) === 0) {
+      const next = (todayPrograms || []).find((p) => p !== program && remainingFor(p, logged) > 0);
+      if (next) setSelectedProgram(next);
+    }
   };
 
   const handleLogUpdated = (logId, patch) =>
@@ -130,6 +155,18 @@ export default function LogProgressPage() {
   const availablePrograms = todayPrograms
     ? (student.programs || []).filter((p) => todayPrograms.includes(p.program))
     : (student.programs || []);
+
+  // The question above these is which class you are logging, so a class that is
+  // already written is not one of the answers. When nothing is left to log the
+  // visit is a correction instead, and then the logged classes are exactly the
+  // ones that have to be reachable, so they come back.
+  //
+  // Written once is not the same as finished: a ninja catching up on two CREATE
+  // sessions has one logged and one still owed, and that class has to stay.
+  const isFullyLogged = (p) => donePrograms.has(p) && pendingCount(p) === 0;
+  const pendingPrograms = availablePrograms.filter((p) => !isFullyLogged(p.program));
+  const selectablePrograms = pendingPrograms.length > 0 ? pendingPrograms : availablePrograms;
+  const loggedCount = availablePrograms.filter((p) => isFullyLogged(p.program)).length;
 
   const enrollment = availablePrograms.find((p) => p.program === selectedProgram);
 
@@ -213,8 +250,8 @@ export default function LogProgressPage() {
                     Which program are you logging?
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {availablePrograms.map((p) => {
-                      const isDone = donePrograms.has(p.program);
+                    {selectablePrograms.map((p) => {
+                      const isDone = isFullyLogged(p.program);
                       const isSelected = selectedProgram === p.program;
                       return (
                         <button
@@ -238,9 +275,11 @@ export default function LogProgressPage() {
                       );
                     })}
                   </div>
-                  {donePrograms.size > 0 && donePrograms.size < availablePrograms.length && (
+                  {/* With the logged classes off the list, this line is the
+                      only thing that says they happened. */}
+                  {loggedCount > 0 && loggedCount < availablePrograms.length && (
                     <p className="text-ninja-muted font-ninja text-xs mt-2">
-                      {donePrograms.size}/{availablePrograms.length} programs already logged today.
+                      {loggedCount}/{availablePrograms.length} programs already logged today.
                     </p>
                   )}
                 </div>

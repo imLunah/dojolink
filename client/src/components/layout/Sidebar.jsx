@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
@@ -6,7 +6,7 @@ import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
 import { LogOutIcon } from 'lucide-react';
-import { LayoutGridIcon, BookOpenIcon } from 'lucide-react';
+import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
 
 const EXPANDED_W = 224; // matches w-56
 const COLLAPSED_W = 76; // icon rail
@@ -45,15 +45,50 @@ function BugIcon() {
 }
 
 export const managerLinks = [
-  { to: '/manager/overview', label: 'Dashboard', Glyph: LayoutGridIcon },
+  // Hovering Dashboard opens a flyout naming the director tools that live on
+  // (or off) the dashboard, so none of them costs the nav a row of its own.
+  // Tasks stays out of the main list for the old reason; the flyout and the
+  // dashboard preview are its ways in. Both navs render `quick` their own way.
+  {
+    to: '/manager/overview', label: 'Dashboard', Glyph: LayoutGridIcon,
+    quick: [
+      { to: '/manager/events', label: 'Events', Glyph: MegaphoneIcon },
+      { to: '/manager/tasks', label: 'Tasks', Glyph: ListTodoIcon },
+      { to: '/manager/reports', label: 'Reports', Glyph: ChartNoAxesColumnIncreasingIcon },
+      { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
+      { to: '/changelog', label: "What's New", Glyph: GiftIcon },
+    ],
+  },
   { to: '/manager/dashboard', label: "Today's Board", icon: 'today' },
   { to: '/manager/students', label: 'Ninjas', icon: 'roster' },
   { to: '/clubs', label: 'Clubs', icon: 'clubs' },
   { to: '/manager/staff', label: 'Staff', icon: 'senseis' },
-  // Tasks is deliberately NOT here. The dashboard preview is the way in, and a
-  // nav entry beside it makes the board look like two features. Both navs read
-  // this list, so adding it back puts it in the sidebar and the top bar at once.
 ];
+
+// The flyout's panel, shared by the sidebar and the top bar so the two navs
+// show the same thing. The caller owns positioning and hover state.
+export function QuickFlyoutPanel({ link, pathname, search }) {
+  return (
+    <div className="w-48 bg-white border border-ninja-border rounded-xl shadow-lg p-1.5">
+      <p className="px-3 pt-1.5 pb-1 font-ninja text-[10px] font-extrabold uppercase tracking-[0.08em] text-ninja-muted">{link.label}</p>
+      {link.quick.map((q) => {
+        const active = isLinkActive(q, pathname, search);
+        return (
+          <Link
+            key={q.to}
+            to={q.to}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg font-ninja text-sm font-bold transition-colors ${
+              active ? 'bg-ninja-blue/10 text-ninja-blue-ink' : 'text-ninja-navy hover:bg-ninja-bg'
+            }`}
+          >
+            {q.Glyph && <q.Glyph size={16} strokeWidth={1.9} className="flex-shrink-0" />}
+            {q.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 
 export const senseiLinks = [
   { to: '/sensei/dashboard', label: "Today's Board", icon: 'today' },
@@ -70,6 +105,16 @@ export default function Sidebar({ onOpenBug }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1');
+  // Which row's quick flyout is open, and where it anchors. Fixed-position
+  // because the nav is a scroll container and clips absolute children.
+  const [flyout, setFlyout] = useState(null);
+  const [flyoutPos, setFlyoutPos] = useState({ top: 0, left: 0 });
+  const openFlyout = (id, el) => {
+    const r = el.getBoundingClientRect();
+    setFlyoutPos({ top: r.top - 6, left: r.right });
+    setFlyout(id);
+  };
+  useEffect(() => { setFlyout(null); }, [location.pathname]);
 
   const toggleCollapsed = () => {
     setCollapsed((c) => {
@@ -151,9 +196,9 @@ export default function Sidebar({ onOpenBug }) {
       <nav className="flex-1 p-3 space-y-0.5 mt-2 overflow-y-auto">
         {navLinks.map((link) => {
           const isActive = isLinkActive(link, location.pathname, location.search);
-          return (
+          const row = (
             <Link
-              key={link.to}
+              key={link.quick ? undefined : link.to}
               to={link.to}
               title={collapsed ? link.label : undefined}
               className={`flex items-center gap-3 py-2.5 rounded-xl font-ninja font-bold text-sm transition-colors relative overflow-hidden whitespace-nowrap ${
@@ -171,6 +216,29 @@ export default function Sidebar({ onOpenBug }) {
                 </motion.span>
               )}
             </Link>
+          );
+          if (!link.quick) return row;
+          // Hovering (or focusing into) the row opens a flyout panel beside
+          // the sidebar listing the pages under it. The flyout's hover box
+          // starts exactly at the row's right edge — the visual gap is the
+          // panel's own padding — so the pointer never crosses dead ground
+          // and the panel never flickers shut on the way over. Works on the
+          // collapsed rail too, where it doubles as the row's label.
+          return (
+            <div
+              key={link.to}
+              onMouseEnter={(e) => openFlyout(link.to, e.currentTarget)}
+              onMouseLeave={() => setFlyout(null)}
+              onFocus={(e) => openFlyout(link.to, e.currentTarget)}
+              onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFlyout(null); }}
+            >
+              {row}
+              {flyout === link.to && (
+                <div className="fixed z-50 pl-3" style={{ top: flyoutPos.top, left: flyoutPos.left }}>
+                  <QuickFlyoutPanel link={link} pathname={location.pathname} search={location.search} />
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>

@@ -1,5 +1,5 @@
 import { PROGRAM_LOGOS } from '../../utils/beltConfig';
-import BeltIcon from './BeltIcon';
+import BeltIcon, { beltIconSrc } from './BeltIcon';
 import { GraduationCapIcon } from 'lucide-react';
 
 // Program class tags keep their OWN fixed identity colors — they do NOT follow
@@ -11,9 +11,6 @@ const PROGRAM_COLORS = {
   'AI Academy':       { text: 'text-blue-600 dark:text-blue-300' },
   'JR':               { text: 'text-purple-600 dark:text-purple-300' },
   'VR Coding':        { text: 'text-teal-600 dark:text-teal-300' },
-  'Silver':           { text: 'text-slate-600 dark:text-slate-300' },
-  'Gold Unity':       { text: 'text-amber-600 dark:text-amber-300' },
-  'Gold Godot':       { text: 'text-amber-600 dark:text-amber-300' },
 };
 
 const SIZE = {
@@ -31,7 +28,7 @@ const AVATAR = {
 // Resolve the symbol image for a class: CREATE uses the ninja's belt icon when
 // a belt is known; everything else uses the program logo.
 const symbolSrc = (program, belt) => {
-  if (program === 'CREATE' && belt) return `/belts/belt-${belt.toLowerCase()}.png`;
+  if (program === 'CREATE' && belt) return beltIconSrc(belt);
   return (program && PROGRAM_LOGOS[program]) || null;
 };
 

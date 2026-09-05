@@ -43,8 +43,8 @@ router.get('/', requireAuth, async (req, res) => {
 
   try {
     const query = isToday
-      ? ASSIGNMENT_SELECT + ' WHERE (da.session_date = $1 OR (da.session_date < $1 AND da.completed = false)) AND s.location_id = $2 ORDER BY da.session_date ASC, da.created_at ASC'
-      : ASSIGNMENT_SELECT + ' WHERE da.session_date = $1 AND s.location_id = $2 ORDER BY da.created_at ASC';
+      ? ASSIGNMENT_SELECT + ' WHERE (da.session_date = $1 OR (da.session_date < $1 AND da.completed = false)) AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2) ORDER BY da.session_date ASC, da.created_at ASC'
+      : ASSIGNMENT_SELECT + ' WHERE da.session_date = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2) ORDER BY da.created_at ASC';
     const { rows } = await pool.query(query, [date, req.session.activeLocationId]);
     res.json(rows);
   } catch (err) {
@@ -61,7 +61,7 @@ router.get('/my', requireSensei, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      ASSIGNMENT_SELECT + ' WHERE da.session_date = $1 AND da.sensei_id = $2 AND s.location_id = $3 ORDER BY da.created_at ASC',
+      ASSIGNMENT_SELECT + ' WHERE da.session_date = $1 AND da.sensei_id = $2 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $3) ORDER BY da.created_at ASC',
       [date, senseiId, req.session.activeLocationId]
     );
     res.json(rows);
@@ -96,7 +96,7 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
   try {
     // Validate the ninja exists, is active, and belongs to this location (both paths).
     const { rows: studentRows } = await pool.query(
-      `SELECT s.id FROM students s WHERE s.id = $1 AND s.active = true AND s.location_id = $2`,
+      `SELECT s.id FROM students s WHERE s.id = $1 AND s.active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)`,
       [student_id, req.session.activeLocationId]
     );
     if (!studentRows[0]) return res.status(404).json({ error: 'Ninja not found at this location' });
@@ -122,7 +122,9 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
       );
 
       if (existing[0]) {
-        await pool.query('UPDATE daily_assignments SET session_date = $1 WHERE id = $2', [date, existing[0].id]);
+        // checked_in_at follows the ninja to today: the parent portal's live
+        // schedule reads the arrival, and this row's created_at is the old one.
+        await pool.query('UPDATE daily_assignments SET session_date = $1, checked_in_at = NOW() WHERE id = $2', [date, existing[0].id]);
         assignmentId = existing[0].id;
       } else {
         const { rows: inserted } = await pool.query(
@@ -163,7 +165,7 @@ router.patch('/:id/assign', requireManager, requireOwnLocation, async (req, res)
     const { rows: existing } = await pool.query(`
       SELECT da.id FROM daily_assignments da
       JOIN students s ON da.student_id = s.id
-      WHERE da.id = $1 AND s.location_id = $2
+      WHERE da.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
     `, [id, req.session.activeLocationId]);
     if (!existing[0]) return res.status(404).json({ error: 'Assignment not found' });
 
@@ -197,7 +199,7 @@ router.delete('/:id', requireManager, requireOwnLocation, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT da.id FROM daily_assignments da
       JOIN students s ON da.student_id = s.id
-      WHERE da.id = $1 AND s.location_id = $2
+      WHERE da.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
     `, [id, req.session.activeLocationId]);
     if (!rows[0]) return res.status(404).json({ error: 'Assignment not found' });
 

@@ -20,3 +20,7 @@ test/db/*.log
 
 # local tooling lockfile, not part of the app
 skills-lock.json
+
+# Local worksheet for naming the JR / Robotics / AI curriculum modules.
+# Franchise curriculum, and this repo is public: it stays on disk only.
+MODULE_NAMES.md

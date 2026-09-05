@@ -1,17 +1,47 @@
-# Update v1.9
+# Update v2.0
 
 ## New
-- Integrated MyStudio to Dojolink. I spent the entire night reverse engineering their crappy website for this to even be possible. It might break it might not.. It was not easy.. Note that this setting is labeled as unstable due to the way I got this to work. To access this feature, it will be on the experimental settings and Center Director's must sign in with their credentials or use paste a cURL below. I recommend signing in due to the nature of 2FA and cookies expiring in the future. 
-- Senseis are now able to view live data on which ninjas are scheduled for the day.
-- Center Directors have the ability to import ninja roster straight from MyStudio.
-- Center Directors can now manage their own centers inside admin settings.
-- To add more security layers, Parent Portal includes having to enter in a center code now (CDs Please update your center code inside settings)
+- The Parent Portal has been completely redesigned. On a phone every page gets a large title and a floating glass tab bar, home opens with a hero in your ninja's belt color, and courses show kits, tracks and modules with the family's own art throughout. Desktop gets a floating toolbar with a child switcher.
+- A ninja can now belong to more than one center. Directors share a ninja in from the Locations page, and removing them from a shared center takes them off that roster only, while their home center keeps them. No more duplicate records for a family that attends two centers.
+- New staff get their badge. Onboarding now prints your name, avatar and username onto a 3D staff ID card you can spin around while you set up your account.
+- Edit Profile is your ID card now. Tap your name to retype it right on the card, tap your photo to slide through the avatars, and tap the card to turn it over, since your username is printed on the back. Every change saves on its own, no form and no Save button.
+- Clicking a staff member hands you their ID card, with their progress logs on a sheet of paper tucked behind it. Tap the paper to read the logs, tap the card to bring it back. The whole desk sizes itself to your screen, filling a desktop and fitting a phone without any scrolling.
+- When logging CREATE, an added project now has its own belt and level. A ninja who finished a level, or a whole belt, part way through class gets written down once instead of needing a second check in.
+- Event listings. Center Directors get an Events page for promoting what's happening at the center: a title, a hook line, a banner image, a date and time, a sign up link, and a description with real formatting, written in the same editor senseis log with. Save a draft to keep working on it, publish when it's ready.
+- Families see your events. Published listings show as a banner at the top of the Parent Portal home, rotating like a slideshow when there's more than one. Learn more grows the banner open right there with the full details and a Sign up button, and a dated event takes itself down once the day passes.
+- Hovering Dashboard in the nav opens a quick menu with Events, Tasks, Reports, Curriculum and What's New, so the director tools are one hover away without making the sidebar longer.
+- Every CREATE ninja gets a sticker book: one die-cut badge for every level of the curriculum, 43 of them from White belt to Black, each an IMPACT achievement under the name Code Ninjas gave it. Finish a level and its badge is yours. The book lives on its own page off your ninja's profile, the earned ones in full colour and the rest locked until they are.
+- Tap a badge to open it. You get its name, how rare it is, and the level behind it: what that level teaches and the project your ninja builds at the end of it.
+- Stickers say how rare they are. Common, Uncommon, Rare and Legendary are worked out from how many CREATE ninjas across every center have really earned that sticker, so the ones from the belts most ninjas have passed stay common and the ones near the end of the book stay rare. Nobody sets these; they move as the dojo moves.
+- The sticker book opens on three personal records: where your ninja's collection stands against every CREATE ninja in the dojo, the sticker that landed most recently, and how much of the book is filled in.
+- Pick your ninja. The ninja at the top of your child's profile now comes in three, and Settings has a Your ninjas page where you choose one for each of your kids. Nobody is assigned one: until you pick, your ninja looks exactly as they always have.
+- Robotics, JR, VR and AI Academy courses have their own art. Every kit and track now leads with its own picture instead of a grey number: a hard hat and wrench for LEGO Spike Essentials, gears for Spike Prime, a wheel for VEX GO, a colour wheel for Ozobot Evo, lightbulbs for Snap Circuits. Finish every module in a kit and it is marked with a medal.
+- The CREATE course shows the game each level builds. Every level now carries a screenshot of the real project, a line about what that level is actually for, and the medal it is awarded with.
 
 ## Changes
-- The check in board refreshes every 30 seconds to show updated values
-- Improved logging session submission / edit / invalid feedback ui
+- Silver, Gold Unity and Gold Godot are no longer programs you can enroll a ninja in. They repeated the top of the CREATE belt ladder, which already runs Bronze, Silver, Platinum and Gold with their own projects, and nobody was enrolled in any of them. The belts of those names are unchanged.
+- The ninja switcher has come off the Parent Portal. Home shows a card for every ninja on your account, so switching between them is a tap on the one you want rather than a control for hiding the others.
+- Logging a session takes you back to Today's Board. If a ninja is checked into more than one class, or has make up sessions to catch up on, the page stays where it is and moves you to the next class so you can finish them in one sitting.
+- A class you have already logged comes off the "which program are you logging" list, so only the classes still to do are on it. If everything is logged they all come back, since that visit is a correction.
+- Once a center is connected to MyStudio, every sensei at that center sees the booked list. It used to sit behind the Experimental toggle, which was a per browser setting, so connecting a center changed nothing for anyone else. The Experimental toggle now only covers the theme customizer.
+- The MyStudio sign in expires after about 24 hours on their end, and DojoLink now says so instead of being surprised by it. The account page shows exactly when it runs out and turns amber in the last six hours, and the board gives directors a heads up with a link to renew. This is MyStudio's session policy, so a daily renewal is normal, not a fault.
+- DojoLink now installs properly as an app. Added a real web app manifest with the DojoLink mark, so home screen shortcuts and installed apps get the right icon instead of a blank.
+- The back of the staff badge now says Username where it used to say Staff ID.
+- A family with one ninja gets a full width card on the Parent Portal home instead of half the page sitting empty.
+- On desktop, the Parent Portal course list stays one screen tall and scrolls on its own, so a ninja in many programs no longer stretches the page.
+- The belt road marks the current belt by size and a lit trail behind it instead of a white ring, and you can drag it sideways with the mouse. It now sizes itself to a phone rather than running off the side of one.
+- The banner at the top of a page stays where it is while the page scrolls up over it, on home, on a ninja's profile, in a course and in the sticker book. The art stays visible for as long as there is room for it instead of leaving with the first scroll.
 
-
-
-
-
+## Bug Fixes
+- Your ninja's own banner is on the Parent Portal home. Their card used to lead with the project from their last class, in the biggest type on the card, with more sessions listed right beside it. It carries the same banner their profile does now: their name, how long they have been a ninja, their belt and how many programs they are in, with your ninja standing in it, and it fills their whole half of the card instead of floating in the middle of it. It says who they are and nothing more; their belt and their classes are a tap away on the profile itself. The whole banner opens their profile, a light follows your cursor across it, and your ninja leans toward you and cheers as you go past. The classes are in the list where they belong, and the list is a plain list instead of a box drawn inside a box.
+- Opening a ninja's profile or one of their courses could land you part way down the page, with the banner already dimmed and its row of kit buttons cut in half by the page sliding over it. Nothing was resetting the scroll when you moved between pages. Every page in the Parent Portal now opens at its banner.
+- Six of the fifty-four ninja pictures were saved wrong and came out as flat dark shapes with no eyes, no belt and no shading. Nothing on screen had ever drawn those six, so nobody had seen them. All fifty-four have been rebuilt.
+- The Parent Portal says when your sign in has run out. It used to keep the pages up and quietly fail on whatever you tapped next, which looked like the site being broken. You now get a Session Timed Out message and a button back to sign in.
+- Typing a link like code.org into session notes made it clickable while you were still writing, so clicking near it to move your cursor opened the website and left the half written log behind. Links in the editor are just text now. In saved logs and comments they are real links, underlined and changing color on hover so you can tell before you click.
+- Session notes were written once per class, but printed under every project. Logging two projects in one sitting showed the note twice, which read as two sessions that happened to say the same thing. It prints once now.
+- Switching to another class while logging kept the note you had written for the previous class sitting in the box, which could submit one class's note under another. Switching starts a clean note now.
+- On a phone, opening a course in the Parent Portal started part way down the page instead of at the top, and the course hero had gaps and corners that let the page show through. Both fixed.
+- The belt card on the parent home could overlap itself, and the current belt's glow was clipped by the belt ladder. Both have room now.
+- For admin accounts, the floating view switcher pill could sit on top of open dialogs and cover what they were saying. Dialogs stack above it now.
+- Clicking the empty space around a staff member's ID card now closes it. An invisible box was catching the click and keeping the card open.
+- The busy chart on the Parent Portal home was filing each check in under the one hour it happened closest to, so ninjas who arrived at 3:40 and were still in class at 4:20 had stopped being counted. A bar is now everyone whose hour touches it, and the live bar is who is in the room this minute. The bars no longer add up to the number of ninjas who came that day, which is correct for the question the chart asks.

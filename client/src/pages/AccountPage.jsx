@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Layout from '../components/layout/Layout';
@@ -7,10 +7,12 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { ONBOARDING_ENABLED } from '../lib/features';
 import { PRESET_AVATARS } from '../lib/avatars';
+import StaffBadge from '../components/shared/StaffBadge';
 import { CARD } from '../lib/surfaces';
 import useIsDesktop from '../lib/useIsDesktop';
 import { MoonIcon, SunIcon } from '../components/ui/icons';
 import MyStudioConnect, { MyStudioRow } from '../components/manager/MyStudioConnect';
+import DeleteAccountCard from '../components/shared/DeleteAccountCard';
 import {
   UserIcon,
   LockIcon,
@@ -21,11 +23,11 @@ import {
   SettingsIcon,
   MapPinIcon,
   PanelTopIcon,
+  Trash2Icon,
 } from 'lucide-react';
 
 const FIELD =
   'w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-lg px-3 py-2 font-ninja text-sm focus:outline-none focus:border-ninja-blue';
-const LABEL = 'block text-ninja-muted text-xs font-ninja font-semibold uppercase tracking-wide mb-1.5';
 
 export default function AccountPage() {
   const { user, setUser, logout, switchLocation } = useAuth();
@@ -42,10 +44,12 @@ export default function AccountPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const [savingAvatar, setSavingAvatar] = useState(false);
-  const [avatarError, setAvatarError] = useState('');
-
   const [section, setSection] = useState('profile');
+
+  // Edit profile is the ID card itself: taps on the printed name, the photo
+  // and the username commit straight to the API, and this is where those
+  // commits report back, under the card.
+  const [cardMsg, setCardMsg] = useState(null); // { type: 'error' | 'success', text }
 
   // The MyStudio connection for this center. Fetched for any director, not
   // only one who has the Experimental toggle on: the connection belongs to the
@@ -80,16 +84,73 @@ export default function AccountPage() {
     setSearchParams(searchParams, { replace: true });
   }, [isManager, searchParams, setSearchParams]);
 
-  const handlePresetSelect = async (src) => {
-    setSavingAvatar(true);
-    setAvatarError('');
+  // Tapping the photo steps to the next preset. The card updates on the tap
+  // and the save waits for the tapping to stop, so stepping through the whole
+  // ring is ten slides and one PATCH, not ten.
+  const avatarTimer = useRef(null);
+  const pendingAvatar = useRef(null);
+  const lastSavedAvatar = useRef(user?.profilePicUrl || null);
+  useEffect(() => () => {
+    if (avatarTimer.current) {
+      clearTimeout(avatarTimer.current);
+      if (pendingAvatar.current) api.patch('/users/me/avatar', { profile_pic_url: pendingAvatar.current }).catch(() => {});
+    }
+  }, []);
+  const saveAvatar = async (src) => {
+    avatarTimer.current = null;
+    pendingAvatar.current = null;
     try {
       await api.patch('/users/me/avatar', { profile_pic_url: src });
-      setUser((prev) => ({ ...prev, profilePicUrl: src }));
+      lastSavedAvatar.current = src;
+      setCardMsg({ type: 'success', text: 'Photo updated.' });
     } catch {
-      setAvatarError('Failed to set avatar. Try again.');
-    } finally {
-      setSavingAvatar(false);
+      setUser((prev) => ({ ...prev, profilePicUrl: lastSavedAvatar.current }));
+      setCardMsg({ type: 'error', text: 'Failed to save the photo. Try again.' });
+    }
+  };
+  const cycleAvatar = () => {
+    const list = PRESET_AVATARS.map((a) => a.src);
+    const next = list[(list.indexOf(user?.profilePicUrl) + 1) % list.length];
+    setCardMsg(null);
+    setUser((prev) => ({ ...prev, profilePicUrl: next }));
+    pendingAvatar.current = next;
+    if (avatarTimer.current) clearTimeout(avatarTimer.current);
+    avatarTimer.current = setTimeout(() => saveAvatar(next), 900);
+  };
+
+  // Commits from the card. Each one is a single field, saved the moment the
+  // editor closes; validation mirrors server/lib/username.js and the server
+  // stays the authority.
+  const commitName = async (value) => {
+    const t = value.trim();
+    setCardMsg(null);
+    if (!t) return setCardMsg({ type: 'error', text: 'Display name cannot be empty.' });
+    if (t === user?.displayName) return;
+    try {
+      await api.patch('/users/me', { display_name: t });
+      setDisplayName(t);
+      setUser((prev) => ({ ...prev, displayName: t }));
+      setCardMsg({ type: 'success', text: 'Name updated.' });
+    } catch (err) {
+      setCardMsg({ type: 'error', text: err?.message || 'Failed to update name.' });
+    }
+  };
+  const commitUsername = async (value) => {
+    const t = value.trim();
+    setCardMsg(null);
+    if (!t || t === user?.username) return;
+    if (t.length < 3) return setCardMsg({ type: 'error', text: 'Username must be at least 3 characters.' });
+    if (!/^[A-Za-z0-9._-]+$/.test(t)) {
+      return setCardMsg({ type: 'error', text: 'Username can only use letters, numbers, dots, underscores and hyphens. No spaces.' });
+    }
+    try {
+      const res = await api.patch('/users/me', { username: t });
+      const finalName = res?.username || t;
+      setUsername(finalName);
+      setUser((prev) => ({ ...prev, username: finalName }));
+      setCardMsg({ type: 'success', text: 'Username updated.' });
+    } catch (err) {
+      setCardMsg({ type: 'error', text: err?.message || 'Failed to update username.' });
     }
   };
 
@@ -108,42 +169,24 @@ export default function AccountPage() {
     setError('');
     setSuccess('');
 
-    const trimmedUsername = username.trim();
+    // Name, username and avatar commit straight from the ID card, so this
+    // form only ever changes the password.
     const trimmedPassword = newPassword.trim();
-    const trimmedDisplay = displayName.trim();
 
-    if (isForced) {
-      if (!trimmedPassword) return setError('You must set a new password to continue.');
-    } else {
-      if (!trimmedUsername && !trimmedPassword && !trimmedDisplay) return setError('Enter a new display name, username, or password.');
-      if (!trimmedDisplay) return setError('Display name cannot be empty.');
+    if (!trimmedPassword) {
+      return setError(isForced ? 'You must set a new password to continue.' : 'Enter a new password.');
     }
-    if (!isForced && trimmedUsername && trimmedUsername !== user?.username) {
-      // Mirrors server/lib/username.js. The server is still the authority.
-      if (trimmedUsername.length < 3) return setError('Username must be at least 3 characters.');
-      if (!/^[A-Za-z0-9._-]+$/.test(trimmedUsername)) {
-        return setError('Username can only use letters, numbers, dots, underscores and hyphens. No spaces.');
-      }
-    }
-    if (trimmedPassword && trimmedPassword !== confirmPassword.trim()) return setError('Passwords do not match.');
+    if (trimmedPassword !== confirmPassword.trim()) return setError('Passwords do not match.');
     if (trimmedPassword && (trimmedPassword.length < 6 || !/[A-Z]/.test(trimmedPassword) || !/[^A-Za-z0-9]/.test(trimmedPassword))) {
       return setError('Password must be at least 6 characters and include an uppercase letter and a special character.');
     }
 
-    const payload = {};
-    if (!isForced && trimmedUsername && trimmedUsername !== user?.username) payload.username = trimmedUsername;
-    if (!isForced && trimmedDisplay && trimmedDisplay !== user?.displayName) payload.display_name = trimmedDisplay;
-    if (trimmedPassword) {
-      payload.new_password = trimmedPassword;
-      if (!isForced) payload.current_password = currentPassword.trim();
-    }
-    if (!Object.keys(payload).length) return setSuccess('No changes to save.');
+    const payload = { new_password: trimmedPassword };
+    if (!isForced) payload.current_password = currentPassword.trim();
 
     setSaving(true);
     try {
       await api.patch('/users/me', payload);
-      if (payload.username) setUser((prev) => ({ ...prev, username: payload.username }));
-      if (payload.display_name) setUser((prev) => ({ ...prev, displayName: payload.display_name }));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -151,7 +194,7 @@ export default function AccountPage() {
         setUser((prev) => ({ ...prev, mustResetPassword: false }));
         navigate(dashPath);
       } else {
-        setSuccess('Account updated successfully.');
+        setSuccess('Password updated.');
       }
     } catch (err) {
       setError(err?.message || 'Failed to update account.');
@@ -162,6 +205,34 @@ export default function AccountPage() {
 
   /* ------------------------------------------------------------- pieces -- */
   // Each block is built once and placed by whichever layout is active.
+
+  // The staff badge IS the profile editor: tap the printed name or the Staff
+  // ID to retype it in place, tap the photo to pick another, tap anywhere
+  // else to turn the card over. Each edit saves as its editor closes.
+  const profileBadge = (scale) => (
+    <StaffBadge
+      name={displayName}
+      username={username}
+      avatar={user?.profilePicUrl}
+      role={roleLabel}
+      center={user?.activeLocation?.name}
+      scale={scale}
+      editable={{ onName: commitName, onUsername: commitUsername, onAvatar: cycleAvatar }}
+    />
+  );
+
+  const cardNote = (
+    <div className="text-center space-y-1.5 max-w-sm mx-auto">
+      <p className="text-ninja-muted font-ninja text-xs">
+        Tap the photo for the next avatar, and tap the name to retype it. The username is printed on the back; tap the card to turn it over.
+      </p>
+      {cardMsg && (
+        <p className={`font-ninja text-sm font-semibold ${cardMsg.type === 'error' ? 'text-ninja-red' : 'text-green-600'}`}>
+          {cardMsg.text}
+        </p>
+      )}
+    </div>
+  );
 
   const identity = (
     <div className="relative bg-[#dbe4f2] dark:bg-ninja-hero rounded-2xl overflow-hidden px-6 pt-7 pb-6 shadow-lg">
@@ -175,11 +246,6 @@ export default function AccountPage() {
               {initials}
             </div>
           )}
-          {savingAvatar && (
-            <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-ninja-navy font-ninja font-bold text-lg leading-tight truncate">{user?.displayName}</p>
@@ -187,7 +253,6 @@ export default function AccountPage() {
           <p className="text-ninja-muted/70 font-ninja text-xs">@{user?.username}</p>
         </div>
       </div>
-      {avatarError && <p className="text-ninja-red dark:text-red-300 font-ninja text-xs mt-2 relative z-10">{avatarError}</p>}
     </div>
   );
 
@@ -197,36 +262,6 @@ export default function AccountPage() {
       <div>
         <p className="text-amber-800 font-ninja font-semibold text-sm">Password reset required</p>
         <p className="text-amber-700 font-ninja text-xs mt-0.5">Your password was reset by an admin. Set a new password to continue.</p>
-      </div>
-    </div>
-  );
-
-  const avatarPicker = (
-    <div className={`${CARD} p-5`}>
-      <p className="text-ninja-muted font-ninja text-xs font-semibold uppercase tracking-wide mb-3">Choose Avatar</p>
-      <div className="grid grid-cols-5 gap-3">
-        {PRESET_AVATARS.map(({ src, label }) => {
-          const isActive = user?.profilePicUrl === src;
-          return (
-            <button
-              key={src}
-              type="button"
-              onClick={() => handlePresetSelect(src)}
-              disabled={savingAvatar}
-              className={`relative w-14 h-14 rounded-full overflow-hidden border-2 transition-all hover:scale-105 disabled:opacity-50 ${
-                isActive ? 'border-ninja-blue ring-2 ring-ninja-blue/30' : 'border-ninja-border hover:border-ninja-blue'
-              }`}
-              title={label}
-            >
-              <img src={src} alt={label} className="w-full h-full object-cover bg-ninja-bg" />
-              {isActive && (
-                <div className="absolute inset-0 bg-ninja-blue/20 flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">✓</span>
-                </div>
-              )}
-            </button>
-          );
-        })}
       </div>
     </div>
   );
@@ -539,31 +574,6 @@ export default function AccountPage() {
     </button>
   );
 
-  const nameFields = (
-    <>
-      <div>
-        <label className={LABEL}>Display Name</label>
-        <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={80} autoComplete="name" className={FIELD} />
-        <p className="text-ninja-muted font-ninja text-xs mt-1.5">Shown across the app and to parents.</p>
-      </div>
-      <div>
-        <label className={LABEL}>Username</label>
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          autoComplete="username"
-          spellCheck={false}
-          autoCapitalize="none"
-          className={FIELD}
-        />
-        <p className="text-ninja-muted font-ninja text-xs mt-1.5">
-          Letters, numbers, dots, underscores and hyphens. No spaces.
-        </p>
-      </div>
-    </>
-  );
-
   const passwordFields = (
     <>
       <div>
@@ -581,6 +591,24 @@ export default function AccountPage() {
         <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" className={FIELD} />
       </div>
     </>
+  );
+
+  // Deleting the account. Username and password again, typed, then the
+  // director's permanent delete runs on this user: logged sessions stay on
+  // the ninjas' records with no author. Admins can't from here.
+  const deleteCard = user?.role === 'admin' ? null : (
+    <DeleteAccountCard
+      intro="This permanently deletes your DojoLink account. Sessions you logged stay on the ninjas' records, with no name on them. Type your username and password to confirm; this can't be undone."
+      fields={[
+        { id: 'username', label: 'Username', autoComplete: 'username' },
+        { id: 'password', label: 'Password', type: 'password', autoComplete: 'current-password' },
+      ]}
+      onDelete={async ({ reason, details, username, password }) => {
+        await api.post('/auth/delete-account', { reason, details, username, password });
+        setUser(null);
+        navigate('/login', { replace: true });
+      }}
+    />
   );
 
   const signOut = (
@@ -621,6 +649,7 @@ export default function AccountPage() {
       { title: 'Your account', items: [
         { key: 'profile', label: 'Edit profile', Icon: UserIcon },
         { key: 'password', label: 'Password', Icon: LockIcon },
+        ...(deleteCard ? [{ key: 'delete', label: 'Delete account', Icon: Trash2Icon }] : []),
       ] },
       { title: 'Preferences', items: [
         { key: 'display', label: 'Display', Icon: PanelTopIcon },
@@ -643,6 +672,7 @@ export default function AccountPage() {
       display: 'Display',
       preferences: 'Preferences',
       help: 'Getting started',
+      delete: 'Delete account',
     };
 
     return (
@@ -728,15 +758,10 @@ export default function AccountPage() {
               </h2>
 
               {section === 'profile' && (
-                <>
-                  {identity}
-                  {avatarPicker}
-                  <form onSubmit={handleSave} className={`${CARD} p-6 space-y-5`}>
-                    {nameFields}
-                    {messages}
-                    {saveButton}
-                  </form>
-                </>
+                <div className="flex flex-col items-center gap-5 py-2">
+                  {profileBadge(1)}
+                  {cardNote}
+                </div>
               )}
 
               {section === 'password' && (
@@ -750,6 +775,7 @@ export default function AccountPage() {
               {section === 'display' && displayCard}
               {section === 'preferences' && experimentalCard}
               {section === 'help' && gettingStarted}
+              {section === 'delete' && deleteCard}
             </motion.section>
           </div>
         </div>
@@ -762,8 +788,8 @@ export default function AccountPage() {
   return (
     <Layout>
       <div className="mx-auto w-full max-w-md space-y-6">
-        {identity}
-        {avatarPicker}
+        <div className="flex justify-center">{profileBadge(0.62)}</div>
+        {cardNote}
         {appearanceCard}
         {experimentalCard}
         {locationCard}
@@ -771,16 +797,14 @@ export default function AccountPage() {
         {gettingStarted}
 
         <form onSubmit={handleSave} className={`${CARD} p-6 space-y-5`}>
-          {nameFields}
-          <div className="border-t border-ninja-border pt-5 space-y-4">
-            <p className="text-ninja-muted font-ninja text-xs font-semibold uppercase tracking-wide">Change Password</p>
-            {passwordFields}
-          </div>
+          <p className="text-ninja-muted font-ninja text-xs font-semibold uppercase tracking-wide">Change Password</p>
+          {passwordFields}
           {messages}
           {saveButton}
         </form>
 
         {signOut}
+        {deleteCard}
       </div>
       {myStudioPanel}
     </Layout>

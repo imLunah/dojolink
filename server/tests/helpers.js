@@ -21,7 +21,7 @@ function csrf(req) {
 
 async function resetDb() {
   await pool.query(`TRUNCATE
-    progress_logs, daily_assignments, student_programs, students,
+    progress_logs, daily_assignments, student_programs, student_locations, students,
     user_locations, belt_level_projects, users, locations, session
     RESTART IDENTITY CASCADE`);
 
@@ -62,6 +62,14 @@ async function resetDb() {
   );
   const studentA = studs[0].id;
   const studentB = studs[1].id;
+
+  // Every read is scoped by membership now (migration 027), so a fixture that
+  // inserts students directly has to give them their home membership row too,
+  // exactly as the backfill does for real data.
+  await pool.query(
+    `INSERT INTO student_locations (student_id, location_id) VALUES ($1, $2), ($3, $4)`,
+    [studentA, locA, studentB, locB]
+  );
 
   await pool.query(
     `INSERT INTO student_programs (student_id, program, belt_level, belt_sublevel) VALUES

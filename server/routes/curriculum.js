@@ -97,7 +97,7 @@ router.get('/roadmap', requireSensei, async (req, res) => {
     ]);
 
     const BELT_ORDER = ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Purple', 'Brown', 'Red', 'Black', 'Bronze', 'Silver', 'Platinum', 'Gold'];
-    const programOrder = ['CREATE', 'JR', 'AI Academy', 'Robotics Academy', 'VR Coding', 'Silver', 'Gold Unity', 'Gold Godot'];
+    const programOrder = ['CREATE', 'JR', 'AI Academy', 'Robotics Academy', 'VR Coding'];
     const programMap = {};
 
     // Non-CREATE programs from curriculum_modules

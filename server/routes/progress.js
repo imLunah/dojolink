@@ -64,6 +64,8 @@ router.post('/', requireSensei, requireOwnLocation, async (req, res) => {
     module_name,
     lesson_name,
     lesson_entries, // array of { sub_program, module_name, lesson_name } for multi-lesson sessions
+                    // A CREATE session may also carry belt_level_at / belt_sublevel_at per entry,
+                    // for a class where the ninja finished a level or a belt and carried on.
   } = req.body;
 
   if (!student_id || !program || !notes) {
@@ -108,6 +110,22 @@ router.post('/', requireSensei, requireOwnLocation, async (req, res) => {
     const subError = await validateSublevel(pool, belt_level_at ?? null, belt_sublevel_at ?? null);
     if (subError) return res.status(400).json({ error: subError });
 
+    // A per-entry belt and level is a second way into the same two columns, so
+    // it gets the same two checks. Validating only the top level values would
+    // hand back the out-of-range write session 27 closed, one nesting deeper.
+    // Each entry's level is bounded against that entry's OWN belt.
+    for (const entry of entries) {
+      if (entry.belt_level_at !== undefined && !isValidBelt(entry.belt_level_at)) {
+        return res.status(400).json({ error: 'Invalid belt level' });
+      }
+      const entrySubError = await validateSublevel(
+        pool,
+        entry.belt_level_at ?? belt_level_at ?? null,
+        entry.belt_sublevel_at ?? null
+      );
+      if (entrySubError) return res.status(400).json({ error: entrySubError });
+    }
+
     // Prefer today's pending assignment so logging clears the kid from the board.
     // A generic check-in (program IS NULL) is also eligible — the sensei picking a
     // class here claims it. Exact program matches win over a generic row.
@@ -124,7 +142,7 @@ router.post('/', requireSensei, requireOwnLocation, async (req, res) => {
     const assignmentId = assignmentRows[0]?.id || null;
 
     const { rows: studentRows } = await pool.query(
-      'SELECT id FROM students WHERE id = $1 AND active = true AND location_id = $2',
+      'SELECT id FROM students WHERE id = $1 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [student_id, req.session.activeLocationId]
     );
     if (!studentRows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -155,8 +173,8 @@ router.post('/', requireSensei, requireOwnLocation, async (req, res) => {
         program,
         senseiId,
         date,
-        belt_level_at || null,
-        belt_sublevel_at || null,
+        entry.belt_level_at ?? belt_level_at ?? null,
+        entry.belt_sublevel_at ?? belt_sublevel_at ?? null,
         entry.project_at ?? project_at ?? null,
         entry.status ?? status_at ?? null,
         notes,
@@ -330,7 +348,7 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
     const { rows: before } = await client.query(
       `SELECT pl.* FROM progress_logs pl
        JOIN students s ON pl.student_id = s.id
-       WHERE pl.id = $1 AND s.location_id = $2
+       WHERE pl.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
        ${isManager ? '' : 'AND pl.sensei_id = $3'}
        FOR UPDATE OF pl`,
       lookup
@@ -449,7 +467,7 @@ router.delete('/:id', requireSensei, requireOwnLocation, async (req, res) => {
     const { rows } = await pool.query(
       `DELETE FROM progress_logs
        USING students s
-       WHERE progress_logs.id = $1 AND progress_logs.student_id = s.id AND s.location_id = $2
+       WHERE progress_logs.id = $1 AND progress_logs.student_id = s.id AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
        ${ownershipClause}
        RETURNING progress_logs.id`,
       params
@@ -482,7 +500,7 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
     const { rows: logRows } = await pool.query(
       `SELECT pl.id FROM progress_logs pl
        JOIN students s ON pl.student_id = s.id
-       WHERE pl.id = $1 AND s.location_id = $2`,
+       WHERE pl.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)`,
       [req.params.id, req.session.activeLocationId]
     );
     if (!logRows[0]) return res.status(404).json({ error: 'Log not found' });
@@ -514,7 +532,7 @@ router.post('/:id/reactions', requireSensei, requireOwnLocation, async (req, res
         const { rows } = await client.query(
           `SELECT pl.id FROM progress_logs pl
            JOIN students s ON pl.student_id = s.id
-           WHERE pl.id = $1 AND s.location_id = $2`,
+           WHERE pl.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)`,
           [req.params.id, req.session.activeLocationId]
         );
         return rows[0]?.id ?? null;

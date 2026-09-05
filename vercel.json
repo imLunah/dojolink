@@ -14,7 +14,7 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; frame-src 'self' https://vercel.live; img-src 'self' data: blob: https://*.supabase.co https://vercel.live https://vercel.com; font-src 'self' data: https://assets.vercel.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-86hhHmOnSDHVU34OyigOS59pLV7YSdMhElLQtDqgswM=' https://va.vercel-scripts.com https://vercel.live; connect-src 'self' https://*.supabase.co https://*.vercel-insights.com https://vercel.live wss://*.pusher.com https://*.pusher.com" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; frame-src 'self' https://vercel.live; img-src 'self' data: blob: https://*.supabase.co https://vercel.live https://vercel.com; font-src 'self' data: https://assets.vercel.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-tOQm2UYBDpbrPzY5sogxOiXYUDVD/4Co/qHKJf8iZEY=' https://va.vercel-scripts.com https://vercel.live; connect-src 'self' https://*.supabase.co https://*.vercel-insights.com https://vercel.live wss://*.pusher.com https://*.pusher.com" }
       ]
     },
     {

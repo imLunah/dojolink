@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireAuth, requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const { ALL_BELTS, isValidBelt, validateSublevel } = require('../lib/belts');
 const { reactionsSubquery } = require('../lib/reactions');
+const { memberOf, addMembership, archiveOrRemove } = require('../lib/studentScope');
 
 // Code.AI (Code.org) login sticker set — must match the students.codeorg_sticker
 // DB CHECK list and CODEORG_STICKERS in client/src/utils/stickers.js.
@@ -57,7 +58,7 @@ router.get('/', requireAuth, async (req, res) => {
       (SELECT MAX(pl.session_date) FROM progress_logs pl WHERE pl.student_id = s.id AND pl.notes IS DISTINCT FROM 'Marked complete from roadmap') AS last_activity,
       ${PROGRAMS_SUBQUERY}
     FROM students s
-    WHERE s.active = $2 AND s.location_id = $1
+    WHERE s.active = $2 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1)
   `;
 
   if (search) {
@@ -89,7 +90,7 @@ router.get('/', requireAuth, async (req, res) => {
         `SELECT sp.program, COUNT(DISTINCT sp.student_id)::int AS count
          FROM student_programs sp
          JOIN students s ON sp.student_id = s.id
-         WHERE s.active = $2 AND s.location_id = $1
+         WHERE s.active = $2 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1)
          GROUP BY sp.program`,
         [req.session.activeLocationId, !showInactive]
       ),
@@ -116,7 +117,7 @@ router.get('/birthdays', requireAuth, async (req, res) => {
              EXTRACT(MONTH FROM s.birthday)::int AS month,
              EXTRACT(DAY   FROM s.birthday)::int AS day
       FROM students s
-      WHERE s.location_id = $1 AND s.active = true AND s.birthday IS NOT NULL
+      WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1) AND s.active = true AND s.birthday IS NOT NULL
       ORDER BY s.full_name ASC
     `, [req.session.activeLocationId]);
     res.json(rows);
@@ -134,7 +135,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   try {
     const params = isManager ? [id] : [id, req.session.activeLocationId];
-    const locationClause = isManager ? '' : 'AND s.location_id = $2';
+    const locationClause = isManager ? '' : 'AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)';
     const activeClause  = isManager ? '' : 'AND s.active = true';
     const { rows } = await pool.query(
       `SELECT s.*, ${PROGRAMS_SUBQUERY} FROM students s WHERE s.id = $1 ${activeClause} ${locationClause}`,
@@ -198,15 +199,24 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
 
   if (!full_name) return res.status(400).json({ error: 'Full name is required' });
 
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
+    await client.query('BEGIN');
+    const { rows } = await client.query(
       'INSERT INTO students (full_name, birthday, location_id) VALUES ($1, $2, $3) RETURNING *',
       [full_name, birthday || null, req.session.activeLocationId]
     );
+    // Home and membership are written together: the creating center is where
+    // the ninja lives, and every read from here on trusts student_locations.
+    await addMembership(client, rows[0].id, req.session.activeLocationId, req.session.userId);
+    await client.query('COMMIT');
     res.status(201).json({ ...rows[0], programs: [] });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error creating student:', err);
     res.status(500).json({ error: 'Failed to create student' });
+  } finally {
+    client.release();
   }
 });
 
@@ -228,7 +238,7 @@ router.post('/:id/programs', requireManager, requireOwnLocation, async (req, res
     if (subError) return res.status(400).json({ error: subError });
 
     const { rows: studentRows } = await pool.query(
-      'SELECT id FROM students WHERE id = $1 AND active = true AND location_id = $2',
+      'SELECT id FROM students WHERE id = $1 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [id, req.session.activeLocationId]
     );
     if (!studentRows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -270,7 +280,7 @@ router.patch('/:id/programs/:program', requireManager, requireOwnLocation, async
       SET belt_level = $1, belt_sublevel = $2, current_project = $3, project_status = $4
       FROM students s
       WHERE sp.student_id = $5 AND sp.program = $6
-        AND sp.student_id = s.id AND s.location_id = $7
+        AND sp.student_id = s.id AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $7)
       RETURNING sp.*
     `, [
       belt_level !== undefined ? belt_level : null,
@@ -299,7 +309,7 @@ router.delete('/:id/programs/:program', requireManager, requireOwnLocation, asyn
       `DELETE FROM student_programs sp
        USING students s
        WHERE sp.student_id = $1 AND sp.program = $2
-         AND sp.student_id = s.id AND s.location_id = $3
+         AND sp.student_id = s.id AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $3)
        RETURNING sp.id`,
       [id, decodeURIComponent(program), req.session.activeLocationId]
     );
@@ -319,7 +329,7 @@ router.patch('/:id', requireManager, requireOwnLocation, async (req, res) => {
 
   try {
     const { rows: existing } = await pool.query(
-      'SELECT * FROM students WHERE id = $1 AND active = true AND location_id = $2',
+      'SELECT * FROM students WHERE id = $1 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [id, req.session.activeLocationId]
     );
     const student = existing[0];
@@ -368,7 +378,7 @@ router.patch('/:id/parent-note', requireSensei, requireOwnLocation, async (req, 
   const { parent_note } = req.body;
   try {
     const { rows } = await pool.query(
-      'UPDATE students SET parent_note = $1 WHERE id = $2 AND active = true AND location_id = $3 RETURNING parent_note',
+      'UPDATE students SET parent_note = $1 WHERE id = $2 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $3) RETURNING parent_note',
       [parent_note || null, id, req.session.activeLocationId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -394,7 +404,7 @@ router.patch('/:id/note', requireSensei, requireOwnLocation, async (req, res) =>
 
   try {
     const { rows } = await pool.query(
-      'UPDATE students SET pinned_note = $1 WHERE id = $2 AND active = true AND location_id = $3 RETURNING pinned_note',
+      'UPDATE students SET pinned_note = $1 WHERE id = $2 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $3) RETURNING pinned_note',
       [pinned_note || null, id, req.session.activeLocationId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -423,7 +433,7 @@ router.patch('/:id/sticker', requireSensei, requireOwnLocation, async (req, res)
         `SELECT 1 FROM student_programs sp
            JOIN students s ON s.id = sp.student_id
           WHERE sp.student_id = $1 AND sp.program = 'JR'
-            AND s.location_id = $2 AND s.active = true`,
+            AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2) AND s.active = true`,
         [id, req.session.activeLocationId]
       );
       if (!enrolled[0]) {
@@ -431,7 +441,7 @@ router.patch('/:id/sticker', requireSensei, requireOwnLocation, async (req, res)
       }
     }
     const { rows } = await pool.query(
-      'UPDATE students SET codeorg_sticker = $1 WHERE id = $2 AND active = true AND location_id = $3 RETURNING codeorg_sticker',
+      'UPDATE students SET codeorg_sticker = $1 WHERE id = $2 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $3) RETURNING codeorg_sticker',
       [codeorg_sticker || null, id, req.session.activeLocationId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -449,13 +459,16 @@ router.delete('/:id', requireManager, requireOwnLocation, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      'SELECT id FROM students WHERE id = $1 AND active = true AND location_id = $2',
+      'SELECT id FROM students WHERE id = $1 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [id, req.session.activeLocationId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
 
-    await pool.query('UPDATE students SET active = false WHERE id = $1', [id]);
-    res.json({ message: 'Student deactivated' });
+    // At the ninja's home this archives them. At a center that only shares
+    // them it removes the share, and the ninja carries on everywhere else.
+    const outcome = await archiveOrRemove(pool, id, req.session.activeLocationId);
+    if (!outcome) return res.status(404).json({ error: 'Student not found' });
+    res.json({ message: outcome === 'archived' ? 'Student deactivated' : 'Student removed from this center', outcome });
   } catch (err) {
     console.error('Error deleting student:', err);
     res.status(500).json({ error: 'Failed to delete student' });
@@ -471,10 +484,18 @@ router.delete('/:id/permanent', requireManager, requireOwnLocation, async (req, 
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      'SELECT id FROM students WHERE id = $1 AND location_id = $2',
+      'SELECT id, location_id AS home FROM students WHERE id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [id, req.session.activeLocationId]
     );
     if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Student not found' }); }
+
+    // A center that only shares the ninja cannot destroy a record that belongs
+    // to another center. For them, permanent delete means "remove the share".
+    if (Number(rows[0].home) !== Number(req.session.activeLocationId)) {
+      await client.query('DELETE FROM student_locations WHERE student_id = $1 AND location_id = $2', [id, req.session.activeLocationId]);
+      await client.query('COMMIT');
+      return res.json({ ok: true, outcome: 'removed' });
+    }
 
     await client.query(`DELETE FROM progress_log_comments WHERE log_id IN (SELECT id FROM progress_logs WHERE student_id = $1)`, [id]);
     await client.query('DELETE FROM progress_logs WHERE student_id = $1', [id]);
@@ -499,7 +520,7 @@ router.patch('/:id/restore', requireManager, requireOwnLocation, async (req, res
   const { id } = req.params;
   try {
     const { rows } = await pool.query(
-      'SELECT id FROM students WHERE id = $1 AND active = false AND location_id = $2',
+      'SELECT id FROM students WHERE id = $1 AND active = false AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [id, req.session.activeLocationId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Archived student not found' });
@@ -522,7 +543,7 @@ router.get('/:id/roadmap', requireSensei, async (req, res) => {
     const { rows: studentRows } = await pool.query(
       isManager
         ? 'SELECT id FROM students WHERE id = $1'
-        : 'SELECT id FROM students WHERE id = $1 AND location_id = $2 AND active = true',
+        : 'SELECT id FROM students WHERE id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2) AND active = true',
       isManager ? [req.params.id] : [req.params.id, req.session.activeLocationId]
     );
     if (!studentRows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -581,7 +602,7 @@ router.post('/:id/roadmap/complete', requireSensei, requireOwnLocation, async (r
 
   try {
     const { rows: studentRows } = await pool.query(
-      'SELECT id FROM students WHERE id = $1 AND active = true AND location_id = $2',
+      'SELECT id FROM students WHERE id = $1 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [req.params.id, req.session.activeLocationId]
     );
     if (!studentRows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -660,7 +681,7 @@ router.post('/:id/roadmap/uncomplete', requireSensei, requireOwnLocation, async 
 
   try {
     const { rows: studentRows } = await pool.query(
-      'SELECT id FROM students WHERE id = $1 AND active = true AND location_id = $2',
+      'SELECT id FROM students WHERE id = $1 AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
       [req.params.id, req.session.activeLocationId]
     );
     if (!studentRows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -764,7 +785,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
       const { rows: existing } = await client.query(
         `SELECT s.id, sp.belt_level FROM students s
          JOIN student_programs sp ON sp.student_id = s.id
-         WHERE LOWER(s.full_name) = LOWER($1) AND s.location_id = $2 AND sp.program = $3 AND s.active = true`,
+         WHERE LOWER(s.full_name) = LOWER($1) AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2) AND sp.program = $3 AND s.active = true`,
         [fullName, locationId, program]
       );
 
@@ -797,7 +818,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
 
       // Find or create the student (they may exist but not in this program yet)
       const { rows: existingStudent } = await client.query(
-        'SELECT id FROM students WHERE LOWER(full_name) = LOWER($1) AND location_id = $2 AND active = true',
+        'SELECT id FROM students WHERE LOWER(full_name) = LOWER($1) AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2) AND active = true',
         [fullName, locationId]
       );
 
@@ -816,6 +837,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
           [fullName, birthday, locationId, row.parent_name || null, row.parent_email || null, row.parent_phone || null]
         );
         studentId = inserted[0].id;
+        await addMembership(client, studentId, locationId, req.session.userId);
       }
 
       await client.query(
@@ -842,7 +864,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
     incoming.map((r) => r.full_name?.trim().toLowerCase()).filter(Boolean)
   );
   const { rows: activeRoster } = await pool.query(
-    'SELECT id, full_name FROM students WHERE location_id = $1 AND active = true',
+    'SELECT id, full_name FROM students WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $1) AND active = true',
     [locationId]
   );
   const missing = activeRoster.filter(
@@ -878,7 +900,7 @@ router.post('/import/apply-belts', requireManager, requireOwnLocation, async (re
          SET belt_level = $1, belt_sublevel = 1
          FROM students s
          WHERE sp.student_id = s.id
-           AND sp.student_id = $2 AND sp.program = $3 AND s.location_id = $4`,
+           AND sp.student_id = $2 AND sp.program = $3 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $4)`,
         [u.belt_level, u.id, u.program, locationId]
       );
       updated += rowCount;
@@ -908,11 +930,21 @@ router.post('/bulk-archive', requireManager, requireOwnLocation, async (req, res
     return res.status(400).json({ error: 'No valid student ids' });
   }
 
-  const { rowCount } = await pool.query(
-    'UPDATE students SET active = false WHERE id = ANY($1::int[]) AND location_id = $2 AND active = true',
+  // Absent from the file at this center. A ninja whose home is here is
+  // archived; one this center only shares is removed from this center and
+  // left alone everywhere else. The count the client shows is of both.
+  let archived = 0;
+  let removed = 0;
+  const { rows: members } = await pool.query(
+    'SELECT id FROM students WHERE id = ANY($1::int[]) AND active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = students.id AND sl_m.location_id = $2)',
     [cleanIds, locationId]
   );
-  res.json({ archived: rowCount });
+  for (const { id } of members) {
+    const outcome = await archiveOrRemove(pool, id, locationId);
+    if (outcome === 'archived') archived += 1;
+    if (outcome === 'removed') removed += 1;
+  }
+  res.json({ archived: archived + removed, archivedOutright: archived, removedFromCenter: removed });
 });
 
 module.exports = router;

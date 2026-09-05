@@ -75,11 +75,12 @@ router.get('/locations', requireManager, async (req, res) => {
   const allowed = allowedLocationIds(req);
   try {
     const { rows } = await pool.query(`
-      SELECT l.id, l.name, l.slug, l.active, l.created_at, l.center_code,
+      SELECT l.id, l.name, l.slug, l.active, l.created_at, l.center_code, l.address,
              COUNT(DISTINCT s.id) FILTER (WHERE s.active = true)::int AS student_count,
              COUNT(DISTINCT u.id) FILTER (WHERE u.active = true AND u.role IN ('manager','sensei'))::int AS staff_count
       FROM locations l
-      LEFT JOIN students s ON s.location_id = l.id
+      LEFT JOIN student_locations sl ON sl.location_id = l.id
+      LEFT JOIN students s ON s.id = sl.student_id
       LEFT JOIN user_locations ul ON ul.location_id = l.id
       LEFT JOIN users u ON u.id = ul.user_id
       ${allowed ? 'WHERE l.id = ANY($1)' : ''}
@@ -90,6 +91,131 @@ router.get('/locations', requireManager, async (req, res) => {
   } catch (err) {
     console.error('Error fetching locations:', err);
     res.status(500).json({ error: 'Failed to fetch locations' });
+  }
+});
+
+// ── Shared ninjas ─────────────────────────────────────────────────────────────
+//
+// A ninja can belong to more than one center (migration 027). These three
+// routes let a director bring a ninja from another center onto their own
+// roster and take them off again. Rule 1 above applies throughout: the target
+// center must be one the director belongs to. The ninja's HOME center is never
+// changed here; sharing is additive, and only the home center can archive them.
+//
+// The search deliberately shows only a name, an age and the home center. It is
+// enough to pick the right child, and a director looking across centers does
+// not need a parent's email or phone to do it.
+
+const SHARED_SELECT = `
+  SELECT s.id, s.full_name, s.birthday, s.location_id AS home_location_id,
+         hl.name AS home_location_name,
+         COALESCE(
+           (SELECT json_agg(sp.program ORDER BY sp.program) FROM student_programs sp WHERE sp.student_id = s.id),
+           '[]'::json
+         ) AS programs
+    FROM students s
+    JOIN locations hl ON hl.id = s.location_id`;
+
+// GET /api/admin/locations/:id/students/search?q=  — ninjas at OTHER centers
+router.get('/locations/:id/students/search', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = Number(req.params.id);
+  if (!mayTouchLocation(req, locationId)) return res.status(403).json({ error: 'Not your center' });
+
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.json([]);
+
+  try {
+    const { rows } = await pool.query(
+      `${SHARED_SELECT}
+        WHERE s.active = true
+          AND s.full_name ILIKE $1
+          AND NOT EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = s.id AND sl.location_id = $2)
+        ORDER BY s.full_name
+        LIMIT 20`,
+      [`%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`, locationId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error searching students to share:', err);
+    res.status(500).json({ error: 'Failed to search' });
+  }
+});
+
+// GET /api/admin/locations/:id/students/shared — members whose home is elsewhere
+router.get('/locations/:id/students/shared', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = Number(req.params.id);
+  if (!mayTouchLocation(req, locationId)) return res.status(403).json({ error: 'Not your center' });
+
+  try {
+    const { rows } = await pool.query(
+      `${SHARED_SELECT.replace('FROM students s', 'FROM student_locations sl JOIN students s ON s.id = sl.student_id')}
+        WHERE sl.location_id = $1 AND s.location_id <> $1 AND s.active = true
+        ORDER BY s.full_name`,
+      [locationId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error listing shared students:', err);
+    res.status(500).json({ error: 'Failed to load shared ninjas' });
+  }
+});
+
+// POST /api/admin/locations/:id/students  { studentId } — share a ninja into this center
+router.post('/locations/:id/students', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = Number(req.params.id);
+  const studentId = Number(req.body?.studentId);
+  if (!mayTouchLocation(req, locationId)) return res.status(403).json({ error: 'Not your center' });
+  if (!Number.isInteger(studentId)) return res.status(400).json({ error: 'studentId is required' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, location_id FROM students WHERE id = $1 AND active = true',
+      [studentId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Ninja not found' });
+    if (Number(rows[0].location_id) === locationId) {
+      return res.status(400).json({ error: 'That ninja already calls this center home' });
+    }
+    await pool.query(
+      `INSERT INTO student_locations (student_id, location_id, added_by)
+       VALUES ($1, $2, $3) ON CONFLICT (student_id, location_id) DO NOTHING`,
+      [studentId, locationId, req.session.userId]
+    );
+    const { rows: out } = await pool.query(`${SHARED_SELECT} WHERE s.id = $1`, [studentId]);
+    res.status(201).json(out[0]);
+  } catch (err) {
+    console.error('Error sharing student:', err);
+    res.status(500).json({ error: 'Failed to add ninja' });
+  }
+});
+
+// DELETE /api/admin/locations/:id/students/:studentId — stop sharing
+router.delete('/locations/:id/students/:studentId', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = Number(req.params.id);
+  const studentId = Number(req.params.studentId);
+  if (!mayTouchLocation(req, locationId)) return res.status(403).json({ error: 'Not your center' });
+
+  try {
+    const { rows } = await pool.query('SELECT location_id FROM students WHERE id = $1', [studentId]);
+    if (!rows[0]) return res.status(404).json({ error: 'Ninja not found' });
+    // The home row is not a share. Taking a ninja off their own home center is
+    // archiving, which lives on the roster page with its own confirm.
+    if (Number(rows[0].location_id) === locationId) {
+      return res.status(400).json({ error: 'This is the ninja\'s home center. Archive them from the roster instead.' });
+    }
+    const { rowCount } = await pool.query(
+      'DELETE FROM student_locations WHERE student_id = $1 AND location_id = $2',
+      [studentId, locationId]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'That ninja is not shared with this center' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Error unsharing student:', err);
+    res.status(500).json({ error: 'Failed to remove ninja' });
   }
 });
 
@@ -155,7 +281,7 @@ router.post('/locations', requireAdmin, async (req, res) => {
 router.patch('/locations/:id', requireManager, async (req, res) => {
   const pool = req.app.get('db');
   const { id } = req.params;
-  const { name, active, center_code } = req.body;
+  const { name, active, center_code, address } = req.body;
 
   if (!mayTouchLocation(req, id)) {
     return res.status(403).json({ error: 'You can only change your own center.' });
@@ -198,14 +324,25 @@ router.patch('/locations/:id', requireManager, async (req, res) => {
       }
     }
 
+    // The address a maps app is handed. Bounded and whitespace-collapsed like
+    // any other free text here; emptying it is allowed and means "we do not
+    // have one", which puts the directions link back to searching the center
+    // by name. That is why it is a three-way check rather than COALESCE:
+    // undefined leaves it alone, a blank string clears it.
+    let addr;
+    if (address !== undefined) {
+      addr = String(address ?? '').trim().replace(/\s+/g, ' ').slice(0, 200);
+    }
+
     const { rows } = await pool.query(
       `UPDATE locations SET
          name        = COALESCE($1, name),
          active      = COALESCE($2, active),
-         center_code = COALESCE($3, center_code)
+         center_code = COALESCE($3, center_code),
+         address     = CASE WHEN $5::boolean THEN NULLIF($6, '') ELSE address END
        WHERE id = $4
-       RETURNING id, name, slug, active, created_at, center_code`,
-      [name?.trim() ?? null, active ?? null, code ?? null, id]
+       RETURNING id, name, slug, active, created_at, center_code, address`,
+      [name?.trim() ?? null, active ?? null, code ?? null, id, address !== undefined, addr ?? null]
     );
     res.json(rows[0]);
   } catch (err) {

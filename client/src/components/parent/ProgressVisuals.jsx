@@ -1,47 +1,18 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BELTS, PROGRAM_LOGOS, PROGRAM_BANNERS, getLevels, getBelt } from '../../utils/beltConfig';
+import { ChevronRightIcon } from 'lucide-react';
+import { BELTS, PROGRAM_LOGOS, PROGRAM_BANNERS, getLevels } from '../../utils/beltConfig';
+import { PROGRAM_GRADIENTS, PROGRAM_BAR_COLORS, JR_CODING_MODULES, SNAP_CIRCUITS_TOTAL, KIT_ORDER, KIT_SHORT, KIT_TOTALS } from '../../lib/programTheme';
 import BeltIcon from '../ui/BeltIcon';
+import { Hero, BeltRoad, PageTitle, LevelMedal, hasLevelMedal } from './ParentUI';
 import { useCurriculum } from '../../context/CurriculumContext';
 import { formatDate } from '../../utils/dateUtils';
 import { CARD } from '../../lib/surfaces';
 
-const PROGRAM_GRADIENTS = {
-  'Robotics Academy': 'linear-gradient(135deg, #060d1a 0%, #0a1e3d 55%, #0d3070 100%)',
-  'AI Academy':       'linear-gradient(135deg, #060c1f 0%, #091840 55%, #0e2a7a 100%)',
-  'JR':               'linear-gradient(135deg, #1a0533 0%, #2d1267 55%, #4c1d95 100%)',
-  'VR Coding':        'linear-gradient(135deg, #04181c 0%, #073a40 55%, #0b5e63 100%)',
-};
+// Program colours, kit and module vocab live in lib/programTheme so the parent
+// portal's own pages read the same values.
 
-const PROGRAM_BAR_COLORS = {
-  'Robotics Academy': '#2563eb',
-  'AI Academy':       '#1d4ed8',
-  'JR':               '#7c3aed',
-  'VR Coding':        '#14b8a6',
-};
-
-const JR_CODING_MODULES = ['Module 1','Module 2','Module 3','Module 4','Module 5','Module 6','Module 7','Module 8','Module 9','Module 10'];
-const SNAP_CIRCUITS_TOTAL = 24;
-
-const KIT_ORDER  = ['LEGO Spike Essentials', 'LEGO Spike Prime', 'VEX GO', 'Ozobot Evo'];
-const KIT_SHORT  = { 'LEGO Spike Essentials': 'Essentials', 'LEGO Spike Prime': 'Prime', 'VEX GO': 'VEX GO', 'Ozobot Evo': 'Ozobot' };
-const KIT_TOTALS = { 'LEGO Spike Essentials': 8, 'LEGO Spike Prime': 4, 'VEX GO': 4, 'Ozobot Evo': 2 };
-
-const BELT_IMAGES = {
-  White:  '/belts/belt-white.png',
-  Yellow: '/belts/belt-yellow.png',
-  Orange: '/belts/belt-orange.png',
-  Green:  '/belts/belt-green.png',
-  Blue:   '/belts/belt-blue.png',
-  Purple: '/belts/belt-purple.png',
-  Brown:  '/belts/belt-brown.png',
-  Red:    '/belts/belt-red.png',
-  Black:  '/belts/belt-black.png',
-  Bronze: '/belts/belt-bronze.png',
-  Silver: '/belts/belt-silver.png',
-  Platinum: '/belts/belt-platinum.png',
-  Gold:   '/belts/belt-gold.png',
-};
 
 function abbrevModule(name) {
   return name
@@ -78,9 +49,54 @@ const nodeVariants = {
   show: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 320, damping: 16 } },
 };
 
+// ─── Opening a course ─────────────────────────────────────────────────────────
+
+// The way into a course, and the reason the Courses section could come off the
+// nav: the card that DESCRIBES a program is the card that opens it.
+//
+// The whole card is the target, because a parent should not have to hunt for a
+// small control on a card that is already about one thing. The chevron sits by
+// the title, the same place the CREATE card puts it, rather than repeating as
+// a separate footer action. The link carries the sentence as its accessible
+// name so nothing is lost to a screen reader.
+function CourseShell({ href, program, children }) {
+  const shell = 'block rounded-2xl overflow-hidden border border-ninja-border shadow-sm';
+  return (
+    <motion.div variants={cardVariants} initial="hidden" animate="show">
+      {href
+        ? <Link to={href} aria-label={`Open the ${program} course`} className={`${shell} group transition-shadow hover:shadow-md focus-visible:outline-none`}>{children}</Link>
+        : <div className={shell}>{children}</div>}
+    </motion.div>
+  );
+}
+
+// The belt journey's door. It has no white body to put a footer row in, and
+// anything added BELOW the words pushes the belt road down the banner, so the
+// door is a chevron on the title's own line: it costs the block no height, and
+// the title is the thing a parent would reach for anyway.
+function Title({ href, className = '', children }) {
+  // The type and the spacing both live on the OUTER element, so the link and
+  // the plain heading occupy the same box to the pixel — a margin on the inner
+  // span would be a flex item's margin and would push the chevron off the
+  // text's own centre line.
+  const type = `font-ninja font-extrabold ${className}`;
+  if (!href) return <p className={type}>{children}</p>;
+  return (
+    <Link to={href} className={`group inline-flex items-center gap-1.5 max-w-full ${type}`}>
+      <span className="truncate">{children}</span>
+      <ChevronRightIcon
+        size={24}
+        strokeWidth={3}
+        aria-hidden
+        className="flex-shrink-0 opacity-60 transition-all group-hover:opacity-100 group-hover:translate-x-0.5"
+      />
+    </Link>
+  );
+}
+
 // ─── Program card banner ──────────────────────────────────────────────────────
 
-function ProgramCardBanner({ program, lastDate, sessions }) {
+function ProgramCardBanner({ program, lastDate, sessions, href }) {
   const gradient = PROGRAM_GRADIENTS[program];
   const logo = PROGRAM_LOGOS[program];
   const banner = PROGRAM_BANNERS[program];
@@ -98,6 +114,8 @@ function ProgramCardBanner({ program, lastDate, sessions }) {
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             objectFit: 'cover', objectPosition: 'center 30%', pointerEvents: 'none',
+            // Zoomed 4%: the art carries a hard band along its edges.
+            transform: 'scale(1.04)',
           }}
         />
       )}
@@ -117,9 +135,10 @@ function ProgramCardBanner({ program, lastDate, sessions }) {
         <h2 style={{
           color: 'white', fontWeight: 800, fontSize: 21, lineHeight: 1.1,
           marginBottom: (lastDate || sessions !== undefined) ? 5 : 0,
-          fontFamily: 'Nunito, sans-serif',
+          fontFamily: 'Nunito, sans-serif', display: 'flex', alignItems: 'center', gap: '6px',
         }}>
-          {program}
+          <span>{program}</span>
+          {href && <ChevronRightIcon size={21} strokeWidth={3} aria-hidden className="flex-shrink-0 opacity-60 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />}
         </h2>
         {lastDate && (
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontFamily: 'Nunito, sans-serif' }}>
@@ -238,158 +257,113 @@ function ActivityChart({ logs }) {
 
 // ─── Belt journey (CREATE only) ───────────────────────────────────────────────
 
-function BeltJourney({ enrollment }) {
-  const { belt_level, belt_sublevel, last_session_date, current_project, project_status } = enrollment;
-  const currentIndex = belt_level ? BELTS.findIndex((b) => b.name === belt_level) : -1;
-  const levels = belt_level ? getLevels(belt_level) : [];
-  const maxLevel = levels.length ? levels[levels.length - 1] : null;
-  const sublevel = belt_sublevel != null ? parseInt(belt_sublevel) : null;
-  // Progress within the belt = position of the current level among the belt's
-  // levels (handles non-1-based belts like Green = levels 6–10).
-  const levelPos = sublevel != null ? levels.indexOf(sublevel) : -1;
-  const progress = levels.length && levelPos >= 0 ? Math.round(((levelPos + 1) / levels.length) * 100) : null;
+// The same hero the CREATE course opens with, so a parent meets one picture of
+// the belt road and not two. It used to be its own gradient card with a
+// "Current Belt" eyebrow, a 76px belt beside the words, a hand-rolled ladder
+// and a sublevel bar — a second design for the one thing the portal already
+// draws. Everything here now comes from ParentUI: the hero, its banner art and
+// the road itself.
+function BeltJourney({ enrollment, childName, href }) {
+  const belt = enrollment.belt_level;
+  const levels = belt ? getLevels(belt) : [];
+  const level = Number(enrollment.belt_sublevel) || levels[0] || null;
+  const pos = level != null ? levels.indexOf(level) + 1 : 0;
+  const eyebrow = `CREATE${childName ? ` · ${childName}` : ''}`;
 
-  if (!belt_level) {
+  if (!belt) {
     return (
-      <div className={`${CARD} p-5`}>
-        <h2 className="text-ninja-navy font-ninja font-bold text-lg mb-1">CREATE</h2>
-        <p className="text-ninja-muted font-ninja text-sm italic text-center py-4">
-          Belt journey starting soon!
-        </p>
-      </div>
+      <Hero program="CREATE" size="block">
+        <p className="font-ninja text-[12px] font-extrabold opacity-85">{eyebrow}</p>
+        <Title href={href} className="text-[32px] leading-tight mt-1">White belt ahead</Title>
+        <p className="font-ninja text-[13px] opacity-85 mt-1">The belt road starts with the first logged session.</p>
+      </Hero>
     );
   }
 
   return (
-    <motion.div
-      className="rounded-2xl shadow-lg overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #006ADD 0%, #004fa8 100%)' }}
-      variants={cardVariants}
-      initial="hidden"
-      animate="show"
-    >
-      <div className="p-5 relative">
-        <div className="absolute pointer-events-none" style={{ right: -8, top: -8, opacity: 0.42 }}>
-          {BELT_IMAGES[belt_level] ? (
-            <img src={BELT_IMAGES[belt_level]} alt="" draggable={false} className="w-[110px] h-[110px] sm:w-40 sm:h-40 md:w-52 md:h-52" />
-          ) : (
-            <div
-              className="w-[110px] h-[110px] sm:w-40 sm:h-40 md:w-52 md:h-52 rounded-full flex items-center justify-center font-ninja font-black"
-              style={{ backgroundColor: getBelt(belt_level)?.color || '#9ca3af', color: getBelt(belt_level)?.textColor || '#fff' }}
-            >
-              <span style={{ fontSize: '3rem' }}>{belt_level[0]}</span>
+    <Hero program="CREATE" size="block">
+      {/* The belt is the hero's art: square, pinned to the right and cut off
+          by the hero's own overflow, sitting above the gradient but under
+          every word (the hero isolates, so a negative z can do that). */}
+      <span
+        aria-hidden
+        className="hidden lg:block absolute inset-y-[-3%] right-[-3.5rem] aspect-square pointer-events-none"
+        style={{
+          zIndex: -1,
+          maskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
+          WebkitMaskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
+        }}
+      >
+        <BeltIcon belt={belt} large style={{ width: '100%', height: '100%' }} />
+      </span>
+
+      {/* On a phone the belt is anchored to the WORDS, not to the hero, and
+          the bleed is lopsided on purpose: it runs far past the top and the
+          right so it sits INTO the corner and leaves by two edges, and stops
+          just short of the road below. Centering it on the hero laid it over
+          the road, where the belts ahead are dimmed and had nothing to be dim
+          against; bleeding it evenly left it hanging off one edge in the
+          middle of the banner, which read as a disc somebody had misplaced.
+          Corner art is cropped art, so the more it leaves the frame the less
+          it looks stranded. */}
+      <div className="relative min-w-0">
+        <span
+          aria-hidden
+          className="lg:hidden absolute -top-14 -bottom-5 right-[-3rem] aspect-square pointer-events-none"
+          style={{
+            zIndex: -1,
+            maskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
+            WebkitMaskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
+          }}
+        >
+          <BeltIcon belt={belt} large style={{ width: '100%', height: '100%' }} />
+        </span>
+        {/* The medal sits BESIDE the whole block, not under the title, and
+            that is a layout decision rather than a taste one: this hero's job
+            is to hold the belt road, and the road's position in it must not
+            drift. Stacked under the summary the medal added its own 60-odd
+            pixels and the door added 30 more, and the road — the one thing on
+            the card a parent looks for — slid down the banner. Alongside, the
+            medal is shorter than the three lines it stands next to, so it
+            costs the block nothing and the road stays where it has always
+            been. Same reason the door is a chevron on the title's own line
+            and not a chip beneath it.
+
+            The level's own medal off the IMPACT poster. The belt behind the
+            hero says which belt; this says how far into it, in the art the
+            centre already hangs on its wall. The nine CREATE belts have one;
+            the Degrees belts do not, and LevelMedal draws nothing rather than
+            borrowing a neighbour's. */}
+        <div className="flex items-center gap-3.5 min-w-0">
+          {level != null && hasLevelMedal(belt, level) && (
+            <div className="hidden lg:block">
+              <LevelMedal belt={belt} level={level} size={58} tilt className="drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]" />
             </div>
           )}
-        </div>
-
-        <p className="font-ninja text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          Current Belt
-        </p>
-
-        <div className="flex items-baseline gap-2 mb-1">
-          <p className="text-white font-ninja font-black" style={{ fontSize: '28px', lineHeight: 1 }}>{belt_level}</p>
-          {sublevel && <p className="font-ninja font-bold text-xl" style={{ color: 'rgba(255,255,255,0.85)' }}>#{sublevel}</p>}
-        </div>
-
-        {(current_project || last_session_date) && (
-          <p className="font-ninja text-xs mb-5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-            {current_project ? `${current_project}${project_status ? ` · ${project_status}` : ''}` : ''}
-            {current_project && last_session_date ? ' · ' : ''}
-            {last_session_date ? `Last: ${formatDate(last_session_date)}` : ''}
-          </p>
-        )}
-        {!current_project && !last_session_date && <div className="mb-5" />}
-
-        <div className="overflow-x-auto no-scrollbar" style={{ margin: '0 -4px', padding: '4px' }}>
-          <div className="flex items-center" style={{ minWidth: 'max-content' }}>
-            {BELTS.map((belt, i) => {
-              const reached = i <= currentIndex;
-              const isCurrent = i === currentIndex;
-              const imgSize = isCurrent ? 34 : 26;
-              return (
-                <React.Fragment key={belt.name}>
-                  {i > 0 && (
-                    <div style={{
-                      width: '12px', height: '2px', flexShrink: 0,
-                      backgroundColor: reached ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.22)',
-                    }} />
-                  )}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    animate={{ opacity: reached ? 1 : 0.45, scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 340, damping: 18, delay: i * 0.04 + 0.2 }}
-                    style={{ flexShrink: 0, display: 'block' }}
-                  >
-                    <BeltIcon
-                      belt={belt.name}
-                      size={imgSize}
-                      style={{
-                        filter: isCurrent
-                          ? 'drop-shadow(0 0 6px rgba(255,255,255,0.55))'
-                          : reached ? 'none' : 'grayscale(100%)',
-                      }}
-                    />
-                  </motion.div>
-                </React.Fragment>
-              );
-            })}
-          </div>
-          <div className="flex" style={{ minWidth: 'max-content', marginTop: '5px' }}>
-            {BELTS.map((belt, i) => {
-              const reached = i <= currentIndex;
-              const isCurrent = i === currentIndex;
-              const imgSize = isCurrent ? 34 : 26;
-              return (
-                <React.Fragment key={belt.name}>
-                  {i > 0 && <div style={{ width: '12px', flexShrink: 0 }} />}
-                  <div style={{ width: imgSize, textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: '12px', fontFamily: 'Nunito, sans-serif',
-                      fontWeight: isCurrent ? 700 : 400,
-                      color: reached ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.35)',
-                      whiteSpace: 'nowrap', display: 'block',
-                    }}>
-                      {belt.name}
-                    </span>
-                  </div>
-                </React.Fragment>
-              );
-            })}
+          <div className="min-w-0">
+            <p className="font-ninja text-[12px] font-extrabold opacity-85 truncate">{eyebrow}</p>
+            <Title href={href} className="text-[36px] lg:text-[32px] leading-none mt-1 tracking-[-0.015em]">{belt} belt</Title>
+            <p className="font-ninja text-[13px] opacity-85 mt-2 truncate">
+              {[level != null ? `Level ${level}` : null, levels.length ? `${pos} of ${levels.length}` : null].filter(Boolean).join(' · ')}
+            </p>
           </div>
         </div>
       </div>
 
-      {progress !== null && (
-        <div className="px-5 pb-5">
-          <div className="flex justify-between font-ninja mb-1.5" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
-            <span>Sublevel progress</span>
-            <motion.span
-              className="font-bold"
-              style={{ color: 'rgba(255,255,255,0.9)' }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              {progress}%
-            </motion.span>
-          </div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-            <motion.div
-              className="h-full rounded-full"
-              style={{ backgroundColor: 'rgba(255,255,255,0.8)' }}
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
-            />
-          </div>
-          {maxLevel && sublevel && (
-            <p className="font-ninja mt-1" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.55)' }}>
-              Level {sublevel} of {maxLevel}
-            </p>
-          )}
-        </div>
-      )}
-    </motion.div>
+      {/* Shown at every width here, unlike the course page: there the level
+          pills take the phone's room and the card below redraws the road, and
+          on this page the road is the whole of what the hero is for.
+
+          The right margin is the belt art's own room. On desktop the art is a
+          square as tall as the hero, hung 3.5rem off the right edge, so it
+          eats roughly 10rem of the content box — and the road, which now
+          stretches to fill whatever it is given, stretched straight into the
+          ninja's face. The number is per-hero because the art's width tracks
+          that hero's height; this one is the shorter of the two. On a phone
+          there is nothing to clear: the art is up in the corner above the
+          road by then. */}
+      <BeltRoad current={belt} onHero className="mt-7 lg:mt-5 lg:mr-[10.5rem]" />
+    </Hero>
   );
 }
 
@@ -489,7 +463,7 @@ function KitPath({ kitOrder, kitShort, currentKitIndex, barColor }) {
   );
 }
 
-function ModuleProgress({ program, enrollment, logs }) {
+function ModuleProgress({ program, enrollment, logs, href }) {
   const { curriculum: CURRICULUM } = useCurriculum();
   const totalSessions = logs.filter((l) => !l.from_roadmap).length;
   const lastDate = enrollment?.last_session_date;
@@ -510,13 +484,8 @@ function ModuleProgress({ program, enrollment, logs }) {
     const visitedModules = new Set(logs.map((l) => l.module_name).filter(Boolean));
 
     return (
-      <motion.div
-        className="rounded-2xl overflow-hidden border border-ninja-border shadow-sm"
-        variants={cardVariants}
-        initial="hidden"
-        animate="show"
-      >
-        <ProgramCardBanner program="AI Academy" lastDate={lastDate} />
+      <CourseShell href={href} program={program}>
+        <ProgramCardBanner program="AI Academy" lastDate={lastDate} href={href} />
         <div className="bg-white p-5">
           {currentModule ? (
             <>
@@ -544,7 +513,7 @@ function ModuleProgress({ program, enrollment, logs }) {
           </p>
           <ModuleGrid modules={aiCurriculum} visited={visitedModules} accentColor={barColor} />
         </div>
-      </motion.div>
+      </CourseShell>
     );
   }
 
@@ -565,13 +534,8 @@ function ModuleProgress({ program, enrollment, logs }) {
     const hasSnap = snapLogs.length > 0;
 
     return (
-      <motion.div
-        className="rounded-2xl overflow-hidden border border-ninja-border shadow-sm"
-        variants={cardVariants}
-        initial="hidden"
-        animate="show"
-      >
-        <ProgramCardBanner program="JR" lastDate={lastDate} sessions={totalSessions} />
+      <CourseShell href={href} program={program}>
+        <ProgramCardBanner program="JR" lastDate={lastDate} sessions={totalSessions} href={href} />
         <div className="bg-white p-5 space-y-5">
           {hasJrCoding && (
             <motion.div
@@ -643,7 +607,7 @@ function ModuleProgress({ program, enrollment, logs }) {
             <p className="text-ninja-muted font-ninja text-sm italic">No sessions logged yet.</p>
           )}
         </div>
-      </motion.div>
+      </CourseShell>
     );
   }
 
@@ -662,13 +626,8 @@ function ModuleProgress({ program, enrollment, logs }) {
       : new Set();
 
     return (
-      <motion.div
-        className="rounded-2xl overflow-hidden border border-ninja-border shadow-sm"
-        variants={cardVariants}
-        initial="hidden"
-        animate="show"
-      >
-        <ProgramCardBanner program="Robotics Academy" lastDate={lastDate} />
+      <CourseShell href={href} program={program}>
+        <ProgramCardBanner program="Robotics Academy" lastDate={lastDate} href={href} />
         <div className="bg-white p-5">
           {currentKit ? (
             <>
@@ -708,7 +667,7 @@ function ModuleProgress({ program, enrollment, logs }) {
             </>
           )}
         </div>
-      </motion.div>
+      </CourseShell>
     );
   }
 
@@ -717,45 +676,63 @@ function ModuleProgress({ program, enrollment, logs }) {
   const modules = CURRICULUM[program] || [];
   const visited = new Set(logs.map((l) => l.module_name).filter(Boolean));
 
+  // The banner is not a decoration Robotics and AI happen to get: every
+  // program has its own lockup off the Canva sheet, and a card that opened
+  // with a heading in navy while its neighbours opened with art read as the
+  // one program nobody had finished. VR Coding lands here, and it arrives with
+  // its own logo on its own gradient.
   return (
-    <div className={`${CARD} p-5`}>
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-ninja-navy font-ninja font-bold text-lg">{program}</h2>
-        <span className="text-ninja-muted font-ninja text-sm">{totalSessions} sessions</span>
+    <CourseShell href={href} program={program}>
+      <ProgramCardBanner program={program} lastDate={lastDate} sessions={totalSessions} href={href} />
+      <div className="bg-white p-5">
+        <ProgressBar pct={pct} color={barColor} delay={0.2} label="Progress" value={`${pct}%`} />
+        <ModuleGrid modules={modules} visited={visited} accentColor={barColor} />
+        {modules.length === 0 && totalSessions === 0 && (
+          <p className="text-ninja-muted font-ninja text-sm italic">No sessions logged yet.</p>
+        )}
       </div>
-      {lastDate && (
-        <p className="text-ninja-muted font-ninja text-xs mb-3">Last: {formatDate(lastDate)}</p>
-      )}
-      <ProgressBar pct={pct} color={barColor} delay={0.2} label="Progress" value={`${pct}%`} />
-      <ModuleGrid modules={modules} visited={visited} accentColor={barColor} />
-    </div>
+    </CourseShell>
   );
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-export default function ProgressVisuals({ programs, sessionLogs }) {
+// Activity, then Courses. `courseHref` is what turns the second half into a
+// section rather than a read-out: given one, every card opens the course it
+// describes. Without it the cards are exactly what they were.
+export default function ProgressVisuals({ programs, sessionLogs, childName, courseHref }) {
   const create = programs.find((p) => p.program === 'CREATE');
   const others = programs.filter((p) => p.program !== 'CREATE');
+  const href = (name) => (courseHref ? courseHref(name) : null);
+  const count = programs.length;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:items-start">
-      <div className="xl:col-span-2">
-        <ActivityChart logs={sessionLogs} />
-      </div>
-      {create && (
-        <div className="xl:col-span-2">
-          <BeltJourney enrollment={create} />
-        </div>
-      )}
-      {others.map((p) => (
-        <ModuleProgress
-          key={p.program}
-          program={p.program}
-          enrollment={p}
-          logs={sessionLogs.filter((l) => l.program === p.program)}
+    <div className="space-y-4 lg:space-y-5">
+      <ActivityChart logs={sessionLogs} />
+
+      <div className="space-y-3">
+        <PageTitle
+          title="Courses"
+          eyebrow={[childName, `${count} program${count === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
+          className="pt-2"
         />
-      ))}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:items-start">
+          {create && (
+            <div className="xl:col-span-2">
+              <BeltJourney enrollment={create} childName={childName} href={href('CREATE')} />
+            </div>
+          )}
+          {others.map((p) => (
+            <ModuleProgress
+              key={p.program}
+              program={p.program}
+              enrollment={p}
+              logs={sessionLogs.filter((l) => l.program === p.program)}
+              href={href(p.program)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

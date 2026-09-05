@@ -45,8 +45,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       if (tab === 'parent') {
-        await parentLogin(parentCode.trim(), parentEmail.trim(), keepSignedIn);
-        navigate('/parent/dashboard');
+        const me = await parentLogin(parentCode.trim(), parentEmail.trim(), keepSignedIn);
+        navigate(me?.onboarded === false ? '/parent/welcome' : '/parent/dashboard');
       } else {
         const user = await login(username, password, keepSignedIn);
         navigate(getHomePath(user));

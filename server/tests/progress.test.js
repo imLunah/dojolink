@@ -56,6 +56,81 @@ describe('POST /api/progress — write validation (security regressions)', () =>
     const res = await csrf(agent.post('/api/progress')).send(logBody({ belt_level_at: 'Rainbow' }));
     expect(res.status).toBe(400);
   });
+
+  // A CREATE class can carry a ninja past a level, or past a belt, in one
+  // sitting. Each project keeps the belt and level it was worked on, so the
+  // session reads back as what happened instead of being filed under one
+  // snapshot and needing a second check-in to record the rest.
+  it('keeps a per-entry belt and level when a session crosses a boundary (201)', async () => {
+    const { agent } = await login(app, 'sensei_a');
+    const res = await csrf(agent.post('/api/progress')).send(logBody({
+      belt_level_at: 'Yellow',
+      belt_sublevel_at: 1,
+      project_at: 'Second Project',
+      lesson_entries: [
+        { project_at: 'First Project', status: 'Completed', belt_level_at: 'White', belt_sublevel_at: 4 },
+        { project_at: 'Second Project', status: 'Working On', belt_level_at: 'Yellow', belt_sublevel_at: 1 },
+      ],
+    }));
+    expect(res.status).toBe(201);
+
+    const { rows } = await pool.query(
+      'SELECT project_at, belt_level_at, belt_sublevel_at FROM progress_logs WHERE student_id = $1 ORDER BY id',
+      [world.studentA]
+    );
+    expect(rows.map((r) => [r.project_at, r.belt_level_at, r.belt_sublevel_at])).toEqual([
+      ['First Project', 'White', 4],
+      ['Second Project', 'Yellow', 1],
+    ]);
+  });
+
+  // The per-entry fields are a second way into the same two columns, so they
+  // get the same two bounds. Validating only the top-level values would hand
+  // back the out-of-range write session 27 closed, one nesting deeper.
+  it('rejects an out-of-range belt_sublevel_at hidden in an entry (400)', async () => {
+    const { agent } = await login(app, 'sensei_a');
+    const res = await csrf(agent.post('/api/progress')).send(logBody({
+      belt_level_at: 'White',
+      belt_sublevel_at: 2,
+      lesson_entries: [
+        { project_at: 'First Project', belt_level_at: 'White', belt_sublevel_at: 2 },
+        { project_at: 'Second Project', belt_level_at: 'White', belt_sublevel_at: 1000 },
+      ],
+    }));
+    expect(res.status).toBe(400);
+
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM progress_logs WHERE student_id = $1', [world.studentA]);
+    expect(rows[0].n).toBe(0);
+  });
+
+  it('rejects a junk belt label hidden in an entry (400)', async () => {
+    const { agent } = await login(app, 'sensei_a');
+    const res = await csrf(agent.post('/api/progress')).send(logBody({
+      belt_level_at: 'White',
+      belt_sublevel_at: 1,
+      lesson_entries: [
+        { project_at: 'First Project', belt_level_at: 'White', belt_sublevel_at: 1 },
+        { project_at: 'Second Project', belt_level_at: 'Rainbow', belt_sublevel_at: 1 },
+      ],
+    }));
+    expect(res.status).toBe(400);
+  });
+
+  // White tops out at 4 and Yellow at 4, but Brown runs to 10: a level is only
+  // in range against the belt it was logged on, and the entry's own belt is
+  // what it must be checked against, not the session's.
+  it('bounds an entry level against that entry\'s own belt (400)', async () => {
+    const { agent } = await login(app, 'sensei_a');
+    const res = await csrf(agent.post('/api/progress')).send(logBody({
+      belt_level_at: 'Brown',
+      belt_sublevel_at: 9,
+      lesson_entries: [
+        { project_at: 'First Project', belt_level_at: 'Brown', belt_sublevel_at: 9 },
+        { project_at: 'Second Project', belt_level_at: 'White', belt_sublevel_at: 9 },
+      ],
+    }));
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('DELETE /api/progress/:id — ownership', () => {

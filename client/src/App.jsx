@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { ParentAuthProvider } from './context/ParentAuthContext';
+import { ParentPortalProvider } from './context/ParentPortalContext';
 import { CurriculumProvider } from './context/CurriculumContext';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import ParentRoute from './components/layout/ParentRoute';
@@ -28,6 +29,8 @@ const StudentProfile = lazy(() => import('./pages/manager/StudentProfile'));
 const StaffPage = lazy(() => import('./pages/manager/StaffPage'));
 const ReportsPage = lazy(() => import('./pages/manager/ReportsPage'));
 const TasksPage = lazy(() => import('./pages/manager/TasksPage'));
+const EventsPage = lazy(() => import('./pages/manager/EventsPage'));
+const EventListingEditorPage = lazy(() => import('./pages/manager/EventListingEditorPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
 const SenseiDashboard = lazy(() => import('./pages/sensei/SenseiDashboard'));
 const LogProgressPage = lazy(() => import('./pages/sensei/LogProgressPage'));
@@ -35,8 +38,18 @@ const LogClubPage = lazy(() => import('./pages/sensei/LogClubPage'));
 const ClubsPage = lazy(() => import('./pages/ClubsPage'));
 const ClubProfilePage = lazy(() => import('./pages/ClubProfilePage'));
 const ClubSessionPage = lazy(() => import('./pages/ClubSessionPage'));
-const ParentDashboard = lazy(() => import('./pages/parent/ParentDashboard'));
-const ParentStudentProfile = lazy(() => import('./pages/parent/ParentStudentProfile'));
+const ParentHome = lazy(() => import('./pages/parent/ParentHome'));
+const ParentProfile = lazy(() => import('./pages/parent/ParentProfile'));
+const ParentWelcomePage = lazy(() => import('./pages/parent/ParentWelcomePage'));
+const ParentAccountPage = lazy(() => import('./pages/parent/ParentAccountPage'));
+// The center's own listings: everything it has coming up, and one listing's
+// page. Lazy like every other parent route.
+const ParentEventsPage = lazy(() => import('./pages/parent/ParentEventsPage'));
+const ParentEventPage = lazy(() => import('./pages/parent/ParentEventPage'));
+// The whole sticker book. Lazy like every other parent route: it pulls the
+// curriculum for the level topics behind each sticker, and a parent who never
+// opens it should not pay for that.
+const ParentStickerBook = lazy(() => import('./pages/parent/ParentStickerBook'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
@@ -59,6 +72,7 @@ export default function App() {
       <ThemeProvider>
       <CurriculumProvider>
       <ParentAuthProvider>
+      <ParentPortalProvider>
       <AuthProvider>
           <Suspense fallback={null}>
           <Routes>
@@ -72,6 +86,9 @@ export default function App() {
             <Route path="/manager/staff"     element={<ProtectedRoute role="sensei"><StaffPage /></ProtectedRoute>} />
             <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsPage /></ProtectedRoute>} />
             <Route path="/manager/tasks"    element={<ProtectedRoute role="manager"><TasksPage /></ProtectedRoute>} />
+            <Route path="/manager/events"   element={<ProtectedRoute role="manager"><EventsPage /></ProtectedRoute>} />
+            <Route path="/manager/events/new" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />
+            <Route path="/manager/events/:id/edit" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />
             <Route path="/manager/students/new" element={<ProtectedRoute role="manager"><AddStudentPage /></ProtectedRoute>} />
             <Route path="/manager/students/:id" element={<ProtectedRoute role="sensei"><StudentProfile /></ProtectedRoute>} />
 
@@ -87,8 +104,22 @@ export default function App() {
 
             {/* Parent portal */}
             <Route path="/parent/login"       element={<Navigate to="/login?tab=parent" replace />} />
-            <Route path="/parent/dashboard"   element={<ParentRoute><ParentDashboard /></ParentRoute>} />
-            <Route path="/parent/students/:id" element={<ParentRoute><ParentStudentProfile /></ParentRoute>} />
+            <Route path="/parent/welcome"     element={<ParentRoute onboarding><ParentWelcomePage /></ParentRoute>} />
+            <Route path="/parent/dashboard"   element={<ParentRoute><ParentHome /></ParentRoute>} />
+            <Route path="/parent/students/:id" element={<ParentRoute><ParentProfile /></ParentRoute>} />
+            <Route path="/parent/students/:id/courses/:program" element={<ParentRoute><ParentProfile /></ParentRoute>} />
+            <Route path="/parent/students/:id/stickers" element={<ParentRoute><ParentStickerBook /></ParentRoute>} />
+            <Route path="/parent/account"     element={<ParentRoute><ParentAccountPage /></ParentRoute>} />
+            <Route path="/parent/events"      element={<ParentRoute><ParentEventsPage /></ParentRoute>} />
+            <Route path="/parent/events/:id"  element={<ParentRoute><ParentEventPage /></ParentRoute>} />
+            {/* Courses was its own section until the grid in front of it turned
+                out to be a menu of what the profile already shows. A course is
+                opened from the child it belongs to now; the old links land on
+                Home rather than nowhere. */}
+            <Route path="/parent/courses"     element={<Navigate to="/parent/dashboard" replace />} />
+            <Route path="/parent/courses/*"   element={<Navigate to="/parent/dashboard" replace />} />
+            <Route path="/parent/note"        element={<Navigate to="/parent/dashboard" replace />} />
+            <Route path="/parent/sessions"    element={<Navigate to="/parent/dashboard" replace />} />
 
             {/* Admin */}
             <Route path="/admin/locations" element={<ProtectedRoute role="manager"><LocationsPage /></ProtectedRoute>} />
@@ -118,6 +149,7 @@ export default function App() {
           <AdminBar />
           <WhatsNewModal />
       </AuthProvider>
+      </ParentPortalProvider>
       </ParentAuthProvider>
       </CurriculumProvider>
       </ThemeProvider>

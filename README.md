@@ -265,7 +265,9 @@ This repository is public. Nothing restricted belongs in it: secrets live in env
 
 ## Programs and belts
 
-Eight programs: **CREATE**, **JR**, **Robotics Academy**, **AI Academy**, **VR Coding**, **Silver**, **Gold Unity**, and **Gold Godot**. Only CREATE carries belts and projects; the rest track modules and lessons.
+Five programs: **CREATE**, **JR**, **Robotics Academy**, **AI Academy**, and **VR Coding**. Only CREATE carries belts and projects; the rest track modules and lessons.
+
+Silver, Gold Unity and Gold Godot were programs until session 49. They duplicated the top of the CREATE ladder, which carries Bronze, Silver, Platinum and Gold as belts with their own projects, and nobody was enrolled in any of them. The **belts** of those names are unchanged and are in the table below.
 
 The CREATE ladder runs White to Black, then three bonus tracks:
 

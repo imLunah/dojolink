@@ -62,32 +62,41 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
+  // ── Light lock ─────────────────────────────────────────────────────
+  // A surface that is light-only (the parent portal) holds a lock while it
+  // is mounted; the page paints light without the stored preference
+  // changing, so a staff member's dark mode is waiting when they come back.
+  const [lightLocks, setLightLocks] = useState(0);
+  const lockLight = useCallback(() => {
+    setLightLocks((n) => n + 1);
+    return () => setLightLocks((n) => n - 1);
+  }, []);
+  const paintDark = dark && lightLocks === 0;
+
   // ── Mode (light/dark) ──────────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem('dj-theme', dark ? 'dark' : 'light');
+  }, [dark]);
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('theme-transitioning');
-    if (dark) {
-      root.classList.add('dark');
-      localStorage.setItem('dj-theme', 'dark');
-    } else {
-      root.classList.remove('dark');
-      localStorage.setItem('dj-theme', 'light');
-    }
+    if (paintDark) root.classList.add('dark');
+    else root.classList.remove('dark');
     const t = setTimeout(() => root.classList.remove('theme-transitioning'), 400);
     return () => clearTimeout(t);
-  }, [dark]);
+  }, [paintDark]);
 
   // ── Accent → retint the whole theme, or clear for Default ───────────
   // Inline vars on <html> beat both :root and .dark rules. For 'default' we
   // remove them so the stock index.css values rule again.
   useEffect(() => {
-    writeAccentVars(accent, dark);
+    writeAccentVars(accent, paintDark);
     localStorage.setItem('dj-accent', isDefaultAccent(accent) ? 'default' : accent);
-  }, [accent, dark]);
+  }, [accent, paintDark]);
 
   // Live, throwaway accent application for dragging — paints the CSS vars
   // without touching React state or localStorage (no app-wide re-render).
-  const previewAccent = useCallback((hex) => writeAccentVars(hex, dark), [dark]);
+  const previewAccent = useCallback((hex) => writeAccentVars(hex, paintDark), [paintDark]);
 
   // rev bumps on every user-initiated change (not on hydrate) so the account-sync
   // bridge can tell a real preference change from applying the saved one.
@@ -116,8 +125,8 @@ export function ThemeProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ dark, toggle, setMode, accent, setAccent, previewAccent, settings, rev, hydrate, experimental, setExperimental, horizontalNav, setHorizontalNav }),
-    [dark, accent, settings, previewAccent, rev, hydrate, experimental, setExperimental, horizontalNav, setHorizontalNav]
+    () => ({ dark, toggle, setMode, accent, setAccent, previewAccent, settings, rev, hydrate, experimental, setExperimental, horizontalNav, setHorizontalNav, lockLight }),
+    [dark, accent, settings, previewAccent, rev, hydrate, experimental, setExperimental, horizontalNav, setHorizontalNav, lockLight]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -125,4 +134,10 @@ export function ThemeProvider({ children }) {
 
 export function useTheme() {
   return useContext(ThemeContext);
+}
+
+// Paint light for as long as the calling component is mounted.
+export function useLightOnly() {
+  const { lockLight } = useTheme();
+  useEffect(() => lockLight(), [lockLight]);
 }
