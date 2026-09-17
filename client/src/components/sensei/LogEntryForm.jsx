@@ -372,14 +372,6 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // The note editor takes its content when it mounts and never reads the prop
-  // again, so clearing `notes` in state leaves the old words on screen: the
-  // class you switched away from writing its notes into the one you switched
-  // to, and a form that reads as filled in while it holds nothing. Bumping
-  // this remounts the editor, which is the only way to hand it new content.
-  const [notesKey, setNotesKey] = useState(0);
-  const resetNotes = (value) => { setNotes(value); setNotesKey((n) => n + 1); };
-
   const isCreate = program === 'CREATE';
   // An edit stays on the day it was logged; only a new session takes the
   // pending check-in's date.
@@ -391,9 +383,8 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
   // Switching class, or switching which log is being edited, starts over.
   //
   // During render rather than in an effect, so no frame is ever painted with a
-  // half-swapped form. Handing the note editor its new content takes more than
-  // a changed prop, which is what resetNotes is for. Guarded by what is being
-  // logged, so nothing clobbers what is being typed.
+  // half-swapped form. Guarded by what is being logged, so nothing clobbers
+  // what is being typed.
   const seedKey = `${program}:${editLog?.id ?? 'new'}`;
   const [seeded, setSeeded] = useState(seedKey);
   if (seedKey !== seeded) {
@@ -401,7 +392,7 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
     const next = seed();
     // A different class is a different note. Switching program starts one
     // afresh rather than carrying the last one across.
-    resetNotes(next.notes);
+    setNotes(next.notes);
     setBeltLevel(next.beltLevel);
     setBeltSublevel(next.beltSublevel);
     setCreateEntries(next.createEntries);
@@ -545,7 +536,7 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
 
       const log = await api.post('/progress', payload);
       setSuccess(true);
-      resetNotes('');
+      setNotes('');
       setLessonEntries([newLessonEntry()]);
       setCreateEntries([newCreateEntry()]);
       onLogged && onLogged(log);
@@ -631,7 +622,6 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
           Session Notes *
         </label>
         <LazyMarkdownEditor
-          key={notesKey}
           value={notes}
           onChange={setNotes}
           placeholder="What did the ninja work on today? Any breakthroughs or challenges?"

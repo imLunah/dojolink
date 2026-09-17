@@ -61,6 +61,25 @@ export default function MarkdownEditor({ value, onChange, placeholder, variant =
     },
   });
 
+  // Tiptap builds its document from `content` when the editor is created and
+  // never looks at the prop again, so a form that swaps in another record's
+  // text while the editor stays mounted keeps showing the old words. On the
+  // task board that reads as the wrong card open: clicking a second card
+  // rebuilds every field around this one, and the note underneath is still the
+  // first card's. Remounting the editor is the other way to do this, but it
+  // throws away undo history and the caret, so the content is handed over
+  // instead.
+  //
+  // Only when the incoming text is not already what the editor holds, which is
+  // what typing produces: `onUpdate` sends this exact string up, it comes back
+  // as `value`, and the editor is left alone.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const incoming = value || '';
+    if (incoming === editor.storage.markdown.getMarkdown()) return;
+    editor.commands.setContent(incoming, { emitUpdate: false });
+  }, [editor, value]);
+
   return (
     <div
       className={
