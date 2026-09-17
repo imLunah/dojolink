@@ -377,22 +377,6 @@ export default function StudentRoster() {
           </div>
           {isManager && !isLogMode && (
             <div className="flex gap-2 flex-wrap">
-              {!showArchived && selected.size > 0 && !confirmDelete && (
-                <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-                  Delete ({selected.size})
-                </Button>
-              )}
-              {!showArchived && selected.size > 0 && confirmDelete && (
-                <>
-                  <span className="self-center text-ninja-muted font-ninja text-sm font-semibold">
-                    Move {selected.size} ninja{selected.size > 1 ? 's' : ''} to the archive?
-                  </span>
-                  <Button variant="danger" onClick={handleDeleteSelected} disabled={deleting}>
-                    {deleting ? 'Deleting...' : 'Confirm'}
-                  </Button>
-                  <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-                </>
-              )}
               <Button
                 variant="secondary"
                 onClick={() => { setShowArchived((v) => !v); setSelected(new Set()); setSearch(''); setProgramFilter(''); }}
@@ -583,23 +567,59 @@ export default function StudentRoster() {
             {!loading && !error && (
               <>
                 {/* Table head — stays pinned, rows scroll below */}
-                <div className={`flex-shrink-0 grid gap-4 px-5 py-3.5 border-b border-ninja-border bg-ninja-bg font-ninja font-bold text-xs text-ninja-muted uppercase tracking-widest ${isManager && !isLogMode ? 'grid-cols-[28px_2fr_1.5fr_1.4fr_1fr_80px]' : 'grid-cols-[2fr_1.5fr_1.4fr_1fr_80px]'}`}>
-                  {isManager && !isLogMode && (
-                    <div>
+                {!showArchived && selected.size > 0 ? (
+                  <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 border-b border-ninja-border bg-ninja-bg">
+                    <label className="inline-flex items-center gap-3 font-ninja font-bold text-sm text-ninja-navy">
                       <input
                         type="checkbox"
                         checked={totalCount > 0 && selected.size >= totalCount}
                         onChange={toggleAll}
                         className="rounded border-ninja-border accent-ninja-blue cursor-pointer"
                       />
+                      {selected.size} selected
+                    </label>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {confirmDelete ? (
+                        <>
+                          <span className="font-ninja text-sm font-semibold text-ninja-muted">
+                            Move to archive?
+                          </span>
+                          <Button size="sm" variant="danger" onClick={handleDeleteSelected} disabled={deleting}>
+                            {deleting ? 'Deleting...' : 'Confirm'}
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+                            Delete
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                            Clear
+                          </Button>
+                        </>
+                      )}
                     </div>
-                  )}
-                  <div>Name</div>
-                  <div>Programs</div>
-                  <div>Belt</div>
-                  <div>Last session</div>
-                  <div />
-                </div>
+                  </div>
+                ) : (
+                  <div className={`flex-shrink-0 grid gap-4 px-5 py-3.5 border-b border-ninja-border bg-ninja-bg font-ninja font-bold text-xs text-ninja-muted uppercase tracking-widest ${isManager && !isLogMode ? 'grid-cols-[28px_2fr_1.5fr_1.4fr_1fr_80px]' : 'grid-cols-[2fr_1.5fr_1.4fr_1fr_80px]'}`}>
+                    {isManager && !isLogMode && (
+                      <div>
+                        <input
+                          type="checkbox"
+                          checked={totalCount > 0 && selected.size >= totalCount}
+                          onChange={toggleAll}
+                          className="rounded border-ninja-border accent-ninja-blue cursor-pointer"
+                        />
+                      </div>
+                    )}
+                    <div>Name</div>
+                    <div>Programs</div>
+                    <div>Belt</div>
+                    <div>Last session</div>
+                    <div />
+                  </div>
+                )}
 
                 {/* Rows — scrollable */}
                 <div className="overflow-y-auto flex-1">
