@@ -23,14 +23,15 @@
   height: 0;
   pointer-events: none;
 }
-/* A link in the EDITOR is text you are still writing: it looks like a link so
-   you know it will be one, but the text cursor says it edits, not opens.
-   Clicking is disabled in MarkdownEditor (link.openOnClick: false). */
+/* A link in the EDITOR is both: text you can still write over, and an address
+   you can go to. The pointer is the promise that pressing it goes somewhere —
+   MarkdownEditor opens it in a new tab and leaves the caret where you pressed,
+   so the note being written is never what you pay for the trip. */
 .tiptap-note a {
   color: rgb(var(--ninja-blue));
   text-decoration: underline;
   text-underline-offset: 2px;
-  cursor: text;
+  cursor: pointer;
 }
 
 /* Bare editor: sits on a colored surface (sticky notes), so everything it draws

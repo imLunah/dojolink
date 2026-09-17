@@ -5,7 +5,7 @@ import '../../styles/markdown.css';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
-import { ItalicIcon, LinkIcon } from 'lucide-react';
+import { ExternalLinkIcon, ItalicIcon, LinkIcon } from 'lucide-react';
 
 // WYSIWYG note/log editor. Typing plain text and markdown shortcuts
 // (**bold**, *italic*, "- " / "1. " for lists) converts in place. The value is
@@ -39,20 +39,40 @@ export default function MarkdownEditor({ value, onChange, placeholder, variant =
         codeBlock: false,
         blockquote: false,
         horizontalRule: false,
-        // StarterKit v3 bundles the Link extension, and its default is to OPEN
-        // a link on click — so typing "code.org" mid-note and then clicking
-        // near it to move the caret navigated away from the form. The editor
-        // is for writing: a link here is text that happens to be a link, so it
-        // still autolinks (the saved markdown carries it and the rendered log
-        // makes it clickable) but never navigates from inside the editor.
+        // StarterKit v3 bundles the Link extension, and its default click
+        // handler navigates the current tab — so clicking a link in a note
+        // took the form away with it, unsaved. Opening is handled below
+        // instead, in a new tab and without swallowing the click.
         link: { openOnClick: false },
       }),
       Placeholder.configure({ placeholder: placeholder || 'Write a note…' }),
-      Markdown.configure({ html: false, transformPastedText: true, transformCopiedText: true }),
+      // transformCopiedText would put markdown on the clipboard, so copying a
+      // URL out of a note and pasting it into the address bar handed over
+      // <https://…> — angle brackets and all, because that is how a link whose
+      // text is the link is written in markdown. Copying between two notes
+      // keeps its formatting regardless: that travels as text/html, which
+      // Tiptap writes and reads on its own.
+      Markdown.configure({ html: false, transformPastedText: true, transformCopiedText: false }),
     ],
     content: value || '',
     onUpdate: ({ editor }) => onChange(editor.storage.markdown.getMarkdown()),
     editorProps: {
+      // A link in a note is usually there to be opened, and an editor you
+      // cannot open a link from makes people retype the address by hand. So a
+      // press opens it — in a NEW tab, which is the whole reason this is safe
+      // to do from inside a form: nothing being typed is lost. Returning false
+      // leaves ProseMirror to do what it would have done anyway, so the caret
+      // still lands where it was pressed and the link is still editable.
+      handleClick: (view, pos, event) => {
+        if (event.button !== 0) return false;
+        const a = event.target?.closest?.('a');
+        const href = a?.getAttribute('href');
+        // Only the schemes a browser should be asked to open. Anything else in
+        // a stored note is not a destination, whatever it claims to be.
+        if (!href || !/^(https?|mailto):/i.test(href)) return false;
+        window.open(href, '_blank', 'noopener,noreferrer');
+        return false;
+      },
       attributes: {
         class: bare
           ? 'tiptap-note tiptap-inherit font-ninja text-sm leading-relaxed focus:outline-none'
@@ -162,6 +182,14 @@ export default function MarkdownEditor({ value, onChange, placeholder, variant =
   );
 }
 
+// A URL is worth opening only if a browser can be handed it. Typed addresses
+// are given their scheme on save, so a field mid-edit ("amazon.com") is not
+// openable yet and says so rather than opening something else.
+const openable = (url) => /^(https?|mailto):/i.test(url.trim());
+const openHref = (url) => {
+  if (openable(url)) window.open(url.trim(), '_blank', 'noopener,noreferrer');
+};
+
 // The insert-link popup: Text and URL, and the text becomes the link. A
 // solid little card portalled to the body (the editor's shell clips overflow)
 // and anchored under the toolbar button, in the same fixed-position pattern
@@ -209,10 +237,21 @@ function LinkPopover({ pos, text, setText, href, setHref, editing, onApply, onRe
       </div>
       <div className="flex items-center gap-2">
         {editing && (
-          <button type="button" onClick={onRemove}
-            className="font-ninja text-xs font-bold text-ninja-red hover:underline rounded mr-auto">
-            Remove
-          </button>
+          <div className="flex items-center gap-3 mr-auto">
+            {/* The way to open a link without touching it. Pressing the link
+                itself opens it too, but a link reached by keyboard, or one too
+                short to aim at, has no press to make — and this panel is
+                already open on the address. */}
+            <button type="button" onClick={() => openHref(href)} disabled={!openable(href)}
+              className="flex items-center gap-1 font-ninja text-xs font-bold text-ninja-blue hover:underline rounded disabled:opacity-40 disabled:no-underline">
+              <ExternalLinkIcon className="w-3.5 h-3.5" />
+              Open
+            </button>
+            <button type="button" onClick={onRemove}
+              className="font-ninja text-xs font-bold text-ninja-red hover:underline rounded">
+              Remove
+            </button>
+          </div>
         )}
         <button type="button" onClick={onCancel}
           className={`font-ninja text-xs font-bold text-ninja-muted hover:text-ninja-navy rounded px-2 py-1.5 ${editing ? '' : 'ml-auto'}`}>
