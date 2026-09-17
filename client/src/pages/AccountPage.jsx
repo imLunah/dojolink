@@ -576,16 +576,16 @@ export default function AccountPage() {
 
   const passwordFields = (
     <>
-      <div>
-        <label className="block text-ninja-muted text-xs font-ninja mb-1.5">New Password</label>
-        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" autoComplete="new-password" className={FIELD} />
-      </div>
-      {newPassword && !isForced && (
+      {!isForced && (
         <div>
           <label className="block text-ninja-muted text-xs font-ninja mb-1.5">Current Password</label>
           <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Confirm your current password" autoComplete="current-password" className={FIELD} />
         </div>
       )}
+      <div>
+        <label className="block text-ninja-muted text-xs font-ninja mb-1.5">New Password</label>
+        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" autoComplete="new-password" className={FIELD} />
+      </div>
       <div>
         <label className="block text-ninja-muted text-xs font-ninja mb-1.5">Confirm New Password</label>
         <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" className={FIELD} />
