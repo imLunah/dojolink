@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import useRefuseNudge from '../../lib/useRefuseNudge';
 
 // Elements a keyboard can land on. Used to keep Tab inside the dialog.
 const FOCUSABLE =
@@ -11,9 +13,19 @@ const FOCUSABLE =
 // while the outer one is still up.
 let scrollLocks = 0;
 
-export default function Modal({ isOpen, onClose, title, children, subheader, width = 'max-w-lg' }) {
+export default function Modal({
+  isOpen, onClose, title, children, subheader, width = 'max-w-lg',
+  // A dialog holding something unsaved declines to be dismissed by a press on
+  // the backdrop or a stray Escape. Its own buttons still close it.
+  canDismiss = true,
+  guardHint = 'There are unsaved changes.',
+  refuseSignal = 0,
+}) {
   const panelRef = useRef(null);
   const returnFocusTo = useRef(null);
+  const { nudging, hinting, refuse } = useRefuseNudge(refuseSignal);
+  const dismiss = useRef(null);
+  dismiss.current = () => { if (canDismiss) onClose(); else refuse(); };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -31,7 +43,7 @@ export default function Modal({ isOpen, onClose, title, children, subheader, wid
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); dismiss.current(); return; }
       if (e.key !== 'Tab') return;
       const items = panelRef.current?.querySelectorAll(FOCUSABLE);
       if (!items || items.length === 0) return;
@@ -71,7 +83,7 @@ export default function Modal({ isOpen, onClose, title, children, subheader, wid
       // leaves it legible, and a page you can still read behind the thing
       // asking you a question is a page still competing with it.
       className="modal-backdrop fixed inset-0 z-[100] flex flex-col bg-ninja-bg sm:bg-black/40 sm:backdrop-blur-[3px] sm:items-center sm:justify-center sm:p-6"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) dismiss.current(); }}
       onTouchStart={(e) => e.stopPropagation()}
       onTouchEnd={(e) => e.stopPropagation()}
     >
@@ -81,7 +93,7 @@ export default function Modal({ isOpen, onClose, title, children, subheader, wid
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         tabIndex={-1}
-        className={`modal-panel w-full flex-1 flex flex-col overflow-hidden focus:outline-none sm:flex-none sm:max-h-[90dvh] sm:rounded-2xl sm:bg-ninja-bg sm:shadow-xl sm:border sm:border-ninja-border ${width}`}
+        className={`modal-panel relative w-full flex-1 flex flex-col overflow-hidden focus:outline-none sm:flex-none sm:max-h-[90dvh] sm:rounded-2xl sm:bg-ninja-bg sm:shadow-xl sm:border sm:border-ninja-border ${width} ${nudging ? 'panel-refuse' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Desktop header with × */}
@@ -118,6 +130,22 @@ export default function Modal({ isOpen, onClose, title, children, subheader, wid
             Done
           </button>
         </div>
+
+        {/* Why the press did nothing, over the foot of the dialog. */}
+        <AnimatePresence>
+          {hinting && (
+            <motion.p
+              role="status"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+              className="absolute inset-x-3 bottom-3 rounded-xl bg-ninja-navy text-ninja-bg px-3 py-2 font-ninja text-xs font-bold text-center shadow-lg"
+            >
+              {guardHint}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </div>
     </div>,
     document.body

@@ -28,6 +28,15 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editor, setEditor] = useState(null); // { task } | { column } | null
+  // Opening another card is a dismissal of the one already open, so it goes
+  // through the same guard: with unsaved work in the panel, the press is
+  // refused and the panel says so rather than swapping the card underneath it.
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [refuseSignal, setRefuseSignal] = useState(0);
+  const openEditor = useCallback((next) => {
+    if (editor && editorDirty) { setRefuseSignal((n) => n + 1); return; }
+    setEditor(next);
+  }, [editor, editorDirty]);
   const [showArchived, setShowArchived] = useState(false);
   const [directors, setDirectors] = useState([]);
   // The card on its way out. A delete asked for from the dialog or the list's
@@ -300,7 +309,7 @@ export default function TasksPage() {
               {canManage && (
                 <button
                   type="button"
-                  onClick={() => setEditor({ column: 'todo' })}
+                  onClick={() => openEditor({ column: 'todo' })}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ninja-blue text-white font-ninja text-xs font-bold hover:bg-ninja-blue-hover transition-colors duration-150 ease-[var(--ease-out)] active:scale-95"
                 >
                   <PlusIcon size={15} strokeWidth={2.75} aria-hidden="true" />
@@ -346,7 +355,7 @@ export default function TasksPage() {
             canManage={canManage}
             directors={directors}
             centerName={user?.activeLocation?.name}
-            onEdit={(task) => setEditor({ task })}
+            onEdit={(task) => openEditor({ task })}
             onDelete={softDelete}
             onPurge={purge}
             onRestore={restore}
@@ -358,8 +367,8 @@ export default function TasksPage() {
             tasks={tasks}
             leavingId={leavingId}
             canManage={canManage}
-            onAdd={(column) => setEditor({ column })}
-            onEdit={(task) => setEditor({ task })}
+            onAdd={(column) => openEditor({ column })}
+            onEdit={(task) => openEditor({ task })}
             onDelete={softDelete}
             onRestore={restore}
             onReorder={reorder}
@@ -375,6 +384,8 @@ export default function TasksPage() {
         directors={directors}
         column={editor?.column ?? 'todo'}
         onClose={() => setEditor(null)}
+        onDirtyChange={setEditorDirty}
+        refuseSignal={refuseSignal}
         onSave={save}
         onDelete={canManage ? softDelete : undefined}
         onPurge={canManage ? purge : undefined}

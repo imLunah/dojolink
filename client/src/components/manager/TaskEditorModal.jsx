@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArchiveRestoreIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react';
 import Modal from '../ui/Modal';
 import SidePanel from '../ui/SidePanel';
@@ -10,10 +10,23 @@ import { COLUMNS } from '../../lib/taskBoard';
 
 const TITLE_MAX = 200;
 
+// The form's fields as one comparable string. Checklist items are cut down to
+// the two things the form can change, so a row carrying an id from the server
+// doesn't read as an edit nobody made.
+const snapshot = (f) => JSON.stringify({
+  title: f.title,
+  body: f.body,
+  color: f.color,
+  due: f.due,
+  assignee: f.assignee,
+  columnKey: f.columnKey,
+  checklist: f.checklist.map((i) => ({ text: i.text, done: Boolean(i.done) })),
+});
+
 
 // Create and edit are the same form. `task` null means create; `column` is the
 // column a new card lands in.
-export default function TaskEditorModal({ isOpen, task, directors = [], column = 'todo', onClose, onSave, onDelete, onPurge, onRestore }) {
+export default function TaskEditorModal({ isOpen, task, directors = [], column = 'todo', onClose, onSave, onDelete, onPurge, onRestore, onDirtyChange, refuseSignal = 0 }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirming, setConfirming] = useState(false);
@@ -33,6 +46,8 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
   const [item, setItem] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // What the card looked like when it opened, to tell an edit from a read.
+  const [baseline, setBaseline] = useState(null);
 
   // Seeded during render, not in an effect, and only when the dialog opens on a
   // different card.
@@ -63,7 +78,17 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
       // display another.
       setAssignee(task?.assignee_id ? String(task.assignee_id) : 'center');
       setColumnKey(task?.column_key ?? column);
-      setChecklist(task?.checklist ? task.checklist.map((i) => ({ ...i })) : []);
+      const checklistSeed = task?.checklist ? task.checklist.map((i) => ({ ...i })) : [];
+      setChecklist(checklistSeed);
+      setBaseline(snapshot({
+        title: task?.title ?? '',
+        body: task?.body ?? '',
+        color: task?.color ?? 'none',
+        due: task?.due_date ?? '',
+        assignee: task?.assignee_id ? String(task.assignee_id) : 'center',
+        columnKey: task?.column_key ?? column,
+        checklist: checklistSeed,
+      }));
       setItem('');
       setError('');
       setSaving(false);
@@ -78,6 +103,14 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
   // author with a Save that never enables.
   const trimmed = title.trim();
   const hasContent = Boolean(trimmed || body.trim());
+
+  // Anything typed and not yet saved. The board asks, because a card holding
+  // unsaved work should not be closed or swapped out by a stray press — see
+  // the panel's own note on refusing a dismissal.
+  const dirty = isOpen
+    && baseline !== null
+    && snapshot({ title, body, color, due, assignee, columnKey, checklist }) !== baseline;
+  useEffect(() => { if (onDirtyChange) onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
   const submit = async () => {
     if (!hasContent) { setError('Give the task a title or a note.'); return; }
@@ -105,7 +138,12 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
   // came out of, so the board it belongs to is still readable while it is being
   // edited; on a phone there is no beside, and it takes the screen.
   const Shell = isDesktop ? SidePanel : Modal;
-  const shellProps = isDesktop ? { width: 'w-[27rem]' } : { width: 'max-w-lg' };
+  const shellProps = {
+    width: isDesktop ? 'w-[27rem]' : 'max-w-lg',
+    canDismiss: !dirty,
+    guardHint: 'Unsaved changes. Save them, or Cancel to discard.',
+    refuseSignal,
+  };
 
   return (
     <Shell
