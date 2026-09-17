@@ -214,7 +214,12 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
                 placeholder="What needs doing?"
                 aria-label="What needs doing?"
                 maxLength={200}
-                className="w-full bg-transparent border-0 px-1.5 py-1 font-ninja text-xl font-bold text-ninja-navy placeholder:text-ninja-muted placeholder:font-normal focus:outline-none"
+                // dark:hover kept transparent by hand: the dark-mode blanket
+                // input rule only spares ghost fields while the pointer is
+                // elsewhere, so without this the field grows a box the moment
+                // it is hovered — on a frosted sheet, a patch of solid colour
+                // behind the words.
+                className="w-full bg-transparent dark:hover:bg-transparent border-0 px-1.5 py-1 font-ninja text-xl font-bold text-ninja-navy placeholder:text-ninja-muted placeholder:font-normal focus:outline-none"
               />
 
               <div className="panel-edge h-px my-3" />
