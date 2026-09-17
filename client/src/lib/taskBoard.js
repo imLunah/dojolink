@@ -116,10 +116,21 @@ export function plainPreview(md) {
     .replace(/`([^`]*)`/g, '$1')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // A URL on its own line is stored as a markdown autolink, <https://…>,
+    // which is how every markdown writer serialises a link whose text is the
+    // link. Rendered it disappears into the link; stripped naively it leaves
+    // the angle brackets sitting around the address on the card, which reads
+    // as something the typist did by mistake.
+    .replace(/<((?:https?|mailto):[^\s>]+)>/gi, '$1')
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')
     .replace(/^\s{0,3}[-*+]\s+/gm, '')
     .replace(/^\s{0,3}\d+\.\s+/gm, '')
-    .replace(/[*_~>]/g, '')
+    // Emphasis markers, everywhere except inside an address: a query string is
+    // full of underscores and they are part of where the link goes, not
+    // decoration around a word. Split on the URLs, strip between them.
+    .split(/((?:https?|mailto):[^\s]+)/gi)
+    .map((part, i) => (i % 2 ? part : part.replace(/[*_~>]/g, '')))
+    .join('')
     .replace(/\s+/g, ' ')
     .trim();
 }
