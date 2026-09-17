@@ -319,7 +319,7 @@ export default function TasksPage() {
               {canManage && (
                 <button
                   type="button"
-                  onClick={(e) => openComposer('todo', e.currentTarget.getBoundingClientRect())}
+                  onClick={() => openEditor({ column: 'todo' })}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ninja-blue text-white font-ninja text-xs font-bold hover:bg-ninja-blue-hover transition-colors duration-150 ease-[var(--ease-out)] active:scale-95"
                 >
                   <PlusIcon size={15} strokeWidth={2.75} aria-hidden="true" />

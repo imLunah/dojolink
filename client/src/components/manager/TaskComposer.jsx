@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { SlidersHorizontalIcon } from 'lucide-react';
+import { CornerDownLeftIcon, SlidersHorizontalIcon } from 'lucide-react';
 import { COLUMNS } from '../../lib/taskBoard';
 import useRefuseNudge from '../../lib/useRefuseNudge';
 
@@ -111,24 +111,26 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[105] flex items-center justify-center p-4 pointer-events-none">
-          {/* The liquid. Solid colour and no content, because it lives inside
-              an SVG filter: a frosted surface cannot, since the filter becomes
-              the backdrop its blur would sample. So the drop is the accent the
-              control was wearing, and the glass sets over it on arrival. */}
+          {/* The liquid, and it has no colour. What the filter is handed is
+              alpha — plain opaque shapes — and what it gives back is a pane:
+              a breath of white so the board reads through it, one bright line
+              tracing the whole welded outline, and a darker line under that
+              for thickness. Glass flowing into the shape of the sheet, rather
+              than a coloured thing arriving and turning into one. */}
           {!reduce && rect && (
             // The fade belongs to the layer, not to the drops inside it. The
             // threshold that welds them together works on alpha, so a drop
             // told to fade comes back through the filter at full strength
             // until it vanishes all at once.
             <motion.div
-              className="fixed inset-0 pointer-events-none"
-              style={{ filter: 'url(#composerGoo)' }}
+              className="fixed inset-0 z-10 pointer-events-none"
+              style={{ filter: 'url(#composerGooGlass)' }}
               initial={{ opacity: 1 }}
               animate={{ opacity: 0, transition: { delay: 0.32, duration: 0.22 } }}
               exit={{ opacity: 0, transition: { duration: 0.12 } }}
             >
               <motion.div
-                className="fixed bg-ninja-blue"
+                className="fixed bg-ninja-bg"
                 style={{
                   left: rect.left, top: rect.top, width: rect.width, height: rect.height,
                   borderRadius: 28, transformOrigin: '0 0',
@@ -152,7 +154,7 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
                   as the head pulls away. */}
               {origin && (
                 <motion.div
-                  className="fixed bg-ninja-blue"
+                  className="fixed bg-ninja-bg"
                   style={{
                     left: origin.left, top: origin.top, width: origin.width, height: origin.height,
                     borderRadius: 28, transformOrigin: '50% 50%',
@@ -164,23 +166,40 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
             </motion.div>
           )}
 
+          {/* The sheet travels with the drop rather than fading in behind
+              it. Fading was the seam: a surface at less than full opacity is
+              its own backdrop root, so the frost had nothing to sample and the
+              sheet arrived clear, then turned to glass all at once when the
+              animation ended. Carrying it along under the liquid means the
+              material is right from the first frame, and what the drop hands
+              over to is already there.
+
+              Two passes: the first is unmeasured and hidden, purely so the box
+              can be asked how big it is; the key swaps in the animated one
+              once the answer is known. The hidden pass is laid out and
+              measured inside the same frame, so it is never painted. */}
           <motion.div
+            key={rect ? 'placed' : 'measuring'}
             ref={boxRef}
             role="dialog"
             aria-modal="false"
             aria-label="Add a task"
             className={`panel-glass relative pointer-events-auto w-full max-w-[calc(100vw-2rem)] p-4 ${nudging ? 'panel-refuse' : ''}`}
-            style={{ width: `${WIDTH}rem` }}
-            // Opacity only on the way in: the drop is what moves, and this
-            // box is measured on its first frame to tell the drop where it is
-            // going. A scale here would hand it a rect 2% too small.
-            initial={{ opacity: 0 }}
-            animate={reduce
-              ? { opacity: 1 }
-              : { opacity: 1, transition: { delay: 0.3, duration: 0.22, ease: [0.23, 1, 0.32, 1] } }}
-            exit={reduce
-              ? { opacity: 0, transition: { duration: 0.12 } }
-              : { opacity: 0, scale: 0.97, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
+            style={{
+              width: `${WIDTH}rem`,
+              transformOrigin: '0 0',
+              visibility: rect || reduce ? 'visible' : 'hidden',
+            }}
+            initial={reduce || !rect ? false : flip}
+            animate={reduce ? {} : {
+              x: 0, y: 0, scaleX: 1, scaleY: 1,
+              transition: {
+                x: HEAD, y: HEAD,
+                scaleX: HEAD,
+                scaleY: { ...HEAD, duration: 0.58 },
+              },
+            }}
+            exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
           >
             <motion.form
               onSubmit={submit}
@@ -229,12 +248,19 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
                     <SlidersHorizontalIcon size={14} strokeWidth={2.25} />
                     Details
                   </button>
+                  {/* The key, not the word. Quick add is for getting a
+                      sentence onto the board without moving your hands, so the
+                      control says which key does it rather than asking to be
+                      aimed at. It is still a button, for the times a pointer
+                      is already where it is. */}
                   <button
                     type="submit"
                     disabled={!text.trim()}
-                    className="px-3.5 py-1.5 rounded-full bg-ninja-blue text-white font-ninja text-sm font-bold disabled:opacity-40 transition-[opacity,transform] duration-150 active:scale-95"
+                    aria-label="Add task"
+                    title="Add task (Enter)"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-ninja-blue text-white disabled:opacity-40 transition-[opacity,transform] duration-150 active:scale-95"
                   >
-                    Add
+                    <CornerDownLeftIcon size={16} strokeWidth={2.5} />
                   </button>
                 </div>
               </div>
@@ -258,18 +284,58 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
 
           <svg width="0" height="0" aria-hidden="true" className="absolute pointer-events-none">
             <defs>
-              {/* Blur everything, then cut the result back to a hard edge. Two
-                  shapes near each other stop being two shapes, and any corner
-                  it is handed comes back rounded — which is the whole trick:
-                  the bead and the sheet are the same rectangle at two sizes,
-                  and the filter is what makes one of them a drop. */}
-              <filter id="composerGoo" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+              {/* Blur the alpha, then cut it back to a hard edge. Two shapes
+                  near each other stop being two shapes, and any corner it is
+                  handed comes back rounded — which is the whole trick: the
+                  bead and the sheet are the same rectangle at two sizes, and
+                  the filter is what makes one of them a drop.
+
+                  What goes in is the sheet's own colour, so the drop is a
+                  piece of the panel rather than a tinted stand-in for it, and
+                  when it fades there is nothing to cross over to: the sheet
+                  underneath is already the same thing in the same place.
+                  Lifted from the card that melts into the bin, which had to
+                  solve exactly this.
+
+                  The intercept puts the threshold at half alpha (7.5/15), so
+                  the silhouette comes back the size of the box that produced
+                  it. Slopes that cross lower inflate every shape a few pixels,
+                  and this one has to land exactly on the sheet. */}
+              <filter id="composerGooGlass" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="soft" />
                 <feColorMatrix
                   in="soft"
                   type="matrix"
-                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 15 -6.5"
+                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 15 -7.5"
+                  result="body"
                 />
+                {/* The union's own outline, taken off its alpha, minus an
+                    eroded copy of itself: a ~2px line around the whole welded
+                    shape, neck included, and a darker one under it for
+                    thickness. One rim around both lobes is what says single
+                    object. */}
+                <feColorMatrix
+                  in="body"
+                  type="matrix"
+                  values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                  result="shape"
+                />
+                <feMorphology in="shape" operator="erode" radius="1.5" result="inner" />
+                <feComposite in="shape" in2="inner" operator="out" result="rimA" />
+                <feOffset in="rimA" dy="1.5" result="rimLoA" />
+                <feFlood floodColor="#0f172a" floodOpacity="0.38" result="loC" />
+                <feComposite in="loC" in2="rimLoA" operator="in" result="rimLo" />
+                {/* Matched to the edge the settled sheet wears (a hairline at
+                    ~0.09 white over its own shadow), not the bright outline a
+                    goo filter wants to draw. Brighter and the drop reads as a
+                    stroked cartoon shape rather than the panel in motion. */}
+                <feFlood floodColor="#ffffff" floodOpacity="0.2" result="hiC" />
+                <feComposite in="hiC" in2="rimA" operator="in" result="rimHi" />
+                <feMerge>
+                  <feMergeNode in="body" />
+                  <feMergeNode in="rimLo" />
+                  <feMergeNode in="rimHi" />
+                </feMerge>
               </filter>
             </defs>
           </svg>
