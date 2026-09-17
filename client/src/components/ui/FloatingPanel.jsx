@@ -117,8 +117,19 @@ export default function FloatingPanel({
           aria-modal="false"
           aria-label={typeof title === 'string' ? title : undefined}
           tabIndex={-1}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
-          animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+          // Scale, and deliberately no fade. A frosted surface cannot be
+          // faded in: an element at less than full opacity becomes its own
+          // backdrop root, so the blur has nothing behind it to sample and the
+          // sheet arrives as a flat box, the material snapping on at the end
+          // of the animation. Opaque from the first frame, growing a little,
+          // is the same arrival without the seam — and the contents fade in
+          // underneath it, where opacity costs nothing.
+          // Reduced motion gets no animation on the surface at all rather
+          // than a cross-fade, for the same reason: a fade would take the
+          // frost with it. The contents still ease in, which is the gentle
+          // substitute without anything moving.
+          initial={reduce ? false : { scale: 0.94 }}
+          animate={reduce ? {} : { scale: 1 }}
           exit={reduce
             ? { opacity: 0, transition: { duration: 0.18 } }
             : { opacity: 0, scale: 0.97, transition: LEAVE }}
@@ -138,9 +149,9 @@ export default function FloatingPanel({
               </button>
             </div>
             <motion.div
-              initial={reduce ? false : { opacity: 0, y: 6 }}
+              initial={reduce ? false : { opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.07, duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+              transition={{ duration: 0.26, ease: [0.23, 1, 0.32, 1] }}
               className="flex-1 min-h-0 overflow-y-auto px-4 pb-4"
             >
               {children}
