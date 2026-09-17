@@ -1,12 +1,19 @@
-import { useEffect, useState } from 'react';
-import { ArchiveRestoreIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { ArchiveRestoreIcon, PlusIcon, SendIcon, Trash2Icon, XIcon } from 'lucide-react';
 import Modal from '../ui/Modal';
 import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import Button from '../ui/Button';
 import LazyMarkdownEditor from '../shared/LazyMarkdownEditor';
+import Linkify from '../shared/Linkify';
+import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { COLUMNS } from '../../lib/taskBoard';
+import { COLUMNS, DUE_TONE, carriesTask, dueMeta, ownsTask, taskHolder } from '../../lib/taskBoard';
+
+// The rendered note, for a card that is not yours to edit. Lazy for the same
+// reason the editor is: both ride the markdown chunk, and the dialog should
+// not make every visitor to the board pay for it.
+const MarkdownView = lazy(() => import('../shared/MarkdownView'));
 
 const TITLE_MAX = 200;
 
@@ -26,13 +33,22 @@ const snapshot = (f) => JSON.stringify({
 
 // Create and edit are the same form. `task` null means create; `column` is the
 // column a new card lands in.
-export default function TaskEditorModal({ isOpen, task, directors = [], column = 'todo', draftTitle = '', onClose, onSave, onDelete, onPurge, onRestore, onDirtyChange, refuseSignal = 0 }) {
-  const { user } = useAuth();
+export default function TaskEditorModal({ isOpen, task, assignees = [], column = 'todo', draftTitle = '', onClose, onSave, onDelete, onPurge, onRestore, onDirtyChange, onCommentCount, refuseSignal = 0 }) {
+  const { user, isReadOnly } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirming, setConfirming] = useState(false);
   // `archived_at` is the day the card was deleted. The column is older than the
   // name; see the note in the tasks route.
   const deleted = Boolean(task?.archived_at);
+  // Whose card this is, and therefore what this dialog is. The owner gets the
+  // form. A carrier gets a reading of the card with the two things that are
+  // theirs still live: the stage and the checklist, plus the comments under
+  // it. Anyone else reads. A new card is its author's by definition, and
+  // browsing another center makes everyone a reader, same as the whole page.
+  // The server holds the same line (see directorTasks.js), so this is the
+  // honest drawing of it, not the enforcement.
+  const owns = !isReadOnly && (!task || ownsTask(task, user));
+  const carries = owns || (!isReadOnly && Boolean(task) && carriesTask(task, user));
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   // Kept, not chosen: a task's colour is no longer drawn on the board, so
@@ -149,37 +165,79 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
     <Shell
       isOpen={isOpen}
       onClose={onClose}
-      title={task ? 'Edit task' : 'New task'}
+      title={task ? (owns ? 'Edit task' : 'Task details') : 'New task'}
       {...shellProps}
     >
       <div className="space-y-4">
-        <div>
-          <label htmlFor="task-title" className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
-            Title
-            {/* Named as optional, because it is. A card that is just a note is
-                a normal card here, not a half-finished one. */}
-            <span className="ml-1.5 font-normal text-ninja-muted">optional</span>
-          </label>
-          <input
-            id="task-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={TITLE_MAX}
-            placeholder="Order laptops for the Friday camp"
-            className="w-full rounded-xl bg-white border border-ninja-border focus:border-ninja-blue transition-colors px-3 py-2.5 font-ninja text-sm text-ninja-navy"
-          />
-        </div>
+        {owns ? (
+          <div>
+            <label htmlFor="task-title" className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
+              Title
+              {/* Named as optional, because it is. A card that is just a note is
+                  a normal card here, not a half-finished one. */}
+              <span className="ml-1.5 font-normal text-ninja-muted">optional</span>
+            </label>
+            <input
+              id="task-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={TITLE_MAX}
+              placeholder="Order laptops for the Friday camp"
+              className="w-full rounded-xl bg-white border border-ninja-border focus:border-ninja-blue transition-colors px-3 py-2.5 font-ninja text-sm text-ninja-navy"
+            />
+          </div>
+        ) : (
+          <div>
+            {title.trim() && (
+              <h3 className="font-ninja text-base font-bold text-ninja-navy leading-snug text-pretty">
+                {title}
+              </h3>
+            )}
+            {/* Why the form is not here. Naming the author is what makes a
+                read-only card read as somebody's card rather than as a bug. */}
+            <p className={`font-ninja text-xs text-ninja-muted ${title.trim() ? 'mt-1' : ''}`}>
+              {task?.created_by_name ? `${task.created_by_name} made this card.` : 'This card came with the board.'}
+              {carries
+                ? ' The words are theirs. The stage, the checklist and the comments are yours.'
+                : ' Only they can change it.'}
+            </p>
+          </div>
+        )}
 
-        <div>
-          <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">Notes</span>
-          <LazyMarkdownEditor
-            value={body}
-            onChange={setBody}
-            placeholder="Anything the next director on shift needs to know…"
-          />
-        </div>
+        {owns ? (
+          <div>
+            <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">Notes</span>
+            <LazyMarkdownEditor
+              value={body}
+              onChange={setBody}
+              placeholder="Anything the next director on shift needs to know…"
+            />
+          </div>
+        ) : body.trim() ? (
+          <div>
+            <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">Notes</span>
+            <Suspense fallback={<p className="font-ninja text-sm text-ninja-muted">Loading…</p>}>
+              <MarkdownView className="font-ninja text-sm leading-relaxed text-ninja-navy">
+                {body}
+              </MarkdownView>
+            </Suspense>
+          </div>
+        ) : null}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {!owns && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            <span className={`font-ninja text-sm ${dueMeta(due) ? DUE_TONE[dueMeta(due).tone] : 'text-ninja-muted'}`}>
+              {dueMeta(due)?.text || 'No due date'}
+            </span>
+            <span className="font-ninja text-sm text-ninja-muted">
+              {task && taskHolder(task) ? `${taskHolder(task)} has it` : 'Nobody has it yet'}
+            </span>
+          </div>
+        )}
+
+        <div className={owns ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : ''}>
+          {owns && (
+          <>
           <div>
             <label htmlFor="task-due" className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
               Due date
@@ -218,19 +276,29 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
                   lines. */}
               <option value="center">{user?.activeLocation?.name || 'The whole center'}</option>
               <optgroup label="Center Directors">
-                {directors.map((d) => (
+                {assignees.filter((d) => d.role !== 'sensei').map((d) => (
+                  <option key={d.id} value={d.id}>{d.display_name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Senseis">
+                {assignees.filter((d) => d.role === 'sensei').map((d) => (
                   <option key={d.id} value={d.id}>{d.display_name}</option>
                 ))}
               </optgroup>
               {/* A card handed to someone who has since left the center would
                   otherwise show as unassigned the moment it is opened, and
                   saving would quietly drop them. */}
-              {task?.assignee_id && !directors.some((d) => d.id === task.assignee_id) && (
+              {task?.assignee_id && !assignees.some((d) => d.id === task.assignee_id) && (
                 <option value={task.assignee_id}>{task.assignee_name || 'No longer at this center'}</option>
               )}
             </select>
           </div>
+          </>
+          )}
 
+          {/* The one field a carrier keeps: moving the card along is exactly
+              what being on it means. A reader gets the fact, not the control. */}
+          {carries ? (
           <div>
             <label htmlFor="task-column" className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
               Column
@@ -246,8 +314,17 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
               ))}
             </select>
           </div>
+          ) : (
+          <div>
+            <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">Column</span>
+            <p className="font-ninja text-sm text-ninja-muted">
+              {COLUMNS.find((c) => c.key === columnKey)?.label}
+            </p>
+          </div>
+          )}
         </div>
 
+        {(carries || checklist.length > 0) && (
         <div>
           <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
             Checklist
@@ -263,17 +340,19 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
               {checklist.map((it, i) => (
                 <li key={i} className="flex items-center gap-2 group">
                   {/* A label around the box, so the words are the target too. */}
-                  <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                  <label className={`flex items-center gap-2 flex-1 min-w-0 ${carries ? 'cursor-pointer' : ''}`}>
                     <input
                       type="checkbox"
                       checked={it.done}
+                      disabled={!carries}
                       onChange={() => setChecklist((cs) => cs.map((c, j) => (j === i ? { ...c, done: !c.done } : c)))}
-                      className="rounded border-ninja-border accent-ninja-blue cursor-pointer flex-shrink-0"
+                      className={`rounded border-ninja-border accent-ninja-blue flex-shrink-0 ${carries ? 'cursor-pointer' : ''}`}
                     />
                     <span className={`font-ninja text-sm truncate ${it.done ? 'text-ninja-muted line-through' : 'text-ninja-navy'}`}>
                       {it.text}
                     </span>
                   </label>
+                  {carries && (
                   <button
                     type="button"
                     onClick={() => setChecklist((cs) => cs.filter((_, j) => j !== i))}
@@ -282,6 +361,7 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
                   >
                     <XIcon size={14} strokeWidth={2.5} />
                   </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -289,6 +369,7 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
 
           {/* Enter adds and leaves the field ready for the next one: a
               checklist is written in one go, not one dialog at a time. */}
+          {carries && (
           <div className="flex items-center gap-2">
             <input
               value={item}
@@ -320,7 +401,16 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
               <PlusIcon size={16} strokeWidth={2.5} />
             </button>
           </div>
+          )}
         </div>
+        )}
+
+        {/* The thread under the card. Only a saved, living card has one: a
+            card being written has nobody to talk to yet, and a deleted card
+            is on its way out. */}
+        {task && !deleted && (
+          <TaskComments task={task} canComment={carries} onCount={onCommentCount} />
+        )}
 
         {error && <p className="font-ninja text-sm text-ninja-red">{error}</p>}
 
@@ -331,7 +421,7 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
             A card already in Recently deleted is offered the two things left:
             back to the board, or gone now rather than in a fortnight. */}
         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-          {task && (
+          {task && owns && (
             <div className="flex items-center gap-1 mr-auto">
               {deleted ? (
                 <>
@@ -393,13 +483,112 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
             </div>
           )}
           <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
-            Cancel
+            {carries ? 'Cancel' : 'Close'}
           </Button>
-          <Button size="sm" onClick={submit} disabled={saving || !hasContent}>
-            {saving ? 'Saving…' : task ? 'Save changes' : 'Add task'}
-          </Button>
+          {carries && (
+            <Button size="sm" onClick={submit} disabled={saving || !hasContent}>
+              {saving ? 'Saving…' : task ? 'Save changes' : 'Add task'}
+            </Button>
+          )}
         </div>
       </div>
     </Shell>
+  );
+}
+
+// The thread under a card, in the same row the club sessions use: the words,
+// then who said them and when. Fetched when the card opens rather than carried
+// on every board read — the board itself only needs the count. Comments are
+// plain text through Linkify, not markdown: they are one-line answers, and an
+// editor here would out-weigh the note above it.
+function TaskComments({ task, canComment, onCount }) {
+  const [comments, setComments] = useState(null); // null is still loading
+  const [text, setText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    setComments(null);
+    setText('');
+    setError('');
+    api.get(`/director-tasks/${task.id}/comments`)
+      .then((rows) => { if (alive) setComments(rows); })
+      .catch(() => { if (alive) setComments([]); });
+    return () => { alive = false; };
+  }, [task.id]);
+
+  const post = async (e) => {
+    e.preventDefault();
+    const body = text.trim();
+    if (!body || posting) return;
+    setPosting(true);
+    setError('');
+    try {
+      const created = await api.post(`/director-tasks/${task.id}/comments`, { body });
+      setComments((cs) => {
+        const next = [...(cs || []), created];
+        onCount?.(task.id, next.length);
+        return next;
+      });
+      setText('');
+    } catch (err) {
+      setError(err.message || 'Could not add the comment.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div>
+      <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
+        Comments
+        {comments?.length > 0 && (
+          <span className="ml-1.5 font-normal text-ninja-muted tabular-nums">{comments.length}</span>
+        )}
+      </span>
+
+      {comments === null ? (
+        <p className="font-ninja text-xs text-ninja-muted mb-2">Loading…</p>
+      ) : comments.length > 0 ? (
+        <div className="space-y-2.5 mb-2.5">
+          {comments.map((c) => (
+            <div key={c.id} className="flex gap-2">
+              <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
+              <div className="min-w-0">
+                <p className="font-ninja text-sm text-ninja-navy break-words"><Linkify>{c.body}</Linkify></p>
+                <p className="font-ninja text-xs text-ninja-muted mt-0.5">
+                  {c.author_name || 'No longer here'} · {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : !canComment ? (
+        <p className="font-ninja text-xs text-ninja-muted">Nothing said yet.</p>
+      ) : null}
+
+      {canComment && (
+        <form onSubmit={post} className="flex items-center gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            maxLength={2000}
+            placeholder={comments?.length ? 'Reply…' : 'Say how it is going…'}
+            aria-label="Add a comment"
+            className="flex-1 rounded-xl bg-white border border-ninja-border focus:border-ninja-blue transition-colors px-3 py-2 font-ninja text-sm text-ninja-navy"
+          />
+          <button
+            type="submit"
+            disabled={!text.trim() || posting}
+            aria-label="Post comment"
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-ninja-border text-ninja-muted hover:text-ninja-blue hover:border-ninja-blue transition-colors flex-shrink-0 disabled:opacity-50"
+          >
+            <SendIcon size={15} strokeWidth={2.25} />
+          </button>
+        </form>
+      )}
+      {error && <p className="mt-1.5 font-ninja text-xs text-ninja-red">{error}</p>}
+    </div>
   );
 }

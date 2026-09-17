@@ -103,6 +103,27 @@ export const DUE_TONE = {
   later: 'text-ninja-muted',
 };
 
+/* --------------------------------------------------------------- tiers -- */
+
+// Who may do what to a card. The server decides this for real (see the notes
+// on directorTasks.js); these mirror its two checks so the board can draw a
+// control as absent rather than let it be pressed and refused.
+//
+// Owner: made the card, or the card predates authorship, or admin. Edits the
+// words, the date, the owner; deletes and restores.
+export const ownsTask = (task, user) =>
+  user?.role === 'admin'
+  || task?.created_by === user?.id
+  || (task?.created_by == null && user?.role === 'manager');
+
+// Carrier: the owner, the named assignee, or every director here while the
+// center holds the card. Moves it between stages, edits the checklist,
+// comments. The words are not theirs.
+export const carriesTask = (task, user) =>
+  ownsTask(task, user)
+  || (task?.assignee_center === true && ['manager', 'admin'].includes(user?.role))
+  || (task?.assignee_id != null && task.assignee_id === user?.id);
+
 /* ------------------------------------------------------------- preview -- */
 
 // Bodies are stored as markdown. On a card we want a couple of lines of prose,

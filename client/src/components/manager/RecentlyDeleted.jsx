@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { ArchiveRestoreIcon, Trash2Icon } from 'lucide-react';
 import TaskCardFace from './TaskCardFace';
 import { CARD } from '../../lib/surfaces';
-import { TASK_SURFACE } from '../../lib/taskBoard';
+import { useAuth } from '../../context/AuthContext';
+import { TASK_SURFACE, ownsTask } from '../../lib/taskBoard';
 
 // What is left of the board, as a list.
 //
@@ -34,9 +35,14 @@ function timeLeft(task) {
 }
 
 export default function RecentlyDeleted({ tasks, canManage, leavingId, onRestore, onPurge, onPurgeAll }) {
+  const { user } = useAuth();
   // One confirm at a time, and it is the id being confirmed rather than a
   // boolean, so opening a second one closes the first instead of arming two.
   const [confirming, setConfirming] = useState(null);
+
+  // The bin shows the whole center's deleted cards, but restore and purge are
+  // the owner's, so Delete all counts only what pressing it would take.
+  const mine = canManage ? tasks.filter((t) => ownsTask(t, user)) : [];
 
   if (tasks.length === 0) {
     return (
@@ -48,12 +54,12 @@ export default function RecentlyDeleted({ tasks, canManage, leavingId, onRestore
 
   return (
     <div className="space-y-3 max-w-3xl">
-      {canManage && (
+      {mine.length > 0 && (
         <div className="flex items-center justify-end">
           {confirming === 'all' ? (
             <div className="flex items-center gap-2">
               <span className="font-ninja text-xs text-ninja-muted">
-                Delete all {tasks.length} for good?
+                Delete {mine.length === tasks.length ? `all ${mine.length}` : `your ${mine.length}`} for good?
               </span>
               <button
                 type="button"
@@ -95,7 +101,7 @@ export default function RecentlyDeleted({ tasks, canManage, leavingId, onRestore
 
           <div className="mt-3 pt-3 border-t border-ninja-border flex items-center justify-between gap-3">
             <span className="font-ninja text-xs text-ninja-muted">{timeLeft(task)}</span>
-            {canManage && (
+            {canManage && ownsTask(task, user) && (
               <span className="flex items-center gap-1 flex-shrink-0">
                 {confirming === task.id ? (
                   <>

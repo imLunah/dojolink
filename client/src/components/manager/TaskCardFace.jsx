@@ -1,4 +1,4 @@
-import { Building2Icon } from 'lucide-react';
+import { Building2Icon, MessageSquareIcon } from 'lucide-react';
 import { DUE_TONE, dueMeta, plainPreview, taskHolder } from '../../lib/taskBoard';
 
 // What a task card looks like, in one place.
@@ -92,7 +92,7 @@ export default function TaskCardFace({ task, onOpen, actions }) {
 
       {/* The footer holds the two things about a card that are not what it
           says: when it is due, and who has it. */}
-      {(due || holder || checklist.length > 0) && (
+      {(due || holder || checklist.length > 0 || task.comment_count > 0) && (
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="flex items-center gap-2.5 min-w-0">
             <span className={`font-ninja text-xs truncate ${due ? DUE_TONE[due.tone] : ''}`}>
@@ -101,6 +101,15 @@ export default function TaskCardFace({ task, onOpen, actions }) {
             {checklist.length > 0 && (
               <span className="font-ninja text-xs text-ninja-muted tabular-nums flex-shrink-0">
                 {ticked}/{checklist.length}
+              </span>
+            )}
+            {task.comment_count > 0 && (
+              <span
+                aria-label={task.comment_count === 1 ? '1 comment' : `${task.comment_count} comments`}
+                className="flex items-center gap-1 font-ninja text-xs text-ninja-muted tabular-nums flex-shrink-0"
+              >
+                <MessageSquareIcon size={12} strokeWidth={2.25} aria-hidden="true" />
+                {task.comment_count}
               </span>
             )}
           </span>

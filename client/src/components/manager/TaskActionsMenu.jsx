@@ -6,7 +6,10 @@ import { COLUMN_KEYS, COLUMN_LABEL } from '../../lib/taskBoard';
 // Everything a card can have done to it, in one menu. The list view uses it:
 // working through twenty rows at once wants every action in one place, where
 // the board puts the common ones on the card and the rest in its dialog.
-export default function TaskActionsMenu({ task, onOpen, onDelete, onPurge, onRestore, onMoveTo, className = '' }) {
+// `canMove` and `canDelete` are the carrier and owner rights from
+// taskBoard.js. They default on so the menu keeps working anywhere that has
+// not learned the tiers; the list passes the real answers.
+export default function TaskActionsMenu({ task, canMove = true, canDelete = true, onOpen, onDelete, onPurge, onRestore, onMoveTo, className = '' }) {
   const [confirming, setConfirming] = useState(false);
   // `archived_at` is the day the card was deleted; the column is older than the
   // name. A card here is in Recently deleted, waiting out its fortnight.
@@ -53,14 +56,16 @@ export default function TaskActionsMenu({ task, onOpen, onDelete, onPurge, onRes
         ) : (
           <>
             <MenuItem icon={PencilIcon} onSelect={() => { close(); onOpen(); }}>
-              Edit
+              {/* The same door either way; what is behind it depends on whose
+                  card it is, and the dialog says so itself. */}
+              {canDelete ? 'Edit' : 'Open'}
             </MenuItem>
             {/* The keyboard and touch route between columns, and the only route
                 below xl or while a filter is on. The arrow points the way the
                 card will actually travel: from the middle of the board some of
                 these go backwards, and four arrows pointing right would say
                 otherwise. */}
-            {COLUMN_KEYS.filter((k) => k !== task.column_key).map((k) => {
+            {canMove && COLUMN_KEYS.filter((k) => k !== task.column_key).map((k) => {
               const back = COLUMN_KEYS.indexOf(k) < COLUMN_KEYS.indexOf(task.column_key);
               return (
                 <MenuItem
@@ -76,9 +81,11 @@ export default function TaskActionsMenu({ task, onOpen, onDelete, onPurge, onRes
                 Recently deleted and sits there for a fortnight. Nothing on a
                 live card is irreversible any more, which is why nothing here
                 stops to ask. */}
-            <MenuItem icon={Trash2Icon} danger onSelect={() => { close(); onDelete(task); }}>
-              Delete
-            </MenuItem>
+            {canDelete && (
+              <MenuItem icon={Trash2Icon} danger onSelect={() => { close(); onDelete(task); }}>
+                Delete
+              </MenuItem>
+            )}
           </>
         )
       }
