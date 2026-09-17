@@ -91,12 +91,13 @@ export function QuickFlyoutPanel({ link, pathname, search }) {
 }
 
 export const senseiLinks = [
-  { to: '/sensei/dashboard', label: "Today's Board", icon: 'today' },
+  { to: '/sensei/dashboard', label: 'Dashboard', Glyph: LayoutGridIcon },
+  { to: '/sensei/tasks', label: 'My Tasks', Glyph: ListTodoIcon },
   { to: '/manager/students', label: 'Ninjas', icon: 'roster' },
   { to: '/clubs', label: 'Clubs', icon: 'clubs' },
   { to: '/manager/staff', label: 'Staff', icon: 'senseis' },
-  // Directors reach Curriculum from their dashboard. Instructors have no
-  // dashboard, so without this the page had no entry point for them at all.
+  // Keep curriculum one press away during a session; this is where senseis
+  // reach lesson resources and completion codes.
   { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
 ];
 

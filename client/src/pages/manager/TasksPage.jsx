@@ -21,9 +21,11 @@ const VIEWS = [
   { value: 'list', label: 'List', icon: <ListIcon size={14} strokeWidth={2.25} /> },
 ];
 
-export default function TasksPage() {
+export default function TasksPage({ mode = 'manager' }) {
   const { user, isReadOnly } = useAuth();
-  const canManage = !isReadOnly;
+  const mineOnly = mode === 'mine';
+  const canInteract = !isReadOnly;
+  const canCreate = !mineOnly && !isReadOnly;
 
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +50,7 @@ export default function TasksPage() {
     setComposer({ column, origin });
   }, [editor, editorDirty]);
   const [showArchived, setShowArchived] = useState(false);
-  const [directors, setDirectors] = useState([]);
+  const [assignees, setAssignees] = useState([]);
   // The card on its way out. A delete asked for from the dialog or the list's
   // menu has nothing moving on screen to connect the press to the row closing
   // up, so the card is left where it is for a beat and shrinks out of it. The
@@ -71,35 +73,37 @@ export default function TasksPage() {
   // Filters are deliberately NOT remembered — a filter is a momentary question,
   // and a board that silently reopens narrowed reads as work having vanished.
   const [view, setView] = useState(() => {
-    try { return localStorage.getItem('dj-tasks-view') === 'list' ? 'list' : 'board'; }
+    try { return localStorage.getItem(mineOnly ? 'dj-my-tasks-view' : 'dj-tasks-view') === 'list' ? 'list' : 'board'; }
     catch { return 'board'; }
   });
   const chooseView = (next) => {
     setView(next);
-    try { localStorage.setItem('dj-tasks-view', next); } catch { /* private mode */ }
+    try { localStorage.setItem(mineOnly ? 'dj-my-tasks-view' : 'dj-tasks-view', next); } catch { /* private mode */ }
   };
 
   const load = useCallback(() => {
     let alive = true;
     setLoading(true);
-    api.get(`/director-tasks${showArchived ? '?archived=true' : ''}`)
+    const query = mineOnly ? '?mine=true' : showArchived ? '?archived=true' : '';
+    api.get(`/director-tasks${query}`)
       .then((rows) => { if (alive) { setTasks(rows); setError(''); } })
       .catch((err) => { if (alive) setError(err.message || 'Could not load tasks.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [showArchived]);
+  }, [mineOnly, showArchived]);
 
   useEffect(load, [load, user?.activeLocation?.id]);
 
   // Who the assignee filter can offer, fetched once here rather than by every
   // component that needs the list.
   useEffect(() => {
+    if (!canCreate) { setAssignees([]); return undefined; }
     let alive = true;
     api.get('/director-tasks/assignees')
       .catch(() => [])
-      .then((rows) => { if (alive) setDirectors(rows || []); });
+      .then((rows) => { if (alive) setAssignees(rows || []); });
     return () => { alive = false; };
-  }, [user?.activeLocation?.id]);
+  }, [canCreate, user?.activeLocation?.id]);
 
 
   // Reordering is optimistic: the card is already under the pointer where the
@@ -111,24 +115,39 @@ export default function TasksPage() {
     setTasks(next);
     setError('');
     try {
+      if (mineOnly) {
+        // A sensei sees only their slice of the center board. Restamping that
+        // slice would create positions that collide with invisible cards, so
+        // their arrows/swipes persist only the one meaningful change: stage.
+        const moved = next.find((task) => {
+          const before = previous.find((old) => old.id === task.id);
+          return before && before.column_key !== task.column_key;
+        });
+        if (!moved) return;
+        const saved = await api.patch(`/director-tasks/${moved.id}`, { column_key: moved.column_key });
+        setTasks((rows) => rows.map((task) => (task.id === saved.id ? { ...task, ...saved } : task)));
+        return;
+      }
       await api.patch('/director-tasks/reorder', { items: reorderPayload(next) });
     } catch (err) {
       setTasks(previous);
       setError(err.message || 'Could not save the new order.');
     }
-  }, [tasks]);
+  }, [mineOnly, tasks]);
 
   const save = useCallback(async (fields) => {
     const editing = editor?.task;
     if (editing) {
       const saved = await api.patch(`/director-tasks/${editing.id}`, fields);
       setTasks((ts) => ts.map((t) => (t.id === saved.id ? { ...t, ...saved } : t)));
-    } else {
+    } else if (canCreate) {
       const created = await api.post('/director-tasks', fields);
       setTasks((ts) => [...ts, created]);
+    } else {
+      throw new Error('Only a manager can create tasks.');
     }
     setError('');
-  }, [editor]);
+  }, [canCreate, editor]);
 
   // Quick adds are chained rather than fired in parallel: position comes from
   // the server's MAX + 1, so three fast returns resolving out of order would
@@ -260,7 +279,7 @@ export default function TasksPage() {
             </button>
           ) : (
             <Link
-              to="/manager/overview"
+              to={mineOnly ? '/sensei/dashboard' : '/manager/overview'}
               className="inline-flex items-center gap-1.5 font-ninja text-sm font-bold text-ninja-muted hover:text-ninja-navy transition-colors rounded"
             >
               <ArrowLeftIcon size={15} strokeWidth={2.25} />
@@ -271,12 +290,14 @@ export default function TasksPage() {
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-3xl font-black font-ninja text-ninja-navy tracking-tight">
-                {showArchived ? 'Recently deleted' : 'Tasks'}
+                {showArchived ? 'Recently deleted' : mineOnly ? 'My Tasks' : 'Tasks'}
               </h1>
               <p className="mt-1 font-ninja text-sm text-ninja-muted text-pretty">
                 {showArchived
                   ? 'Deleted tasks are kept here for 14 days, then removed for good.'
-                  : canManage
+                  : mineOnly
+                    ? 'Tasks assigned to you at this center.'
+                    : canCreate
                     ? 'Assign tasks to this location'
                     : "You're viewing another center, so this board is read-only."}
               </p>
@@ -291,13 +312,13 @@ export default function TasksPage() {
                   a question about which set of tasks the page is showing, and
                   the two controls after it are questions about how to show
                   them. */}
-              <button
+              {canCreate && <button
                 type="button"
                 onClick={() => setShowArchived(true)}
                 className="px-3 py-1.5 rounded-full font-ninja text-xs font-semibold border border-transparent bg-transparent text-ninja-muted hover:text-ninja-navy hover:border-ninja-border transition-colors duration-150 ease-[var(--ease-out)] active:scale-95"
               >
                 Recently deleted
-              </button>
+              </button>}
               <Segmented
                 options={VIEWS}
                 value={view}
@@ -316,7 +337,7 @@ export default function TasksPage() {
                   The group above is already hidden while Recently deleted is
                   open, so this only has to ask whether the viewer can write
                   here at all. */}
-              {canManage && (
+              {canCreate && (
                 <button
                   type="button"
                   onClick={() => openEditor({ column: 'todo' })}
@@ -353,7 +374,7 @@ export default function TasksPage() {
         ) : showArchived ? (
           <RecentlyDeleted
             tasks={tasks}
-            canManage={canManage}
+            canManage={canCreate}
             leavingId={leavingId}
             onRestore={restore}
             onPurge={purge}
@@ -362,8 +383,9 @@ export default function TasksPage() {
         ) : view === 'list' ? (
           <TaskList
             tasks={tasks}
-            canManage={canManage}
-            directors={directors}
+            canManage={canInteract}
+            canCreate={canCreate}
+            assignees={assignees}
             centerName={user?.activeLocation?.name}
             onEdit={(task) => openEditor({ task })}
             onDelete={softDelete}
@@ -376,7 +398,10 @@ export default function TasksPage() {
           <TaskBoard
             tasks={tasks}
             leavingId={leavingId}
-            canManage={canManage}
+            canManage={canInteract}
+            canCreate={canCreate}
+            canClearDone={canCreate}
+            filtered={mineOnly}
             onCompose={openComposer}
             onEdit={(task) => openEditor({ task })}
             onDelete={softDelete}
@@ -402,16 +427,19 @@ export default function TasksPage() {
       <TaskEditorModal
         isOpen={!!editor}
         task={editor?.task ?? null}
-        directors={directors}
+        assignees={assignees}
         column={editor?.column ?? 'todo'}
         draftTitle={editor?.draftTitle ?? ''}
         onClose={() => setEditor(null)}
         onDirtyChange={setEditorDirty}
+        // A posted comment changes one number on one card; the dialog says
+        // which and the board redraws it without a refetch.
+        onCommentCount={(id, count) => setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, comment_count: count } : t)))}
         refuseSignal={refuseSignal}
         onSave={save}
-        onDelete={canManage ? softDelete : undefined}
-        onPurge={canManage ? purge : undefined}
-        onRestore={canManage ? restore : undefined}
+        onDelete={canCreate ? softDelete : undefined}
+        onPurge={canCreate ? purge : undefined}
+        onRestore={canCreate ? restore : undefined}
       />
     </Layout>
   );

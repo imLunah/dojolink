@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, Trash2Icon } from 'lucide-react';
 import TaskActionsMenu from './TaskActionsMenu';
 import { CARD } from '../../lib/surfaces';
-import { COLUMNS, COLUMN_KEYS, DUE_TONE, dueMeta, plainPreview, taskHolder } from '../../lib/taskBoard';
+import { useAuth } from '../../context/AuthContext';
+import { COLUMNS, COLUMN_KEYS, DUE_TONE, carriesTask, dueMeta, ownsTask, plainPreview, taskHolder } from '../../lib/taskBoard';
 
 // The same cards, as one table. The board answers "what is happening in each
 // stage"; this answers "what is coming up", which a column layout cannot show
@@ -61,7 +62,8 @@ function SortHeader({ label, sortKey, sort, onSort, className = '' }) {
   );
 }
 
-export default function TaskList({ tasks, canManage, directors = [], centerName, onEdit, onDelete, onPurge, onRestore, onPatch, onQuickAdd }) {
+export default function TaskList({ tasks, canManage, canCreate = canManage, assignees = [], centerName, onEdit, onDelete, onPurge, onRestore, onPatch, onQuickAdd }) {
+  const { user } = useAuth();
   const [sort, setSort] = useState({ key: 'due', dir: 'asc' });
   const [picked, setPicked] = useState(() => new Set());
   const [adding, setAdding] = useState('');
@@ -94,8 +96,12 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
   // Selection is by id, and ids outlive a sort but not a delete. Anything that
   // has left the board is dropped rather than left in the set, or the count
   // above the table would go on counting rows that are not there.
-  const live = rows.filter((t) => picked.has(t.id));
-  const allPicked = rows.length > 0 && live.length === rows.length;
+  //
+  // Only rows that are yours to delete are selectable at all — the bar's one
+  // action is Delete, and a checkbox that arms a refusal is worse than none.
+  const selectable = canManage ? rows.filter((t) => ownsTask(t, user)) : [];
+  const live = selectable.filter((t) => picked.has(t.id));
+  const allPicked = selectable.length > 0 && live.length === selectable.length;
 
   const quickAdd = (e) => {
     e.preventDefault();
@@ -110,7 +116,7 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
   // and anything typed in one breath is a thing to do rather than a thing being
   // done. The header's Add task is the other half of this: one breath here,
   // everything else there.
-  const addRow = canManage && onQuickAdd && (
+  const addRow = canCreate && onQuickAdd && (
     <form onSubmit={quickAdd} className="px-4 lg:px-5 py-2 border-t border-ninja-border/50">
       <input
         type="text"
@@ -151,7 +157,7 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
     </div>
   );
 
-  const pickBox = (task) => canManage && (
+  const pickBox = (task) => canManage && ownsTask(task, user) && (
     <input
       type="checkbox"
       checked={picked.has(task.id)}
@@ -178,11 +184,11 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
     {selectionBar}
     <div className={CARD}>
       <div className={`hidden lg:grid ${COLS} gap-3 px-5 py-2.5 rounded-t-2xl border-b border-ninja-border bg-ninja-bg font-ninja font-bold text-[11px] text-ninja-muted`}>
-        {canManage ? (
+        {selectable.length > 0 ? (
           <input
             type="checkbox"
             checked={allPicked}
-            onChange={() => setPicked(allPicked ? new Set() : new Set(rows.map((t) => t.id)))}
+            onChange={() => setPicked(allPicked ? new Set() : new Set(selectable.map((t) => t.id)))}
             aria-label={allPicked ? 'Clear selection' : 'Select every task'}
             className="rounded border-ninja-border accent-ninja-blue cursor-pointer self-center"
           />
@@ -202,7 +208,12 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
         const note = task.title?.trim() ? plainPreview(task.body) : '';
         const list = task.checklist || [];
         const ticked = list.filter((i) => i.done).length;
-        const editable = canManage && !task.archived_at;
+        // The three tiers, per row: the stage is a carrier's, the words and
+        // the date are the owner's, and everyone else reads. Same answers the
+        // board and the dialog give, because they are the same functions.
+        const own = canManage && ownsTask(task, user);
+        const carry = canManage && !task.archived_at && carriesTask(task, user);
+        const editable = own && !task.archived_at;
         const who = task.assignee_center ? 'center' : task.assignee_id ? String(task.assignee_id) : 'center';
 
         const title = (
@@ -223,7 +234,7 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
           </div>
         );
 
-        const status = editable ? (
+        const status = carry ? (
           <select
             value={task.column_key}
             onChange={(e) => onPatch(task, { column_key: e.target.value })}
@@ -245,16 +256,23 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
               const v = e.target.value;
               onPatch(task, v === 'center'
                 ? { assignee_center: true, assignee_id: null, assignee_name: null }
-                : { assignee_center: false, assignee_id: Number(v), assignee_name: directors.find((d) => String(d.id) === v)?.display_name || null });
+                : { assignee_center: false, assignee_id: Number(v), assignee_name: assignees.find((d) => String(d.id) === v)?.display_name || null });
             }}
             aria-label={`Who has ${lead}`}
             className={GHOST}
           >
             <option value="center">{centerName || 'The whole center'}</option>
             <optgroup label="Center Directors">
-              {directors.map((d) => <option key={d.id} value={String(d.id)}>{d.display_name}</option>)}
+              {assignees.filter((d) => d.role !== 'sensei').map((d) => (
+                <option key={d.id} value={String(d.id)}>{d.display_name}</option>
+              ))}
             </optgroup>
-            {task.assignee_id && !directors.some((d) => d.id === task.assignee_id) && (
+            <optgroup label="Senseis">
+              {assignees.filter((d) => d.role === 'sensei').map((d) => (
+                <option key={d.id} value={String(d.id)}>{d.display_name}</option>
+              ))}
+            </optgroup>
+            {task.assignee_id && !assignees.some((d) => d.id === task.assignee_id) && (
               <option value={String(task.assignee_id)}>{task.assignee_name || 'No longer here'}</option>
             )}
           </select>
@@ -278,9 +296,14 @@ export default function TaskList({ tasks, canManage, directors = [], centerName,
           </span>
         );
 
-        const menu = canManage && (
+        // A deleted row someone else owns has nothing in the menu at all —
+        // restore and purge are the owner's, and a menu of zero items is a
+        // control that lies about being one.
+        const menu = canManage && (own || !task.archived_at) && (
           <TaskActionsMenu
             task={task}
+            canMove={carry}
+            canDelete={own}
             onOpen={() => onEdit(task)}
             onDelete={onDelete}
             onPurge={onPurge}

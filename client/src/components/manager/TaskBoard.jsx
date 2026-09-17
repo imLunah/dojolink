@@ -7,12 +7,15 @@ import {
 } from 'lucide-react';
 import TaskCardFace from './TaskCardFace';
 import { CARD } from '../../lib/surfaces';
+import { useAuth } from '../../context/AuthContext';
 import {
   COLUMNS,
   COLUMN_KEYS,
   COLUMN_LABEL,
+  carriesTask,
   groupByColumn,
   moveTask,
+  ownsTask,
   TASK_SURFACE,
 } from '../../lib/taskBoard';
 
@@ -163,7 +166,11 @@ function CardButton({ onClick, disabled, label, children }) {
 
 /* --------------------------------------------------------------- card -- */
 
-function TaskCard({ task, canManage, grabbable, swipeable, settling, landed, leaving, onOpen, onDelete, onRestore, onMoveTo, cardRef, onPointerDown, onSwipeStart }) {
+// `canMove` and `canDelete` are the card's own answers to "may this viewer
+// move it along" and "may they throw it away" — the owner/carrier tiers from
+// taskBoard.js, decided by the board so every gesture here agrees with the
+// dialog and with the server.
+function TaskCard({ task, canManage, canMove, canDelete, grabbable, swipeable, settling, landed, leaving, onOpen, onDelete, onRestore, onMoveTo, cardRef, onPointerDown, onSwipeStart }) {
   const reduce = useReducedMotion();
   const faceRef = useRef(null);
   const aheadRef = useRef(null);   // revealed by a pull to the right
@@ -294,14 +301,17 @@ function TaskCard({ task, canManage, grabbable, swipeable, settling, landed, lea
     // Held still for half a second and the card arms for deletion. Cancelled by
     // the first sign of a swipe below, so the two never race: a press that
     // moves is somebody sorting the board, and a press that waits is somebody
-    // asking for the other thing.
+    // asking for the other thing. A card that is not yours to delete never
+    // arms: the hold simply has no second meaning on it.
     clearTimeout(holdTimer.current);
-    holdTimer.current = setTimeout(() => {
-      arm(true);
-      // The one moment on this board worth a tap on the wrist, since the card
-      // has not moved and there is nothing else to say it changed meaning.
-      if (navigator.vibrate) navigator.vibrate(12);
-    }, HOLD_MS);
+    if (canDelete) {
+      holdTimer.current = setTimeout(() => {
+        arm(true);
+        // The one moment on this board worth a tap on the wrist, since the card
+        // has not moved and there is nothing else to say it changed meaning.
+        if (navigator.vibrate) navigator.vibrate(12);
+      }, HOLD_MS);
+    }
 
     // On the document rather than the card: a pointer that leaves the card
     // mid-swipe is still swiping, and a card that unmounts under a capture
@@ -458,7 +468,7 @@ function TaskCard({ task, canManage, grabbable, swipeable, settling, landed, lea
           task={task}
           onOpen={onOpen}
           actions={
-            canManage && (
+            (canMove || (archived && canDelete)) && (
               // Two arrows in place of the menu that used to live here. Nearly
               // everything that menu held was a stage to move the card to, and
               // a card only ever has two of those: the one before and the one
@@ -508,10 +518,11 @@ function TaskCard({ task, canManage, grabbable, swipeable, settling, landed, lea
 // restamps position across every column: handed a subset it would renumber the
 // cards it could see and scramble the order of the ones it could not.
 export default function TaskBoard({
-  tasks, canManage, filtered = false, leavingId = null,
+  tasks, canManage, canCreate = canManage, canClearDone = canCreate, filtered = false, leavingId = null,
   onEdit, onDelete, onRestore, onReorder, onCompose, onClearDone,
 }) {
   const wide = useDragEnabled();
+  const { user } = useAuth();
   // A drag measures the gaps between the cards on screen. With cards hidden,
   // those gaps describe a board that isn't there.
   const dragEnabled = wide && !filtered;
@@ -810,13 +821,22 @@ export default function TaskBoard({
     // The empty track can be a quarter of a wide board, which is more red than
     // a drop target needs to be. The band takes the outer part of it: pinned to
     // the window's edge, capped, and never crossing into the last column.
-    const lastCol = colRefs.current[COLUMN_KEYS[COLUMN_KEYS.length - 1]];
-    const edge = (lastCol?.getBoundingClientRect().right ?? window.innerWidth - TRASH_MIN_W) + TRASH_GAP;
-    const left = Math.min(
-      Math.max(edge, window.innerWidth - TRASH_MAX_W),
-      window.innerWidth - TRASH_MIN_W
-    );
-    s.trash = { left, w: window.innerWidth - left, h: window.innerHeight };
+    // No bin at all under a card that is not yours to delete: a carrier can
+    // drag their card between columns, and the red band never appears to offer
+    // the thing the server would refuse. Everything downstream already treats
+    // a missing rect as "there is no bin" — overTrash is false, paintGoo
+    // returns before drawing, the portal renders nothing.
+    if (ownsTask(task, user)) {
+      const lastCol = colRefs.current[COLUMN_KEYS[COLUMN_KEYS.length - 1]];
+      const edge = (lastCol?.getBoundingClientRect().right ?? window.innerWidth - TRASH_MIN_W) + TRASH_GAP;
+      const left = Math.min(
+        Math.max(edge, window.innerWidth - TRASH_MAX_W),
+        window.innerWidth - TRASH_MIN_W
+      );
+      s.trash = { left, w: window.innerWidth - left, h: window.innerHeight };
+    } else {
+      s.trash = null;
+    }
 
     snap.current = s;
     info.current = { id: task.id, dx: startX - rect.left, dy: startY - rect.top, w: rect.width, h: rect.height };
@@ -832,6 +852,9 @@ export default function TaskBoard({
   const onCardPointerDown = (e, task) => {
     suppressClick.current = false;
     if (!canManage || !dragEnabled) return;
+    // A card that is not yours to carry does not lift. Opening it still works
+    // — that is the click, and the click is everyone's.
+    if (!carriesTask(task, user)) return;
     if (e.button !== 0) return;
     if (e.target.closest('[data-no-drag]')) return;
 
@@ -1057,7 +1080,7 @@ export default function TaskBoard({
                   {all.length}
                 </span>
               </h3>
-              {canManage && (
+              {canCreate && (
                 <button
                   type="button"
                   onClick={(e) => onCompose(col.key, e.currentTarget.getBoundingClientRect())}
@@ -1074,16 +1097,23 @@ export default function TaskBoard({
               ref={(el) => { listRefs.current[col.key] = el; }}
               className="relative space-y-3 min-h-[2rem]"
             >
-              {items.map((task, i) => (
+              {items.map((task, i) => {
+                // The two rights the tiers grant, computed here so the drag,
+                // the swipe, the arrows and the bin all read the same answer.
+                const carry = canManage && carriesTask(task, user);
+                const own = canManage && ownsTask(task, user);
+                return (
                 <Fragment key={task.id}>
                   {at === i && placeholder}
                   <TaskCard
                     task={task}
                     canManage={canManage}
-                    grabbable={canManage && dragEnabled && !task.archived_at}
+                    canMove={carry && !task.archived_at}
+                    canDelete={own}
+                    grabbable={carry && dragEnabled && !task.archived_at}
                     // The other horizontal gesture. Never both at once — see
                     // the note above DISMISS_AT.
-                    swipeable={canManage && !dragEnabled && !task.archived_at}
+                    swipeable={carry && !dragEnabled && !task.archived_at}
                     settling={landing !== null}
                     landed={landing === task.id}
                     leaving={leavingId === task.id}
@@ -1101,14 +1131,15 @@ export default function TaskBoard({
                     onMoveTo={handleMoveTo}
                   />
                 </Fragment>
-              ))}
+                );
+              })}
               {at >= items.length && placeholder}
 
               {/* No empty-state sentence under an empty column: the Add task
                   row below already says the column is empty and offers the one
                   thing to do about it. A read-only board keeps the sentence,
                   because there it has nothing else to say. */}
-              {items.length === 0 && !canManage && (
+              {items.length === 0 && !canCreate && (
                 <p className="font-ninja text-xs text-ninja-muted px-1 py-3">
                   {col.key === 'done' ? 'Nothing finished yet.' : 'Nothing here.'}
                 </p>
@@ -1120,7 +1151,7 @@ export default function TaskBoard({
                 same thing in their own way: the one action a column wants
                 often enough to have it waiting there. Nothing is typed into
                 Done, and nothing is cleared out of the others. */}
-            {canManage && col.key === 'done' && all.length > 0 && (
+            {canClearDone && col.key === 'done' && all.length > 0 && (
               <button
                 type="button"
                 onClick={onClearDone}
@@ -1130,7 +1161,7 @@ export default function TaskBoard({
               </button>
             )}
 
-            {canManage && col.key !== 'done' && (
+            {canCreate && col.key !== 'done' && (
               // Most cards on this board are one sentence somebody thought of
               // while standing up. This is the way in for those: the line the
               // sentence gets typed on opens in the middle of the screen, out

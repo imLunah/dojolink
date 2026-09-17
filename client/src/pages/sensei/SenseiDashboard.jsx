@@ -16,6 +16,7 @@ import ExpectedToday from '../../components/manager/ExpectedToday';
 import useExpectedToday, { countNinjas } from '../../lib/useExpectedToday';
 import useLiveRefresh from '../../lib/useLiveRefresh';
 import { CARD } from '../../lib/surfaces';
+import MyTasksPanel from '../../components/sensei/MyTasksPanel';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
@@ -92,7 +93,7 @@ export default function SenseiDashboard() {
         <motion.div variants={fadeUp} className="flex items-start justify-between gap-4">
           <div>
           <h1 className="text-2xl sm:text-4xl font-bold font-ninja text-ninja-navy tracking-wide">
-            Today's <span className="text-ninja-blue">Ninjas</span>
+            Sensei <span className="text-ninja-blue">Dashboard</span>
           </h1>
           <p className="text-ninja-muted font-ninja mt-1">{formatDate(todayStr)}</p>
           {user && (
@@ -179,6 +180,16 @@ export default function SenseiDashboard() {
         >
           <ExpectedToday feed={bookedFeed} date={todayStr} readOnly bare />
         </Modal>
+
+        <motion.div variants={fadeUp}>
+          <MyTasksPanel locationId={user?.activeLocation?.id} />
+        </motion.div>
+
+        <motion.div variants={fadeUp}>
+          <h2 className="text-xl sm:text-2xl font-black font-ninja text-ninja-navy tracking-tight">
+            Today&apos;s Ninjas
+          </h2>
+        </motion.div>
 
         {!loading && !error && assignments.length > 0 && (
           <motion.div variants={fadeUp}>

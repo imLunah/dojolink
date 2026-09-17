@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { requireManager, requireOwnLocation } = require('../middleware/auth');
+const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 
-// Center Director task board. One shared board per location: every director at
-// a center sees and edits the same cards, same model as StaffAnnouncements.
-// Senseis never reach this — every route is requireManager, and writes add
-// requireOwnLocation so a director browsing another center gets it read-only.
+// One shared task board per location. Directors see the whole board and may
+// assign cards to any active staff member there. Senseis get a private slice:
+// only cards assigned directly to them, with carrier rights rather than owner
+// rights. Writes also add requireOwnLocation so a director browsing another
+// center gets it read-only.
 
 const COLUMNS = ['todo', 'doing', 'done'];
 const COLORS = ['none', 'blue', 'amber', 'green', 'purple', 'red'];
@@ -24,7 +25,9 @@ const SELECT = `
   SELECT t.id, t.title, t.body, t.column_key, t.color, t.position,
          to_char(t.due_date, 'YYYY-MM-DD') AS due_date,
          t.assignee_id, t.assignee_center, t.checklist, t.archived_at,
-         t.created_at, t.updated_at,
+         t.created_at, t.updated_at, t.created_by,
+         (SELECT COUNT(*)::int FROM director_task_comments c
+          WHERE c.task_id = t.id) AS comment_count,
          u.display_name AS created_by_name,
          a.display_name AS assignee_name,
          l.name AS location_name
@@ -34,14 +37,14 @@ const SELECT = `
   LEFT JOIN locations l ON l.id = t.location_id
 `;
 
-// Directors of this center, by membership rather than home center, so someone
+// Staff at this center, by membership rather than home center, so someone
 // covering two locations appears on both boards. Admins are included because
 // acting anywhere is the whole point of the role.
 const ASSIGNEE_SELECT = `
-  SELECT u.id, u.display_name
+  SELECT u.id, u.display_name, u.role
   FROM users u
   WHERE u.active = true
-    AND u.role IN ('manager', 'admin')
+    AND u.role IN ('manager', 'sensei', 'admin')
     AND u.id IN (SELECT user_id FROM user_locations WHERE location_id = $1)
   ORDER BY u.display_name ASC
 `;
@@ -61,20 +64,72 @@ async function readAssignee(pool, body, locationId) {
   if (rawId === null || rawId === undefined || rawId === '') return { id: null, center: false };
 
   const id = Number(rawId);
-  if (!Number.isInteger(id) || id < 1) return { error: 'Unknown director' };
+  if (!Number.isInteger(id) || id < 1) return { error: 'Unknown staff member' };
   const { rows } = await pool.query(
     `SELECT 1 FROM users u
-     WHERE u.id = $1 AND u.active = true AND u.role IN ('manager', 'admin')
+     WHERE u.id = $1 AND u.active = true AND u.role IN ('manager', 'sensei', 'admin')
        AND u.id IN (SELECT user_id FROM user_locations WHERE location_id = $2)`,
     [id, locationId]
   );
-  if (!rows[0]) return { error: 'That director is not at this center' };
+  if (!rows[0]) return { error: 'That staff member is not at this center' };
   return { id, center: false };
 }
+
+/* ------------------------------------------------------------- who may -- */
+// The board is shared reading, not shared writing. A card's words belong to
+// whoever wrote them; what everyone else may do depends on where they stand:
+//   owner   — made the card (or the card predates authorship, or admin, since
+//             acting anywhere is that role's whole point). Edits everything,
+//             deletes, restores.
+//   carrier — named on the card, or any director here while the center holds
+//             it. Moves it between stages, edits the checklist, comments.
+//   viewer  — any other director at the center. Reads.
+// The client draws the same three tiers; these two checks are what make them
+// true rather than drawn.
+const ownsTask = (t, session) =>
+  session.role === 'admin'
+  || t.created_by === session.userId
+  || (t.created_by == null && session.role === 'manager');
+const carriesTask = (t, session) =>
+  ownsTask(t, session)
+  || t.assignee_id === session.userId
+  || (t.assignee_center === true && ['manager', 'admin'].includes(session.role));
+const mayReadTask = (t, session) =>
+  ['manager', 'admin'].includes(session.role) || t.assignee_id === session.userId;
+
+// The row a permission decision is made against, fetched fresh: the client's
+// copy of a card is whatever it last saw, not what is true.
+async function taskRow(pool, id, locationId) {
+  const { rows } = await pool.query(
+    `SELECT id, created_by, assignee_id, assignee_center, column_key, archived_at
+     FROM director_tasks WHERE id = $1 AND location_id = $2`,
+    [id, locationId]
+  );
+  return rows[0] || null;
+}
+
+const NOT_YOURS = 'Only the person who made this task can change that.';
 
 // pg serializes a DATE as UTC midnight, which a browser in a negative offset
 // reads as the day before. to_char keeps it a plain calendar string all the way
 // to the card, which is the same fix club session dates needed.
+
+// Stored as jsonb, so a bad array would land in the database as-is and come
+// back to the card as a crash rather than a 400. Its own function because a
+// carrier's save validates the checklist and nothing else.
+function readChecklist(body) {
+  if (body.checklist === undefined) return { checklist: undefined };
+  if (!Array.isArray(body.checklist)) return { error: 'Invalid checklist' };
+  if (body.checklist.length > CHECKLIST_MAX) return { error: `A card can hold ${CHECKLIST_MAX} checklist items` };
+  const checklist = [];
+  for (const item of body.checklist) {
+    const text = typeof item?.text === 'string' ? item.text.trim() : '';
+    if (!text) continue; // a blank row is somebody mid-typing, not an item
+    if (text.length > CHECKLIST_TEXT_MAX) return { error: `Checklist item max ${CHECKLIST_TEXT_MAX} characters` };
+    checklist.push({ text, done: item.done === true });
+  }
+  return { checklist };
+}
 
 function validate(body) {
   const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -97,20 +152,9 @@ function validate(body) {
   if (!COLORS.includes(color)) return { error: 'Invalid color' };
 
   // Absent means "leave it alone"; anything present has to be the real shape.
-  // Stored as jsonb, so a bad array would land in the database as-is and come
-  // back to the card as a crash rather than a 400.
-  let checklist;
-  if (body.checklist !== undefined) {
-    if (!Array.isArray(body.checklist)) return { error: 'Invalid checklist' };
-    if (body.checklist.length > CHECKLIST_MAX) return { error: `A card can hold ${CHECKLIST_MAX} checklist items` };
-    checklist = [];
-    for (const item of body.checklist) {
-      const text = typeof item?.text === 'string' ? item.text.trim() : '';
-      if (!text) continue; // a blank row is somebody mid-typing, not an item
-      if (text.length > CHECKLIST_TEXT_MAX) return { error: `Checklist item max ${CHECKLIST_TEXT_MAX} characters` };
-      checklist.push({ text, done: item.done === true });
-    }
-  }
+  const read = readChecklist(body);
+  if (read.error) return { error: read.error };
+  const checklist = read.checklist;
 
   // Empty string comes back from a cleared <input type="date">; both it and an
   // absent field mean "no due date".
@@ -129,7 +173,7 @@ function validate(body) {
   };
 }
 
-// GET /api/director-tasks/assignees — the directors a card can be handed to.
+// GET /api/director-tasks/assignees — the staff a card can be handed to.
 // Above every /:id route, or Express reads 'assignees' as an id.
 router.get('/assignees', requireManager, async (req, res) => {
   const pool = req.app.get('db');
@@ -138,7 +182,7 @@ router.get('/assignees', requireManager, async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('Error fetching assignees:', err);
-    res.status(500).json({ error: 'Failed to fetch directors' });
+    res.status(500).json({ error: 'Failed to fetch staff' });
   }
 });
 
@@ -174,15 +218,22 @@ async function purgeExpired(pool) {
 // ?archived=true returns what has been deleted instead, newest first, which is
 // a different question and a different order: a deleted card has no place on a
 // board, only a date it left one.
-router.get('/', requireManager, async (req, res) => {
+router.get('/', requireSensei, async (req, res) => {
   const pool = req.app.get('db');
   const archived = req.query.archived === 'true';
+  const mine = req.query.mine === 'true' || req.session.role === 'sensei';
   try {
     await purgeExpired(pool);
     const { rows } = await pool.query(
-      `${SELECT} WHERE t.location_id = $1 AND t.archived_at IS ${archived ? 'NOT NULL' : 'NULL'}
+      `${SELECT} WHERE t.location_id = $1
+       AND ($2::boolean OR t.assignee_id = $3)
+       AND t.archived_at IS ${archived ? 'NOT NULL' : 'NULL'}
        ORDER BY ${archived ? 't.archived_at DESC' : 't.position ASC'}, t.id ASC`,
-      [req.session.activeLocationId]
+      [
+        req.session.activeLocationId,
+        ['manager', 'admin'].includes(req.session.role) && !mine,
+        req.session.userId,
+      ]
     );
     res.json(rows);
   } catch (err) {
@@ -241,11 +292,15 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
 router.post('/archive-done', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
+    // Your own finished cards, not the column. A card someone else made
+    // leaves the board when they say it does, and Clear All saying otherwise
+    // would be the bulk route around the rule the single-card routes keep.
     const { rows } = await pool.query(
       `UPDATE director_tasks SET archived_at = now(), updated_at = now()
        WHERE location_id = $1 AND column_key = 'done' AND archived_at IS NULL
+         AND ($2 OR created_by IS NULL OR created_by = $3)
        RETURNING id`,
-      [req.session.activeLocationId]
+      [req.session.activeLocationId, req.session.role === 'admin', req.session.userId]
     );
     res.json({ archived: rows.map((r) => r.id) });
   } catch (err) {
@@ -261,6 +316,11 @@ router.post('/archive-done', requireManager, requireOwnLocation, async (req, res
 router.post('/:id/archive', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    if (!current) return res.status(404).json({ error: 'Task not found' });
+    if (!ownsTask(current, req.session)) {
+      return res.status(403).json({ error: 'Only the person who made this task can delete it.' });
+    }
     const { rows } = await pool.query(
       `UPDATE director_tasks SET archived_at = now(), updated_at = now()
        WHERE id = $1 AND location_id = $2 AND archived_at IS NULL
@@ -280,6 +340,11 @@ router.post('/:id/archive', requireManager, requireOwnLocation, async (req, res)
 router.post('/:id/restore', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    if (!current) return res.status(404).json({ error: 'Task not found' });
+    if (!ownsTask(current, req.session)) {
+      return res.status(403).json({ error: 'Only the person who made this task can put it back.' });
+    }
     const { rows } = await pool.query(
       `UPDATE director_tasks t
        SET archived_at = NULL, updated_at = now(),
@@ -322,6 +387,31 @@ router.patch('/reorder', requireManager, requireOwnLocation, async (req, res) =>
     if (!Number.isInteger(it?.position)) return res.status(400).json({ error: 'Invalid position' });
   }
 
+  // Positions renumber freely: every drop shuffles the neighbours of the
+  // dropped card, and those cards did not change meaning. Changing COLUMN is
+  // the write that belongs to somebody, so it is checked per card against the
+  // stored row rather than the payload's claim of one.
+  try {
+    const { rows: current } = await pool.query(
+      `SELECT id, created_by, assignee_id, assignee_center, column_key
+       FROM director_tasks WHERE id = ANY($1::int[]) AND location_id = $2`,
+      [items.map((it) => it.id), req.session.activeLocationId]
+    );
+    const byId = new Map(current.map((r) => [r.id, r]));
+    for (const it of items) {
+      const row = byId.get(it.id);
+      if (!row || !mayReadTask(row, req.session)) {
+        return res.status(403).json({ error: 'You can only arrange tasks assigned to you.' });
+      }
+      if (row && row.column_key !== it.column_key && !carriesTask(row, req.session)) {
+        return res.status(403).json({ error: 'That card moves only by whoever made it or is carrying it.' });
+      }
+    }
+  } catch (err) {
+    console.error('Error checking reorder permissions:', err);
+    return res.status(500).json({ error: 'Failed to reorder tasks' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -348,14 +438,61 @@ router.patch('/reorder', requireManager, requireOwnLocation, async (req, res) =>
 });
 
 // PATCH /api/director-tasks/:id — edit a card.
-// Deliberately NOT author-gated. The board belongs to the center, not to
-// whoever typed the card, so any director on shift can move a task along.
-router.patch('/:id', requireManager, requireOwnLocation, async (req, res) => {
+//
+// This USED to be deliberately un-gated, on the theory that the board belongs
+// to the center. Three directors sharing one board found the edge of that
+// theory: a card is a thing somebody said, and anyone being able to rewrite it
+// means nobody is on record as having said anything. So the owner edits the
+// card; a carrier's save changes the stage and the checklist and nothing
+// else. The client sends the whole card either way — this has always been a
+// whole-card write — so the locked fields are not compared against the
+// payload, they are simply never read from it: whatever a stale or creative
+// request says about the title, the stored words stay the stored words.
+router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
-  const fields = validate(req.body);
-  if (fields.error) return res.status(400).json({ error: fields.error });
 
   try {
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    if (!current) return res.status(404).json({ error: 'Task not found' });
+
+    if (!ownsTask(current, req.session)) {
+      if (!carriesTask(current, req.session)) return res.status(403).json({ error: NOT_YOURS });
+
+      const column_key = req.body.column_key ?? current.column_key;
+      if (!COLUMNS.includes(column_key)) return res.status(400).json({ error: 'Invalid column' });
+      const read = readChecklist(req.body);
+      if (read.error) return res.status(400).json({ error: read.error });
+
+      // Same position rule as the full edit below: a changed column re-ranks
+      // to the end of the destination, staying put keeps the drag's rank.
+      const { rows } = await pool.query(
+        `UPDATE director_tasks t
+         SET column_key = $1,
+             checklist = COALESCE($2::jsonb, t.checklist),
+             position = CASE
+               WHEN t.column_key = $1 THEN t.position
+               ELSE COALESCE((SELECT MAX(d.position) + 1 FROM director_tasks d
+                              WHERE d.location_id = t.location_id AND d.column_key = $1
+                                AND d.archived_at IS NULL), 0)
+             END,
+             updated_at = now()
+         WHERE t.id = $3 AND t.location_id = $4
+         RETURNING id`,
+        [
+          column_key,
+          read.checklist === undefined ? null : JSON.stringify(read.checklist),
+          req.params.id,
+          req.session.activeLocationId,
+        ]
+      );
+      if (!rows[0]) return res.status(404).json({ error: 'Task not found' });
+      const { rows: full } = await pool.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
+      return res.json(full[0]);
+    }
+
+    const fields = validate(req.body);
+    if (fields.error) return res.status(400).json({ error: fields.error });
+
     const assignee = await readAssignee(pool, req.body, req.session.activeLocationId);
     if (assignee.error) return res.status(400).json({ error: assignee.error });
 
@@ -410,11 +547,14 @@ router.patch('/:id', requireManager, requireOwnLocation, async (req, res) => {
 router.delete('/deleted', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
+    // The bin shows everyone's deleted cards; emptying it takes only yours.
+    // Someone else's card waiting out its fortnight is still theirs to save.
     const { rows } = await pool.query(
       `DELETE FROM director_tasks
        WHERE location_id = $1 AND archived_at IS NOT NULL
+         AND ($2 OR created_by IS NULL OR created_by = $3)
        RETURNING id`,
-      [req.session.activeLocationId]
+      [req.session.activeLocationId, req.session.role === 'admin', req.session.userId]
     );
     res.json({ deleted: rows.map((r) => r.id) });
   } catch (err) {
@@ -427,6 +567,11 @@ router.delete('/deleted', requireManager, requireOwnLocation, async (req, res) =
 router.delete('/:id', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    if (!current) return res.status(404).json({ error: 'Task not found' });
+    if (!ownsTask(current, req.session)) {
+      return res.status(403).json({ error: 'Only the person who made this task can delete it for good.' });
+    }
     const { rows } = await pool.query(
       'DELETE FROM director_tasks WHERE id = $1 AND location_id = $2 RETURNING id',
       [req.params.id, req.session.activeLocationId]
@@ -436,6 +581,86 @@ router.delete('/:id', requireManager, requireOwnLocation, async (req, res) => {
   } catch (err) {
     console.error('Error deleting task:', err);
     res.status(500).json({ error: 'Failed to delete task' });
+  }
+});
+
+/* ------------------------------------------------------------ comments -- */
+
+const COMMENT_MAX = 2000;
+const COMMENT_SELECT = `
+  SELECT c.id, c.task_id, c.author_id, c.body, c.created_at,
+         u.display_name AS author_name
+  FROM director_task_comments c
+  LEFT JOIN users u ON u.id = c.author_id
+`;
+
+// GET /api/director-tasks/:id/comments — the thread under a card, oldest
+// first. Reading is the center's, same as the board itself.
+router.get('/:id/comments', requireSensei, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const task = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!mayReadTask(task, req.session)) return res.status(404).json({ error: 'Task not found' });
+    const { rows } = await pool.query(
+      `${COMMENT_SELECT} WHERE c.task_id = $1 ORDER BY c.created_at ASC, c.id ASC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching task comments:', err);
+    res.status(500).json({ error: 'Failed to fetch comments' });
+  }
+});
+
+// POST /api/director-tasks/:id/comments — what a carrier has instead of the
+// note: the words under the card are signed, where words edited into someone
+// else's prose would not be. Owners can too, because a thread with the answer
+// missing is half a conversation.
+router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+  if (!body) return res.status(400).json({ error: 'Say something first' });
+  if (body.length > COMMENT_MAX) return res.status(400).json({ error: `Comment max ${COMMENT_MAX} characters` });
+  try {
+    const task = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!carriesTask(task, req.session)) {
+      return res.status(403).json({ error: 'Comments are for the people on the card.' });
+    }
+    const { rows } = await pool.query(
+      'INSERT INTO director_task_comments (task_id, author_id, body) VALUES ($1, $2, $3) RETURNING id',
+      [task.id, req.session.userId, body]
+    );
+    const { rows: full } = await pool.query(`${COMMENT_SELECT} WHERE c.id = $1`, [rows[0].id]);
+    res.status(201).json(full[0]);
+  } catch (err) {
+    console.error('Error adding task comment:', err);
+    res.status(500).json({ error: 'Failed to add the comment' });
+  }
+});
+
+// DELETE /api/director-tasks/:id/comments/:commentId — your own words only,
+// admin excepted. The join to the task is the location check.
+router.delete('/:id/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM director_task_comments c
+       USING director_tasks t
+       WHERE c.id = $1 AND c.task_id = t.id AND t.id = $2 AND t.location_id = $3
+         AND ($4 OR c.author_id = $5)
+         AND ($6 OR t.assignee_id = $5)
+       RETURNING c.id`,
+      [req.params.commentId, req.params.id, req.session.activeLocationId,
+       req.session.role === 'admin', req.session.userId,
+       ['manager', 'admin'].includes(req.session.role)]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Comment not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Error deleting task comment:', err);
+    res.status(500).json({ error: 'Failed to delete the comment' });
   }
 });
 

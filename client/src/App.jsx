@@ -33,6 +33,7 @@ const EventsPage = lazy(() => import('./pages/manager/EventsPage'));
 const EventListingEditorPage = lazy(() => import('./pages/manager/EventListingEditorPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
 const SenseiDashboard = lazy(() => import('./pages/sensei/SenseiDashboard'));
+const SenseiTasksPage = lazy(() => import('./pages/sensei/SenseiTasksPage'));
 const LogProgressPage = lazy(() => import('./pages/sensei/LogProgressPage'));
 const LogClubPage = lazy(() => import('./pages/sensei/LogClubPage'));
 const ClubsPage = lazy(() => import('./pages/ClubsPage'));
@@ -87,6 +88,7 @@ export default function App() {
 
             {/* Sensei routes */}
             <Route path="/sensei/dashboard"    element={<ProtectedRoute role="sensei"><SenseiDashboard /></ProtectedRoute>} />
+            <Route path="/sensei/tasks"        element={<ProtectedRoute role="sensei"><SenseiTasksPage /></ProtectedRoute>} />
             <Route path="/sensei/student/:id"  element={<ProtectedRoute role="sensei"><LogProgressPage /></ProtectedRoute>} />
             <Route path="/clubs/log"           element={<ProtectedRoute role="manager"><LogClubPage /></ProtectedRoute>} />
 

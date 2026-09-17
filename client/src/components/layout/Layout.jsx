@@ -38,6 +38,7 @@ const TAB_LAZY_MAP = {
   '/manager/overview': lazy(() => import('../../pages/manager/DirectorDashboard')),
   '/manager/dashboard': lazy(() => import('../../pages/manager/ManagerDashboard')),
   '/sensei/dashboard': lazy(() => import('../../pages/sensei/SenseiDashboard')),
+  '/sensei/tasks': lazy(() => import('../../pages/sensei/SenseiTasksPage')),
   '/manager/students': lazy(() => import('../../pages/manager/StudentRoster')),
   '/clubs': lazy(() => import('../../pages/ClubsPage')),
   '/manager/staff': lazy(() => import('../../pages/manager/StaffPage')),
