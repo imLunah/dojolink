@@ -6,14 +6,12 @@ import useRefuseNudge from '../../lib/useRefuseNudge';
 
 // Spring rather than a curve, because a panel arriving is a physical thing and
 // a spring settles the way one does. No bounce: nothing threw it, so overshoot
-// would be decoration. It grows a little rather than travelling, which is what
-// a sheet that belongs to the whole page does; leaving is the same path, run
-// shorter.
+// would be decoration. Leaving is a shorter trip back toward the right edge.
 const ENTER = { type: 'spring', bounce: 0, duration: 0.42 };
 const LEAVE = { duration: 0.2, ease: [0.4, 0, 1, 1] };
 
-// A sheet that opens over the middle of the page and leaves the page visible
-// through it. Modal's sibling, not its replacement: a dialog is for a question
+// A sheet docked beside the page on the right, leaving the work it belongs to
+// visible. Modal's sibling, not its replacement: a dialog is for a question
 // that has to be answered before anything else can happen, and opening a task
 // is not that.
 //
@@ -23,11 +21,9 @@ const LEAVE = { duration: 0.2, ease: [0.4, 0, 1, 1] };
 // and it has to be true. Escape closes it and focus moves in on open and back
 // to the card on close, because those are courtesies, not walls.
 //
-// It used to arrive docked along the right edge, where it read as a second
-// region of the page rather than something laid on top of it. Centred and
-// frosted, with the board still legible around and through it, it is obviously
-// one thing in front of the work — and the middle of the screen is where you
-// are already looking.
+// The panel floats just inside the edge rather than filling it. Its solid
+// surface keeps the page from showing through the form, while its position
+// makes the board remain readable beside it.
 export default function FloatingPanel({
   isOpen,
   onClose,
@@ -109,7 +105,7 @@ export default function FloatingPanel({
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 pointer-events-none"
+          className="fixed inset-0 z-[100] flex items-stretch justify-end p-3 pointer-events-none"
         >
         <motion.aside
           ref={panelRef}
@@ -117,26 +113,23 @@ export default function FloatingPanel({
           aria-modal="false"
           aria-label={typeof title === 'string' ? title : undefined}
           tabIndex={-1}
-          // Scale, and deliberately no fade. A frosted surface cannot be
-          // faded in: an element at less than full opacity becomes its own
-          // backdrop root, so the blur has nothing behind it to sample and the
-          // sheet arrives as a flat box, the material snapping on at the end
-          // of the animation. Opaque from the first frame, growing a little,
-          // is the same arrival without the seam — and the contents fade in
-          // underneath it, where opacity costs nothing.
+          // Travels from the edge it belongs to, and deliberately does not
+          // fade on entry. Opaque from the first frame keeps the material from
+          // changing underneath the form while it arrives.
           // Reduced motion gets no animation on the surface at all rather
           // than a cross-fade, for the same reason: a fade would take the
           // frost with it. The contents still ease in, which is the gentle
           // substitute without anything moving.
-          initial={reduce ? false : { scale: 0.94 }}
-          animate={reduce ? {} : { scale: 1 }}
+          style={{ transformOrigin: '100% 50%' }}
+          initial={reduce ? false : { x: 24, scale: 0.96 }}
+          animate={reduce ? {} : { x: 0, scale: 1 }}
           exit={reduce
             ? { opacity: 0, transition: { duration: 0.18 } }
-            : { opacity: 0, scale: 0.97, transition: LEAVE }}
+            : { opacity: 0, x: 18, scale: 0.98, transition: LEAVE }}
           transition={reduce ? { duration: 0.2 } : ENTER}
-          className={`pointer-events-auto w-full ${width} max-h-full focus:outline-none`}
+          className={`pointer-events-auto w-full ${width} max-w-[calc(100vw-1.5rem)] h-full focus:outline-none`}
         >
-          <div className={`panel-glass relative max-h-full flex flex-col ${nudging ? 'panel-refuse' : ''}`}>
+          <div className={`panel-glass relative h-full flex flex-col ${nudging ? 'panel-refuse' : ''}`}>
             <div className="panel-edge flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3.5">
               <h2 className="font-ninja text-lg font-bold text-ninja-navy truncate tracking-[-0.01em]">{title}</h2>
               <button

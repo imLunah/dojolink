@@ -299,7 +299,7 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
           {/* The one field a carrier keeps: moving the card along is exactly
               what being on it means. A reader gets the fact, not the control. */}
           {carries ? (
-          <div className={owns ? 'sm:col-start-2' : ''}>
+          <div>
             <label htmlFor="task-column" className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
               Column
             </label>
