@@ -7,7 +7,7 @@ import {
   Loader2Icon,
 } from 'lucide-react';
 import Modal from '../ui/Modal';
-import SidePanel from '../ui/SidePanel';
+import FloatingPanel from '../ui/FloatingPanel';
 import Button from '../ui/Button';
 import { api } from '../../api/client';
 import useIsDesktop from '../../lib/useIsDesktop';
@@ -722,9 +722,9 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
   // Beside the page on desktop, a dialog below it. Same two-shell rule the task
   // editor follows, from the one shared media query.
   return isDesktop ? (
-    <SidePanel isOpen={isOpen} onClose={onClose} title={title}>
+    <FloatingPanel isOpen={isOpen} onClose={onClose} title={title}>
       {body}
-    </SidePanel>
+    </FloatingPanel>
   ) : (
     <Modal isOpen={isOpen} onClose={onClose} title={title}>
       {body}

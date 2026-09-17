@@ -6,6 +6,7 @@ import Layout from '../../components/layout/Layout';
 import TaskBoard from '../../components/manager/TaskBoard';
 import TaskList from '../../components/manager/TaskList';
 import TaskEditorModal from '../../components/manager/TaskEditorModal';
+import TaskComposer from '../../components/manager/TaskComposer';
 import RecentlyDeleted from '../../components/manager/RecentlyDeleted';
 import Segmented from '../../components/ui/Segmented';
 import { Skeleton, SkeletonList } from '../../components/ui/Skeleton';
@@ -36,6 +37,15 @@ export default function TasksPage() {
   const openEditor = useCallback((next) => {
     if (editor && editorDirty) { setRefuseSignal((n) => n + 1); return; }
     setEditor(next);
+  }, [editor, editorDirty]);
+
+  // Writing a task, before it is a card. `origin` is the rect of whatever was
+  // pressed, so the composer can grow out of it rather than appearing.
+  const [composer, setComposer] = useState(null); // { column, origin } | null
+  const openComposer = useCallback((column, origin) => {
+    if (editor && editorDirty) { setRefuseSignal((n) => n + 1); return; }
+    setEditor(null);
+    setComposer({ column, origin });
   }, [editor, editorDirty]);
   const [showArchived, setShowArchived] = useState(false);
   const [directors, setDirectors] = useState([]);
@@ -309,7 +319,7 @@ export default function TasksPage() {
               {canManage && (
                 <button
                   type="button"
-                  onClick={() => openEditor({ column: 'todo' })}
+                  onClick={(e) => openComposer('todo', e.currentTarget.getBoundingClientRect())}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ninja-blue text-white font-ninja text-xs font-bold hover:bg-ninja-blue-hover transition-colors duration-150 ease-[var(--ease-out)] active:scale-95"
                 >
                   <PlusIcon size={15} strokeWidth={2.75} aria-hidden="true" />
@@ -367,22 +377,34 @@ export default function TasksPage() {
             tasks={tasks}
             leavingId={leavingId}
             canManage={canManage}
-            onAdd={(column) => openEditor({ column })}
+            onCompose={openComposer}
             onEdit={(task) => openEditor({ task })}
             onDelete={softDelete}
             onRestore={restore}
             onReorder={reorder}
-            onQuickAdd={quickAdd}
             onClearDone={clearDone}
           />
         )}
       </div>
+
+      <TaskComposer
+        isOpen={!!composer}
+        origin={composer?.origin ?? null}
+        column={composer?.column ?? 'todo'}
+        onSubmit={quickAdd}
+        onClose={() => setComposer(null)}
+        // The same task, with the rest of the card's fields. Whatever has been
+        // typed goes with it, because retyping it would be the form punishing
+        // you for wanting a due date.
+        onMore={(column, draftTitle) => { setComposer(null); openEditor({ column, draftTitle }); }}
+      />
 
       <TaskEditorModal
         isOpen={!!editor}
         task={editor?.task ?? null}
         directors={directors}
         column={editor?.column ?? 'todo'}
+        draftTitle={editor?.draftTitle ?? ''}
         onClose={() => setEditor(null)}
         onDirtyChange={setEditorDirty}
         refuseSignal={refuseSignal}

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../ui/Modal';
-import SidePanel from '../ui/SidePanel';
+import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import { CARD } from '../../lib/surfaces';
 import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR } from 'lucide-react';
@@ -216,9 +216,9 @@ export default function EventCalendar({ canManage = true, bare = false }) {
     } catch { /* ignore */ } finally { setBusy(false); }
   };
 
-  const Shell = isDesktop ? SidePanel : Modal;
-  const dayShell = isDesktop ? { width: 'w-[22rem]' } : { width: 'max-w-sm' };
-  const formShell = isDesktop ? { width: 'w-[25rem]' } : { width: 'max-w-md' };
+  const Shell = isDesktop ? FloatingPanel : Modal;
+  const dayShell = isDesktop ? { width: 'max-w-[24rem]' } : { width: 'max-w-sm' };
+  const formShell = isDesktop ? { width: 'max-w-[28rem]' } : { width: 'max-w-md' };
 
   return (
     <div className={bare ? '' : `${CARD} p-5`}>
