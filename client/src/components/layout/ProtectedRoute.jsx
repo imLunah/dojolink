@@ -1,15 +1,12 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { SkeletonShell } from '../ui/Skeleton';
 
 export default function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-[100dvh] bg-ninja-bg flex items-center justify-center">
-        <div className="text-ninja-muted text-xl font-ninja">Loading...</div>
-      </div>
-    );
+    return <SkeletonShell />;
   }
 
   if (!user) {
