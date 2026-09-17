@@ -189,6 +189,11 @@ function LinkPopover({ pos, text, setText, href, setHref, editing, onApply, onRe
       ref={ref}
       role="dialog"
       aria-label={editing ? 'Edit link' : 'Insert link'}
+      // Portalled to the body to escape the editor's clipping, which puts it
+      // outside whatever panel the editor sits in. This says it is still part
+      // of that panel, so typing a URL into it does not read as a press
+      // somewhere else and close the panel out from under the note.
+      data-panel-layer=""
       className="fixed z-[110] w-72 rounded-xl bg-white border border-ninja-border shadow-xl p-3"
       style={{ top: pos.top, left: pos.left }}
     >
