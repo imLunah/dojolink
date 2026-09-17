@@ -253,19 +253,20 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
                     <SlidersHorizontalIcon size={14} strokeWidth={2.25} />
                     Details
                   </button>
-                  {/* The key, not the word. Quick add is for getting a
-                      sentence onto the board without moving your hands, so the
-                      control says which key does it rather than asking to be
-                      aimed at. It is still a button, for the times a pointer
-                      is already where it is. */}
+                  {/* The key, named. Quick add is for getting a sentence onto
+                      the board without moving your hands, so the control says
+                      which key does it — glyph and word both, so nobody has to
+                      recognise the symbol. It is still a button, for the times
+                      a pointer is already where it is. */}
                   <button
                     type="submit"
                     disabled={!text.trim()}
                     aria-label="Add task"
                     title="Add task (Enter)"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-ninja-blue text-white disabled:opacity-40 transition-[opacity,transform] duration-150 active:scale-95"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-ninja text-sm font-bold bg-ninja-blue text-white disabled:opacity-40 transition-[opacity,transform] duration-150 active:scale-95"
                   >
-                    <CornerDownLeftIcon size={16} strokeWidth={2.5} />
+                    <CornerDownLeftIcon size={14} strokeWidth={2.5} />
+                    Enter
                   </button>
                 </div>
               </div>
@@ -327,18 +328,17 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
                 />
                 <feMorphology in="shape" operator="erode" radius="1.5" result="inner" />
                 <feComposite in="shape" in2="inner" operator="out" result="rimA" />
-                <feOffset in="rimA" dy="1.5" result="rimLoA" />
-                <feFlood floodColor="#0f172a" floodOpacity="0.38" result="loC" />
-                <feComposite in="loC" in2="rimLoA" operator="in" result="rimLo" />
                 {/* Matched to the edge the settled sheet wears (a hairline at
                     ~0.09 white over its own shadow), not the bright outline a
                     goo filter wants to draw. Brighter and the drop reads as a
-                    stroked cartoon shape rather than the panel in motion. */}
+                    stroked cartoon shape rather than the panel in motion. No
+                    dark line under it: the liquid sits on the settled sheet
+                    for a beat before it fades, and anything dark in the rim
+                    reads as a border drawn around the panel. */}
                 <feFlood floodColor="#ffffff" floodOpacity="0.2" result="hiC" />
                 <feComposite in="hiC" in2="rimA" operator="in" result="rimHi" />
                 <feMerge>
                   <feMergeNode in="body" />
-                  <feMergeNode in="rimLo" />
                   <feMergeNode in="rimHi" />
                 </feMerge>
               </filter>
