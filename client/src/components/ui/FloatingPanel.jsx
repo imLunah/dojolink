@@ -29,7 +29,7 @@ export default function FloatingPanel({
   onClose,
   title,
   children,
-  width = 'max-w-[26rem]',
+  width = 'w-[26rem]',
   // A panel holding something unsaved refuses to be dismissed by a stray
   // press. The buttons inside it still close it — those are deliberate.
   canDismiss = true,
@@ -104,9 +104,6 @@ export default function FloatingPanel({
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <motion.div
-          className="fixed inset-0 z-[100] flex items-stretch justify-end p-3 pointer-events-none"
-        >
         <motion.aside
           ref={panelRef}
           role="dialog"
@@ -127,7 +124,7 @@ export default function FloatingPanel({
             ? { opacity: 0, transition: { duration: 0.18 } }
             : { opacity: 0, x: 18, scale: 0.98, transition: LEAVE }}
           transition={reduce ? { duration: 0.2 } : ENTER}
-          className={`pointer-events-auto w-full ${width} max-w-[calc(100vw-1.5rem)] h-full focus:outline-none`}
+          className={`fixed top-3 right-3 bottom-3 z-[100] ${width} max-w-[calc(100vw-1.5rem)] focus:outline-none`}
         >
           <div className={`panel-glass relative h-full flex flex-col ${nudging ? 'panel-refuse' : ''}`}>
             <div className="panel-edge flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3.5">
@@ -168,7 +165,6 @@ export default function FloatingPanel({
             </AnimatePresence>
           </div>
         </motion.aside>
-        </motion.div>
       )}
     </AnimatePresence>,
     document.body

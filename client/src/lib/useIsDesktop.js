@@ -9,17 +9,17 @@ import { useState, useEffect } from 'react';
 //
 // 1024px is the app's own desktop line — the nav's breakpoint, and the width
 // below which there is no beside.
-const QUERY = '(min-width: 1024px)';
-
-export default function useIsDesktop() {
+export default function useIsDesktop(minWidth = 1024) {
+  const query = `(min-width: ${minWidth}px)`;
   const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(QUERY).matches
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches
   );
   useEffect(() => {
-    const mq = window.matchMedia(QUERY);
+    const mq = window.matchMedia(query);
     const onChange = (e) => setIsDesktop(e.matches);
+    setIsDesktop(mq.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, []);
+  }, [query]);
   return isDesktop;
 }

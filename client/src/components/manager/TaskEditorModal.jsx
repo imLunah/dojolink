@@ -35,7 +35,9 @@ const snapshot = (f) => JSON.stringify({
 // column a new card lands in.
 export default function TaskEditorModal({ isOpen, task, assignees = [], column = 'todo', draftTitle = '', onClose, onSave, onDelete, onPurge, onRestore, onDirtyChange, onCommentCount, refuseSignal = 0 }) {
   const { user, isReadOnly } = useAuth();
-  const isDesktop = useIsDesktop();
+  // The task rail still fits in a narrow desktop window: at 27rem it leaves
+  // enough of the board visible to keep its context. Phones remain modal.
+  const isDesktop = useIsDesktop(560);
   const [confirming, setConfirming] = useState(false);
   // `archived_at` is the day the card was deleted. The column is older than the
   // name; see the note in the tasks route.
@@ -155,7 +157,7 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
   // edited; on a phone there is no beside, and it takes the screen.
   const Shell = isDesktop ? FloatingPanel : Modal;
   const shellProps = {
-    width: isDesktop ? 'max-w-[32rem]' : 'max-w-lg',
+    width: isDesktop ? 'w-[27rem]' : 'max-w-lg',
     canDismiss: !dirty,
     guardHint: 'Unsaved changes. Save them, or Cancel to discard.',
     refuseSignal,
