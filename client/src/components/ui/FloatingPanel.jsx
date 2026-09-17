@@ -6,17 +6,16 @@ import useRefuseNudge from '../../lib/useRefuseNudge';
 
 // Spring rather than a curve, because a panel arriving is a physical thing and
 // a spring settles the way one does. No bounce: nothing threw it, so overshoot
-// would be decoration. Leaving is a shorter tween along the same path — it
-// goes back the way it came, which is the only exit that reads as the same
-// object.
+// would be decoration. It grows a little rather than travelling, which is what
+// a sheet that belongs to the whole page does; leaving is the same path, run
+// shorter.
 const ENTER = { type: 'spring', bounce: 0, duration: 0.42 };
 const LEAVE = { duration: 0.2, ease: [0.4, 0, 1, 1] };
 
-// A panel that comes in from the right and leaves the page it came from
-// visible. Modal's sibling, not its replacement: a dialog is for a question
+// A sheet that opens over the middle of the page and leaves the page visible
+// through it. Modal's sibling, not its replacement: a dialog is for a question
 // that has to be answered before anything else can happen, and opening a task
-// is not that. You should be able to read the card you opened against the
-// column it came out of.
+// is not that.
 //
 // Which is why there is no backdrop and no focus trap. Both belong to a modal
 // dialog, and wearing them here would make a panel that only looks
@@ -24,15 +23,17 @@ const LEAVE = { duration: 0.2, ease: [0.4, 0, 1, 1] };
 // and it has to be true. Escape closes it and focus moves in on open and back
 // to the card on close, because those are courtesies, not walls.
 //
-// It floats rather than filling the edge, and the surface is frosted: the
-// board reads through it as texture, so the panel is obviously in front of the
-// work rather than replacing it.
-export default function SidePanel({
+// It used to arrive docked along the right edge, where it read as a second
+// region of the page rather than something laid on top of it. Centred and
+// frosted, with the board still legible around and through it, it is obviously
+// one thing in front of the work — and the middle of the screen is where you
+// are already looking.
+export default function FloatingPanel({
   isOpen,
   onClose,
   title,
   children,
-  width = 'w-[26rem]',
+  width = 'max-w-[26rem]',
   // A panel holding something unsaved refuses to be dismissed by a stray
   // press. The buttons inside it still close it — those are deliberate.
   canDismiss = true,
@@ -107,24 +108,24 @@ export default function SidePanel({
   return createPortal(
     <AnimatePresence>
       {isOpen && (
+        <motion.div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 pointer-events-none"
+        >
         <motion.aside
           ref={panelRef}
           role="dialog"
           aria-modal="false"
           aria-label={typeof title === 'string' ? title : undefined}
           tabIndex={-1}
-          // Grows out of the edge it arrived from rather than the middle of
-          // itself, so the corner it came from stays put while it opens.
-          style={{ transformOrigin: '100% 50%' }}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, x: 24, scale: 0.96 }}
-          animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 }}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1 }}
           exit={reduce
             ? { opacity: 0, transition: { duration: 0.18 } }
-            : { opacity: 0, x: 18, scale: 0.98, transition: LEAVE }}
+            : { opacity: 0, scale: 0.97, transition: LEAVE }}
           transition={reduce ? { duration: 0.2 } : ENTER}
-          className={`fixed top-3 right-3 bottom-3 z-[100] ${width} max-w-[calc(100vw-1.5rem)] focus:outline-none`}
+          className={`pointer-events-auto w-full ${width} max-h-full focus:outline-none`}
         >
-          <div className={`panel-glass relative h-full flex flex-col ${nudging ? 'panel-refuse' : ''}`}>
+          <div className={`panel-glass relative max-h-full flex flex-col ${nudging ? 'panel-refuse' : ''}`}>
             <div className="panel-edge flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3.5">
               <h2 className="font-ninja text-lg font-bold text-ninja-navy truncate tracking-[-0.01em]">{title}</h2>
               <button
@@ -163,6 +164,7 @@ export default function SidePanel({
             </AnimatePresence>
           </div>
         </motion.aside>
+        </motion.div>
       )}
     </AnimatePresence>,
     document.body

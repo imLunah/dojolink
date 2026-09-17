@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArchiveRestoreIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react';
 import Modal from '../ui/Modal';
-import SidePanel from '../ui/SidePanel';
+import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import Button from '../ui/Button';
 import LazyMarkdownEditor from '../shared/LazyMarkdownEditor';
@@ -26,7 +26,7 @@ const snapshot = (f) => JSON.stringify({
 
 // Create and edit are the same form. `task` null means create; `column` is the
 // column a new card lands in.
-export default function TaskEditorModal({ isOpen, task, directors = [], column = 'todo', onClose, onSave, onDelete, onPurge, onRestore, onDirtyChange, refuseSignal = 0 }) {
+export default function TaskEditorModal({ isOpen, task, directors = [], column = 'todo', draftTitle = '', onClose, onSave, onDelete, onPurge, onRestore, onDirtyChange, refuseSignal = 0 }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirming, setConfirming] = useState(false);
@@ -68,7 +68,7 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
   if (seedKey !== seeded) {
     setSeeded(seedKey);
     if (isOpen) {
-      setTitle(task?.title ?? '');
+      setTitle(task?.title ?? draftTitle ?? '');
       setBody(task?.body ?? '');
       setColor(task?.color ?? 'none');
       setDue(task?.due_date ?? '');
@@ -81,7 +81,7 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
       const checklistSeed = task?.checklist ? task.checklist.map((i) => ({ ...i })) : [];
       setChecklist(checklistSeed);
       setBaseline(snapshot({
-        title: task?.title ?? '',
+        title: task?.title ?? draftTitle ?? '',
         body: task?.body ?? '',
         color: task?.color ?? 'none',
         due: task?.due_date ?? '',
@@ -137,9 +137,9 @@ export default function TaskEditorModal({ isOpen, task, directors = [], column =
   // One form, two shells. On a desktop board a card opens beside the column it
   // came out of, so the board it belongs to is still readable while it is being
   // edited; on a phone there is no beside, and it takes the screen.
-  const Shell = isDesktop ? SidePanel : Modal;
+  const Shell = isDesktop ? FloatingPanel : Modal;
   const shellProps = {
-    width: isDesktop ? 'w-[27rem]' : 'max-w-lg',
+    width: isDesktop ? 'max-w-[32rem]' : 'max-w-lg',
     canDismiss: !dirty,
     guardHint: 'Unsaved changes. Save them, or Cancel to discard.',
     refuseSignal,

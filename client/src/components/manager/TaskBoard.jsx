@@ -509,7 +509,7 @@ function TaskCard({ task, canManage, grabbable, swipeable, settling, landed, lea
 // cards it could see and scramble the order of the ones it could not.
 export default function TaskBoard({
   tasks, canManage, filtered = false, leavingId = null,
-  onEdit, onDelete, onRestore, onReorder, onAdd, onQuickAdd, onClearDone,
+  onEdit, onDelete, onRestore, onReorder, onCompose, onClearDone,
 }) {
   const wide = useDragEnabled();
   // A drag measures the gaps between the cards on screen. With cards hidden,
@@ -558,7 +558,6 @@ export default function TaskBoard({
 
   const [held, setHeld] = useState(null);   // the card drawn in the overlay
   const [target, setTarget] = useState(null);
-  const [quickAdd, setQuickAdd] = useState({ key: null, text: '' });
   // The id of the card just dropped, held for as long as the board takes to
   // settle around it and then let go of.
   const [landing, setLanding] = useState(null);
@@ -1061,10 +1060,10 @@ export default function TaskBoard({
               {canManage && (
                 <button
                   type="button"
-                  onClick={() => onAdd(col.key)}
+                  onClick={(e) => onCompose(col.key, e.currentTarget.getBoundingClientRect())}
                   aria-label={`Add task to ${col.label}`}
                   title={`Add task to ${col.label}`}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-blue hover:bg-white dark:hover:bg-white/5 transition-colors flex-shrink-0"
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-blue hover:bg-white dark:hover:bg-white/5 transition-colors flex-shrink-0 active:scale-90 duration-150"
                 >
                   <PlusIcon size={17} strokeWidth={2.25} />
                 </button>
@@ -1133,28 +1132,17 @@ export default function TaskBoard({
 
             {canManage && col.key !== 'done' && (
               // Most cards on this board are one sentence somebody thought of
-              // while standing up. Typing it here is the whole interaction; the
-              // + in the header is for the ones that need a date and an owner.
-              <form
-                className="mt-3"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const text = quickAdd.text.trim();
-                  if (!text) return;
-                  setQuickAdd({ key: col.key, text: '' });
-                  onQuickAdd(col.key, text);
-                }}
+              // while standing up. This is the way in for those: the line the
+              // sentence gets typed on opens in the middle of the screen, out
+              // of this control, with the column already chosen.
+              <button
+                type="button"
+                onClick={(e) => onCompose(col.key, e.currentTarget.getBoundingClientRect())}
+                aria-label={`Add a task to ${col.label}`}
+                className="mt-3 w-full px-3 py-2.5 rounded-xl bg-transparent border border-transparent hover:border-ninja-border hover:text-ninja-navy font-ninja text-sm text-ninja-muted text-left transition-colors duration-150"
               >
-                <input
-                  type="text"
-                  value={quickAdd.key === col.key ? quickAdd.text : ''}
-                  onChange={(e) => setQuickAdd({ key: col.key, text: e.target.value })}
-                  onKeyDown={(e) => { if (e.key === 'Escape') { setQuickAdd({ key: null, text: '' }); e.currentTarget.blur(); } }}
-                  placeholder="+ Quick add"
-                  aria-label={`Quick add a task to ${col.label}`}
-                  className="w-full px-3 py-2.5 rounded-xl bg-transparent border border-transparent hover:border-ninja-border focus:border-ninja-blue focus:bg-white dark:focus:bg-white/5 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted transition-colors duration-150"
-                />
-              </form>
+                + Quick add
+              </button>
             )}
           </section>
         );
