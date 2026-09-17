@@ -1,4 +1,5 @@
-import { CARD, FLAT } from '../../lib/surfaces';
+import { useLocation } from 'react-router-dom';
+import { CARD, PANEL, FLAT } from '../../lib/surfaces';
 import { useTheme } from '../../context/ThemeContext';
 
 // Loading placeholders shaped like the content that is coming, instead of the
@@ -20,22 +21,74 @@ function Wrap({ label, children }) {
   );
 }
 
+// The unwrapped bodies, shared with SkeletonShell below so the guard's sketch
+// and the page's own loading state are literally the same shapes — the page
+// mounts onto an identical outline. Only the exported wrappers carry
+// role="status"; nesting two live regions would announce "loading" twice.
+
+function ListRows({ rows = 6, surface = CARD }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className={`${surface} p-4 flex items-center gap-3`}>
+          <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <Skeleton className="h-3.5" style={{ width: `${45 + ((i * 13) % 30)}%` }} />
+            <Skeleton className="h-3 w-24" />
+          </div>
+          <Skeleton className="h-6 w-16 rounded-full flex-shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CardGrid({ count = 6, cols = 'sm:grid-cols-2 lg:grid-cols-3', height = 140, surface = CARD }) {
+  return (
+    <div className={`grid grid-cols-1 ${cols} gap-4`}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className={`${surface} p-5 space-y-3`} style={{ minHeight: height }}>
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-3 w-1/2" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProfileBlocks() {
+  return (
+    <div className="space-y-6">
+      <div className={`${CARD} p-6 flex items-center gap-4`}>
+        <Skeleton className="w-16 h-16 rounded-full flex-shrink-0" />
+        <div className="flex-1 min-w-0 space-y-2.5">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-3.5 w-32" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`${CARD} p-5 lg:col-span-2 space-y-3`}>
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-5/6" />
+          <Skeleton className="h-3 w-3/4" />
+        </div>
+        <div className={`${CARD} p-5 space-y-3`}>
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Rows of text with a leading avatar block. Rosters, staff lists, user tables.
 export function SkeletonList({ rows = 6, label = 'Loading' }) {
   return (
     <Wrap label={label}>
-      <div className="space-y-2">
-        {Array.from({ length: rows }, (_, i) => (
-          <div key={i} className={`${CARD} p-4 flex items-center gap-3`}>
-            <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
-            <div className="flex-1 min-w-0 space-y-2">
-              <Skeleton className="h-3.5" style={{ width: `${45 + ((i * 13) % 30)}%` }} />
-              <Skeleton className="h-3 w-24" />
-            </div>
-            <Skeleton className="h-6 w-16 rounded-full flex-shrink-0" />
-          </div>
-        ))}
-      </div>
+      <ListRows rows={rows} />
     </Wrap>
   );
 }
@@ -44,15 +97,7 @@ export function SkeletonList({ rows = 6, label = 'Loading' }) {
 export function SkeletonCards({ count = 6, cols = 'sm:grid-cols-2 lg:grid-cols-3', height = 140, label = 'Loading' }) {
   return (
     <Wrap label={label}>
-      <div className={`grid grid-cols-1 ${cols} gap-4`}>
-        {Array.from({ length: count }, (_, i) => (
-          <div key={i} className={`${CARD} p-5 space-y-3`} style={{ minHeight: height }}>
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-3 w-1/2" />
-            <Skeleton className="h-3 w-1/3" />
-          </div>
-        ))}
-      </div>
+      <CardGrid count={count} cols={cols} height={height} />
     </Wrap>
   );
 }
@@ -61,28 +106,7 @@ export function SkeletonCards({ count = 6, cols = 'sm:grid-cols-2 lg:grid-cols-3
 export function SkeletonProfile({ label = 'Loading' }) {
   return (
     <Wrap label={label}>
-      <div className="space-y-6">
-        <div className={`${CARD} p-6 flex items-center gap-4`}>
-          <Skeleton className="w-16 h-16 rounded-full flex-shrink-0" />
-          <div className="flex-1 min-w-0 space-y-2.5">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-3.5 w-32" />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className={`${CARD} p-5 lg:col-span-2 space-y-3`}>
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-5/6" />
-            <Skeleton className="h-3 w-3/4" />
-          </div>
-          <div className={`${CARD} p-5 space-y-3`}>
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-2/3" />
-          </div>
-        </div>
-      </div>
+      <ProfileBlocks />
     </Wrap>
   );
 }
@@ -204,10 +228,29 @@ function TopNavSkeleton() {
   );
 }
 
-// The staff dashboard, the page the guard almost always resolves into: the
-// masthead (date line, the big greeting, the quick-link chips, the hairline),
-// then the calendar beside the check-ins card.
-function StaffPageSkeleton() {
+// The page-header pattern most staff pages share: a title, a line under it,
+// and the controls on the right.
+function PageHead({ titleClass = 'h-8 sm:h-10', titleW = 200, subW = 160, lines = 1, controls = null }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <PageBar className={titleClass} style={{ width: titleW }} />
+        <PageBar className="h-3.5 mt-2.5" style={{ width: subW }} />
+        {lines > 1 && <PageBar className="h-3.5 mt-2 w-44" />}
+      </div>
+      {controls}
+    </div>
+  );
+}
+
+function ButtonBar({ w = 140 }) {
+  return <PageBar className="h-10 rounded-xl" style={{ width: w }} />;
+}
+
+// The overview dashboard: the masthead (date line, the big greeting, the
+// quick-link chips, the hairline), then the calendar beside the check-ins
+// card.
+function DirectorDashboardSkeleton() {
   return (
     <div className="space-y-8">
       <header>
@@ -252,10 +295,238 @@ function StaffPageSkeleton() {
   );
 }
 
+// Today's Board: the two-tone title with the date and welcome lines under it,
+// the check-in button, then the same four list rows the page shows while the
+// board loads.
+function TodaysBoardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <PageHead titleW={230} subW={170} lines={2} controls={<ButtonBar w={160} />} />
+      <ListRows rows={4} />
+    </div>
+  );
+}
+
+// Ninjas: the smaller title over the count line, the filter chips, and the
+// roster rows.
+function RosterSkeleton() {
+  return (
+    <div className="space-y-4">
+      <PageHead titleClass="h-7" titleW={110} subW={120} controls={<ButtonBar w={130} />} />
+      <div className="flex flex-wrap items-center gap-2">
+        {[52, 64, 58, 60, 70].map((w, i) => (
+          <PageBar key={i} className="h-8 rounded-full" style={{ width: w }} />
+        ))}
+        <PageBar className="h-9 w-44 rounded-lg ml-auto" />
+      </div>
+      <ListRows rows={6} />
+    </div>
+  );
+}
+
+// Center Staff: the big title, the search box and buttons, then the panel with
+// its three column headings and the staff rows inside it.
+function StaffListSkeleton() {
+  return (
+    <div className="space-y-6">
+      <PageHead
+        titleW={220}
+        subW={130}
+        controls={
+          <div className="flex flex-wrap items-center gap-2">
+            <PageBar className="h-9 w-44 rounded-lg" />
+            <ButtonBar w={100} />
+            <ButtonBar w={110} />
+          </div>
+        }
+      />
+      <div className={`${PANEL} overflow-hidden`}>
+        <div className="grid grid-cols-3 border-b border-ninja-border bg-ninja-bg px-5 py-3 gap-2">
+          <PageBar className="h-3 w-16" />
+          <PageBar className="h-3 w-20" />
+          <PageBar className="h-3 w-14" />
+        </div>
+        <div className="divide-y divide-ninja-border">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="grid grid-cols-3 items-center px-5 py-4 gap-2">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
+                <Skeleton className="h-3.5" style={{ width: `${50 + ((i * 11) % 30)}%` }} />
+              </div>
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Clubs: the big title and create button over the card grid.
+function ClubsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <PageHead titleW={120} subW={230} controls={<ButtonBar w={140} />} />
+      <CardGrid count={6} />
+    </div>
+  );
+}
+
+// Tasks: the back link, the big Tasks title over its line, the pill controls,
+// and the four board columns with cards — the same column sketch the page
+// itself draws while the board loads.
+function TasksSkeleton() {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <PageBar className="w-4 h-4 rounded" />
+        <PageBar className="h-3.5 w-24" />
+      </div>
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <PageBar className="h-9 w-28" />
+          <PageBar className="h-3.5 w-52 mt-2" />
+        </div>
+        <div className="flex items-center gap-2">
+          <PageBar className="h-8 w-32 rounded-full" />
+          <PageBar className="h-8 w-24 rounded-full" />
+        </div>
+      </div>
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 items-start">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="space-y-2.5">
+            <div className="flex items-center justify-between px-1">
+              <PageBar className="h-4 w-24" />
+              <PageBar className="w-4 h-4 rounded" />
+            </div>
+            {Array.from({ length: i === 0 ? 3 : 2 }, (_, j) => (
+              <div key={j} className={`${CARD} p-4 space-y-2.5`}>
+                <Skeleton className="h-3.5 w-4/5" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-3/5" />
+                <div className="flex items-center justify-between pt-1">
+                  <Skeleton className="h-3 w-14" />
+                  <Skeleton className="w-6 h-6 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Events: title and controls over three tall event cards.
+function EventsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <PageHead titleClass="h-7" titleW={90} subW={180} controls={<ButtonBar w={130} />} />
+      <CardGrid count={3} cols="sm:grid-cols-2 xl:grid-cols-3" height={260} />
+    </div>
+  );
+}
+
+// Reports: the narrow centered column, title, then the tile grid.
+function ReportsSkeleton() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="mb-6">
+        <PageBar className="h-7 w-28" />
+        <PageBar className="h-3.5 w-56 mt-2" />
+      </div>
+      <CardGrid count={6} />
+    </div>
+  );
+}
+
+// Curriculum: the narrow centered column, title, then the list rows.
+function CurriculumSkeleton() {
+  return (
+    <div className="max-w-3xl mx-auto">
+      <PageBar className="h-7 w-36" />
+      <PageBar className="h-3.5 w-64 mt-2 max-w-full" />
+      <div className="mt-8">
+        <ListRows rows={6} />
+      </div>
+    </div>
+  );
+}
+
+// What's New: the narrow column with release entries.
+function ChangelogSkeleton() {
+  return (
+    <div className="max-w-2xl mx-auto">
+      <PageBar className="h-7 w-36 mb-6" />
+      <div className="space-y-8">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="space-y-2.5">
+            <PageBar className="h-4 w-1/3" />
+            <PageBar className="h-3 w-full" />
+            <PageBar className="h-3 w-4/5" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Settings: the sidebar of sections beside the form, in one card, the way
+// both the staff and parent Settings pages draw it on desktop.
+function SettingsSkeleton({ surface = CARD }) {
+  return (
+    <div className={`${surface} overflow-hidden`}>
+      <div className="hidden lg:grid grid-cols-[272px_1fr]">
+        <div className="border-r border-ninja-border p-6 space-y-5">
+          <Skeleton className="h-7 w-28" />
+          <div className="space-y-1 pt-2">
+            {[88, 104, 76, 96, 84].map((w, i) => (
+              <div key={i} className="flex items-center gap-3 py-2.5 px-3">
+                <Skeleton className="w-5 h-5 rounded" />
+                <Skeleton className="h-3.5" style={{ width: w }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="p-8 space-y-6">
+          <Skeleton className="h-5 w-40" />
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-16 h-16 rounded-full flex-shrink-0" />
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </div>
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-10 w-full max-w-md rounded-lg" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="lg:hidden p-5 space-y-5">
+        <Skeleton className="h-7 w-28" />
+        <div className="flex items-center gap-4">
+          <Skeleton className="w-14 h-14 rounded-full flex-shrink-0" />
+          <div className="space-y-2">
+            <Skeleton className="h-3.5 w-36" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-10 w-full rounded-lg" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // The parent home: the navy events banner flush with the top (it holds its
 // place with the house gradient, exactly as the real one does when there are
 // no listings), then the schedule strip and the family cards.
-function ParentPageSkeleton() {
+function ParentHomeSkeleton() {
   return (
     <>
       <div
@@ -294,16 +565,71 @@ function ParentPageSkeleton() {
   );
 }
 
+// Parent Courses: the title block, then the two wide course cards.
+function ParentCoursesSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <PageBar className="h-7 w-36" />
+        <PageBar className="h-3.5 w-60 mt-2 max-w-full" />
+      </div>
+      <CardGrid count={2} cols="lg:grid-cols-2" height={220} surface={FLAT} />
+    </div>
+  );
+}
+
+// A ninja's profile: the header card, then the wide and narrow cards — the
+// same blocks ParentProfile shows while it loads.
+function ParentProfileSkeleton() {
+  return <ProfileBlocks />;
+}
+
+// Which page is coming, read from the address the guard is holding. Detail
+// routes fall through their section's prefix; anything unrecognized gets the
+// dashboard, which is also where "/" resolves.
+function staffPageFor(pathname) {
+  const at = (base) => pathname === base || pathname.startsWith(base + '/');
+  if (at('/manager/dashboard') || at('/sensei/dashboard')) return <TodaysBoardSkeleton />;
+  if (at('/manager/students')) return <RosterSkeleton />;
+  if (at('/manager/staff')) return <StaffListSkeleton />;
+  if (at('/clubs')) return <ClubsSkeleton />;
+  if (at('/manager/tasks')) return <TasksSkeleton />;
+  if (at('/manager/events')) return <EventsSkeleton />;
+  if (at('/manager/reports')) return <ReportsSkeleton />;
+  if (at('/curriculum-roadmap')) return <CurriculumSkeleton />;
+  if (at('/account')) return <SettingsSkeleton />;
+  if (at('/changelog')) return <ChangelogSkeleton />;
+  return <DirectorDashboardSkeleton />;
+}
+
+function parentPageFor(pathname) {
+  const at = (base) => pathname === base || pathname.startsWith(base + '/');
+  if (at('/parent/courses')) return <ParentCoursesSkeleton />;
+  if (at('/parent/students')) return <ParentProfileSkeleton />;
+  if (at('/parent/account')) return <SettingsSkeleton surface={FLAT} />;
+  return null; // home, with its full-bleed hero, lays out its own main
+}
+
 // The whole first paint, shown by the route guards while auth resolves.
-// Shaped like the shell that is about to mount — the nav where the nav will
-// be, cards where the page will be — and reading the same stored preferences
-// the real shell reads (nav orientation, collapsed rail), so the app appears
-// to assemble in place instead of replacing a "Loading" sign.
+// Shaped like the shell and the page that are about to mount — the nav where
+// the nav will be, this section's furniture where the section will be — and
+// reading the same stored preferences the real shell reads (nav orientation,
+// collapsed rail), so the app appears to assemble in place instead of
+// replacing a "Loading" sign.
 export function SkeletonShell({ portal = false }) {
   const { horizontalNav } = useTheme();
+  const { pathname } = useLocation();
   const collapsed = localStorage.getItem(portal ? 'parent-nav-collapsed' : 'sidebar-collapsed') === '1';
   const railWidth = collapsed ? 76 : portal ? 240 : 224; // matches ParentSideNav / Sidebar
   const topNav = !portal && horizontalNav;
+
+  // The full-screen pages that mount without the shell: no rail to sketch,
+  // and drawing one would promise chrome that never arrives.
+  if (pathname === '/welcome' || pathname === '/getting-started' || pathname === '/parent/welcome') {
+    return <div role="status" aria-busy="true" aria-label="Loading" className="min-h-[100dvh] bg-ninja-bg" />;
+  }
+
+  const parentPage = portal ? parentPageFor(pathname) : null;
 
   return (
     <div
@@ -330,11 +656,17 @@ export function SkeletonShell({ portal = false }) {
 
       {portal ? (
         <main className="flex-1 min-w-0 pb-32 lg:pb-12">
-          <ParentPageSkeleton />
+          {parentPage ? (
+            <div className="pt-5 lg:pt-7">
+              <div className="max-w-6xl mx-auto px-4 sm:px-6">{parentPage}</div>
+            </div>
+          ) : (
+            <ParentHomeSkeleton />
+          )}
         </main>
       ) : (
         <main className="flex-1 min-w-0 max-w-7xl lg:max-w-none mx-auto w-full px-4 sm:px-6 lg:px-8 pt-[max(env(safe-area-inset-top),1.25rem)] lg:pt-8 pb-28 lg:pb-8">
-          <StaffPageSkeleton />
+          {staffPageFor(pathname)}
         </main>
       )}
     </div>
