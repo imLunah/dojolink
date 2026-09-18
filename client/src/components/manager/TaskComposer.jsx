@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { CornerDownLeftIcon, SlidersHorizontalIcon } from 'lucide-react';
@@ -7,11 +7,8 @@ import useRefuseNudge from '../../lib/useRefuseNudge';
 
 const WIDTH = 36; // rem
 
-// How the liquid travels. The head is thrown and settles; the tail lets go a
-// beat later, which is what makes the two read as one thing pulling apart
-// rather than two things fading.
-const HEAD = { type: 'spring', bounce: 0.18, duration: 0.5 };
-const TAIL = { duration: 0.34, ease: [0.4, 0, 1, 1] };
+const EASE_OUT = [0.23, 1, 0.32, 1];
+const EASE_IN = [0.4, 0, 1, 1];
 
 // Typing a task, as one line rather than a form.
 //
@@ -20,21 +17,16 @@ const TAIL = { duration: 0.34, ease: [0.4, 0, 1, 1] };
 // row to say where it goes. The form behind it still exists for a card that
 // needs a date and an owner, one press away.
 //
-// It grows out of whatever was pressed. A control the size of a full stop and
-// a sheet the size of a paragraph have nothing in common to animate between,
-// so what travels is neither: a drop of liquid leaves the control, carries the
-// distance, spreads into the sheet's shape, and the glass sets over it. The
-// board already melts a card into the bin this way — same union of blurred
-// shapes cut back to a hard edge, which rounds every corner it is handed, so a
-// small rectangle leaves as a bead and a large one arrives as a panel without
-// a single radius being animated.
-export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit, onClose, onMore }) {
+// It opens where it is going to be, the way Spotlight does. Nothing travels
+// from the control that was pressed: the sheet settles up out of a slightly
+// smaller copy of itself while the glass thickens out of the board, and the
+// cursor is already in the field.
+export default function TaskComposer({ isOpen, column = 'todo', onSubmit, onClose, onMore }) {
   const reduce = useReducedMotion();
   const [text, setText] = useState('');
   const [col, setCol] = useState(column);
   const boxRef = useRef(null);
   const inputRef = useRef(null);
-  const [rect, setRect] = useState(null);
   const { nudging, hinting, refuse } = useRefuseNudge();
 
   // A composer holding typed words is not thrown away by a stray press. Empty,
@@ -48,19 +40,11 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
     setCol(column);
   }, [isOpen, column]);
 
-  // The sheet's own rect, so the drop knows what shape to end up as. Measured
-  // rather than assumed: its height is whatever the row of columns wraps to.
-  useLayoutEffect(() => {
-    if (!isOpen) { setRect(null); return; }
-    const el = boxRef.current;
-    if (el) setRect(el.getBoundingClientRect());
-  }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen) return;
-    const t = setTimeout(() => inputRef.current?.focus(), reduce ? 0 : 220);
+    const t = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(t);
-  }, [isOpen, reduce]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -95,116 +79,32 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
     onClose();
   };
 
-  // Where the drop starts: the control that was pressed, in screen
-  // coordinates, expressed as the transform that would put the sheet's box on
-  // top of it. Origin at the top left corner so the two rects line up exactly.
-  const flip = origin && rect
-    ? {
-      x: origin.left - rect.left,
-      y: origin.top - rect.top,
-      scaleX: Math.max(origin.width, 8) / rect.width,
-      scaleY: Math.max(origin.height, 8) / rect.height,
-    }
-    : { x: 0, y: 0, scaleX: 0.9, scaleY: 0.6 };
-
   return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[105] flex items-center justify-center p-4 pointer-events-none">
-          {/* The liquid, and it has no colour. What the filter is handed is
-              alpha — plain opaque shapes — and what it gives back is a pane:
-              a breath of white so the board reads through it, one bright line
-              tracing the whole welded outline, and a darker line under that
-              for thickness. Glass flowing into the shape of the sheet, rather
-              than a coloured thing arriving and turning into one. */}
-          {!reduce && rect && (
-            // The fade belongs to the layer, not to the drops inside it. The
-            // threshold that welds them together works on alpha, so a drop
-            // told to fade comes back through the filter at full strength
-            // until it vanishes all at once.
-            <motion.div
-              className="fixed inset-0 z-10 pointer-events-none"
-              style={{ filter: 'url(#composerGooGlass)' }}
-              initial={{ opacity: 1 }}
-              animate={{ opacity: 0, transition: { delay: 0.32, duration: 0.22 } }}
-              exit={{ opacity: 0, transition: { duration: 0.12 } }}
-            >
-              <motion.div
-                className="fixed bg-ninja-bg"
-                style={{
-                  left: rect.left, top: rect.top, width: rect.width, height: rect.height,
-                  borderRadius: 28, transformOrigin: '0 0',
-                }}
-                initial={flip}
-                animate={{
-                  x: 0, y: 0, scaleX: 1, scaleY: 1,
-                  transition: {
-                    x: HEAD, y: HEAD,
-                    scaleX: HEAD,
-                    // A touch behind its partner, so the drop stretches along
-                    // the way and rounds out as it lands instead of arriving
-                    // as a rectangle that grew.
-                    scaleY: { ...HEAD, duration: 0.58 },
-                  },
-                }}
-              />
-              {/* What stays behind on the control and pinches off. The neck
-                  only exists while the two are within a couple of standard
-                  deviations of each other, so it forms and breaks on its own
-                  as the head pulls away. */}
-              {origin && (
-                <motion.div
-                  className="fixed bg-ninja-bg"
-                  style={{
-                    left: origin.left, top: origin.top, width: origin.width, height: origin.height,
-                    borderRadius: 28, transformOrigin: '50% 50%',
-                  }}
-                  initial={{ scale: 1 }}
-                  animate={{ scale: 0, transition: TAIL }}
-                />
-              )}
-            </motion.div>
-          )}
-
-          {/* The sheet travels with the drop rather than fading in behind
-              it. Fading was the seam: a surface at less than full opacity is
-              its own backdrop root, so the frost had nothing to sample and the
-              sheet arrived clear, then turned to glass all at once when the
-              animation ended. Carrying it along under the liquid means the
-              material is right from the first frame, and what the drop hands
-              over to is already there.
-
-              Two passes: the first is unmeasured and hidden, purely so the box
-              can be asked how big it is; the key swaps in the animated one
-              once the answer is known. The hidden pass is laid out and
-              measured inside the same frame, so it is never painted. */}
+          {/* The glass does not fade: a surface below full opacity stops
+              sampling the board behind it, so it would arrive clear and frost
+              over at the end. It thickens instead, through --glass, and only
+              the words on it fade. */}
           <motion.div
-            key={rect ? 'placed' : 'measuring'}
             ref={boxRef}
             role="dialog"
             aria-modal="false"
             aria-label="Add a task"
-            className={`panel-glass relative pointer-events-auto w-full max-w-[calc(100vw-2rem)] p-4 ${nudging ? 'panel-refuse' : ''}`}
-            style={{
-              width: `${WIDTH}rem`,
-              transformOrigin: '0 0',
-              visibility: rect || reduce ? 'visible' : 'hidden',
-            }}
-            initial={reduce || !rect ? false : flip}
-            animate={reduce ? {} : {
-              x: 0, y: 0, scaleX: 1, scaleY: 1,
-              transition: {
-                x: HEAD, y: HEAD,
-                scaleX: HEAD,
-                scaleY: { ...HEAD, duration: 0.58 },
-              },
-            }}
-            exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
+            className={`panel-glass glass-ramp relative pointer-events-auto w-full max-w-[calc(100vw-2rem)] p-4 ${nudging ? 'panel-refuse' : ''}`}
+            style={{ width: `${WIDTH}rem` }}
+            initial={reduce ? false : { '--glass': 0, scale: 0.96 }}
+            animate={{ '--glass': 1, scale: 1, transition: { duration: 0.22, ease: EASE_OUT } }}
+            exit={reduce
+              ? { '--glass': 0, transition: { duration: 0.1 } }
+              : { '--glass': 0, scale: 0.98, transition: { duration: 0.14, ease: EASE_IN } }}
           >
             <motion.form
               onSubmit={submit}
-              initial={reduce ? false : { opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0, transition: { delay: reduce ? 0 : 0.38, duration: 0.2 } }}
+              initial={reduce ? false : { opacity: 0 }}
+              animate={{ opacity: 1, transition: { delay: 0.04, duration: 0.16, ease: EASE_OUT } }}
+              exit={{ opacity: 0, transition: { duration: 0.08 } }}
             >
               {/* One line, the size of the thing you came here to say. */}
               <input
@@ -254,10 +154,10 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
                     Details
                   </button>
                   {/* The key, named. Quick add is for getting a sentence onto
-                      the board without moving your hands, so the control says
-                      which key does it — glyph and word both, so nobody has to
-                      recognise the symbol. It is still a button, for the times
-                      a pointer is already where it is. */}
+                      the board without moving your hands, so the control shows
+                      the key that does it, as the glyph and the word together,
+                      and nobody has to recognise the symbol. It is still a
+                      button, for the times a pointer is already where it is. */}
                   <button
                     type="submit"
                     disabled={!text.trim()}
@@ -288,62 +188,6 @@ export default function TaskComposer({ isOpen, origin, column = 'todo', onSubmit
             </AnimatePresence>
           </motion.div>
 
-          <svg width="0" height="0" aria-hidden="true" className="absolute pointer-events-none">
-            <defs>
-              {/* Blur the alpha, then cut it back to a hard edge. Two shapes
-                  near each other stop being two shapes, and any corner it is
-                  handed comes back rounded — which is the whole trick: the
-                  bead and the sheet are the same rectangle at two sizes, and
-                  the filter is what makes one of them a drop.
-
-                  What goes in is the sheet's own colour, so the drop is a
-                  piece of the panel rather than a tinted stand-in for it, and
-                  when it fades there is nothing to cross over to: the sheet
-                  underneath is already the same thing in the same place.
-                  Lifted from the card that melts into the bin, which had to
-                  solve exactly this.
-
-                  The intercept puts the threshold at half alpha (7.5/15), so
-                  the silhouette comes back the size of the box that produced
-                  it. Slopes that cross lower inflate every shape a few pixels,
-                  and this one has to land exactly on the sheet. */}
-              <filter id="composerGooGlass" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="soft" />
-                <feColorMatrix
-                  in="soft"
-                  type="matrix"
-                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 15 -7.5"
-                  result="body"
-                />
-                {/* The union's own outline, taken off its alpha, minus an
-                    eroded copy of itself: a ~2px line around the whole welded
-                    shape, neck included, and a darker one under it for
-                    thickness. One rim around both lobes is what says single
-                    object. */}
-                <feColorMatrix
-                  in="body"
-                  type="matrix"
-                  values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-                  result="shape"
-                />
-                <feMorphology in="shape" operator="erode" radius="1.5" result="inner" />
-                <feComposite in="shape" in2="inner" operator="out" result="rimA" />
-                {/* Matched to the edge the settled sheet wears (a hairline at
-                    ~0.09 white over its own shadow), not the bright outline a
-                    goo filter wants to draw. Brighter and the drop reads as a
-                    stroked cartoon shape rather than the panel in motion. No
-                    dark line under it: the liquid sits on the settled sheet
-                    for a beat before it fades, and anything dark in the rim
-                    reads as a border drawn around the panel. */}
-                <feFlood floodColor="#ffffff" floodOpacity="0.2" result="hiC" />
-                <feComposite in="hiC" in2="rimA" operator="in" result="rimHi" />
-                <feMerge>
-                  <feMergeNode in="body" />
-                  <feMergeNode in="rimHi" />
-                </feMerge>
-              </filter>
-            </defs>
-          </svg>
         </div>
       )}
     </AnimatePresence>,

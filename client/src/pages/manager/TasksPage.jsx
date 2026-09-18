@@ -41,13 +41,12 @@ export default function TasksPage({ mode = 'manager' }) {
     setEditor(next);
   }, [editor, editorDirty]);
 
-  // Writing a task, before it is a card. `origin` is the rect of whatever was
-  // pressed, so the composer can grow out of it rather than appearing.
-  const [composer, setComposer] = useState(null); // { column, origin } | null
-  const openComposer = useCallback((column, origin) => {
+  // Writing a task, before it is a card.
+  const [composer, setComposer] = useState(null); // { column } | null
+  const openComposer = useCallback((column) => {
     if (editor && editorDirty) { setRefuseSignal((n) => n + 1); return; }
     setEditor(null);
-    setComposer({ column, origin });
+    setComposer({ column });
   }, [editor, editorDirty]);
   const [showArchived, setShowArchived] = useState(false);
   const [assignees, setAssignees] = useState([]);
@@ -414,7 +413,6 @@ export default function TasksPage({ mode = 'manager' }) {
 
       <TaskComposer
         isOpen={!!composer}
-        origin={composer?.origin ?? null}
         column={composer?.column ?? 'todo'}
         onSubmit={quickAdd}
         onClose={() => setComposer(null)}
