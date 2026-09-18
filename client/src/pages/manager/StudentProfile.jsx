@@ -24,7 +24,7 @@ const courseHref = (studentId, program) => `/manager/students/${studentId}/cours
 
 // A course card on the profile IS the way into the course: the whole card
 // links there, where the ninja's progress is read and edited.
-const COURSE_CARD_LINK = 'block rounded-2xl transition-[transform,box-shadow] duration-150 hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ninja-blue/60';
+const COURSE_CARD_LINK = 'group block rounded-2xl transition-[transform,box-shadow] duration-150 hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ninja-blue/60';
 
 // ── Animation variants ────────────────────────────────────────────────────────
 const fadeUp = {
@@ -130,7 +130,7 @@ function MobileBeltJourney({ enrollment, courseTo }) {
               {belt_level} #{belt_sublevel} of {maxLevel}
             </span>
           )}
-          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted" strokeWidth={2.5} />}
+          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted transition-[color,transform] duration-200 group-hover:text-ninja-navy group-hover:translate-x-0.5" strokeWidth={2.5} />}
         </div>
       </div>
 
@@ -249,7 +249,7 @@ function MobileProgramCard({ enrollment, courseTo }) {
             style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.45))' }}
           />
         )}
-        <ChevronRightIcon aria-hidden className="w-6 h-6 flex-shrink-0 text-white/60" strokeWidth={2.5} />
+        <ChevronRightIcon aria-hidden className="w-6 h-6 flex-shrink-0 text-white opacity-60 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-hover:translate-x-0.5" strokeWidth={2.5} />
       </div>
 
       {/* Card body */}
@@ -353,7 +353,7 @@ function DesktopBeltJourney({ enrollment, courseTo }) {
               {belt_level} #{belt_sublevel} of {maxLevel}
             </span>
           )}
-          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted" strokeWidth={2.5} />}
+          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted transition-[color,transform] duration-200 group-hover:text-ninja-navy group-hover:translate-x-0.5" strokeWidth={2.5} />}
         </div>
       </div>
 
