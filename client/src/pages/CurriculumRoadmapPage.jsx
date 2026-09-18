@@ -1,5 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import Layout from '../components/layout/Layout';
 import { api } from '../api/client';
 import { PROGRAM_LOGOS } from '../utils/beltConfig';
@@ -70,6 +70,34 @@ export default function CurriculumRoadmapPage() {
   }, []);
 
   const current = programs.find((p) => p.program === activeProgram);
+  const pageRef = useRef(null);
+  const reduce = useReducedMotion();
+
+  // Switching programs swaps the whole banner: new art, new height. Swapped
+  // in one frame it reads as a jolt, so the old banner is copied, laid over
+  // the page exactly where it was, and faded out while the new one mounts
+  // underneath it. A crossfade, without keeping two live course pages around.
+  const switchProgram = (key) => {
+    if (key === activeProgram) return;
+    const old = pageRef.current?.querySelector('[data-staff-banner]');
+    if (old && !reduce) {
+      const r = old.getBoundingClientRect();
+      const ghost = old.cloneNode(true);
+      ghost.removeAttribute('data-staff-banner');
+      ghost.setAttribute('aria-hidden', 'true');
+      Object.assign(ghost.style, {
+        position: 'fixed', left: `${r.left}px`, top: `${r.top}px`,
+        width: `${r.width}px`, height: `${r.height}px`, margin: '0',
+        zIndex: '30', pointerEvents: 'none',
+        transition: 'opacity 360ms cubic-bezier(0.23, 1, 0.32, 1)',
+      });
+      document.body.appendChild(ghost);
+      requestAnimationFrame(() => requestAnimationFrame(() => { ghost.style.opacity = '0'; }));
+      setTimeout(() => ghost.remove(), 420);
+    }
+    setActiveProgram(key);
+    setSection('course');
+  };
 
   // Programs on the left, what to read about the chosen one on the right.
   // It sits under the banner, the way the parent course puts its page under
@@ -82,7 +110,7 @@ export default function CurriculumRoadmapPage() {
           label="Programs"
           layoutId="curriculum-program"
           value={activeProgram}
-          onChange={(key) => { setActiveProgram(key); setSection('course'); }}
+          onChange={switchProgram}
           items={programs.map((p) => ({ key: p.program, label: p.program, logo: PROGRAM_LOGOS[p.program] }))}
         />
       </div>
@@ -92,7 +120,7 @@ export default function CurriculumRoadmapPage() {
 
   return (
     <Layout>
-      <div className="max-w-6xl mx-auto">
+      <div ref={pageRef} className="max-w-6xl mx-auto">
         {/* The banner is the top of the page and says "Curriculum" itself. */}
         <h1 className="sr-only">Curriculum</h1>
 

@@ -84,7 +84,7 @@ function Frame({ block, hero, between, body, children }) {
 // The staff banner, pulled out to the page's top and side edges on a desktop.
 function StaffBleed({ children }) {
   const { ref, style } = useStaffBleed();
-  return <div ref={ref} style={style}>{children}</div>;
+  return <div ref={ref} style={style} data-staff-banner>{children}</div>;
 }
 
 function ProjectKindIcon({ kind, status }) {
