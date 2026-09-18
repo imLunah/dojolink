@@ -8,7 +8,7 @@ import LazyMarkdownEditor from '../shared/LazyMarkdownEditor';
 import Linkify from '../shared/Linkify';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { COLUMNS, DUE_TONE, carriesTask, dueMeta, ownsTask, taskHolder } from '../../lib/taskBoard';
+import { COLUMNS, DUE_TONE, carriesTask, dueMeta, ownsTask } from '../../lib/taskBoard';
 
 // The rendered note, for a card that is not yours to edit. Lazy for the same
 // reason the editor is: both ride the markdown chunk, and the dialog should
@@ -198,14 +198,6 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
                 {title}
               </h3>
             )}
-            {/* Why the form is not here. Naming the author is what makes a
-                read-only card read as somebody's card rather than as a bug. */}
-            <p className={`font-ninja text-xs text-ninja-muted ${title.trim() ? 'mt-1' : ''}`}>
-              {task?.created_by_name ? `${task.created_by_name} made this card.` : 'This card came with the board.'}
-              {carries
-                ? ' The words are theirs. The stage, the checklist and the comments are yours.'
-                : ' Only they can change it.'}
-            </p>
           </div>
         )}
 
@@ -233,9 +225,6 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             <span className={`font-ninja text-sm ${dueMeta(due) ? DUE_TONE[dueMeta(due).tone] : 'text-ninja-muted'}`}>
               {dueMeta(due)?.text || 'No due date'}
-            </span>
-            <span className="font-ninja text-sm text-ninja-muted">
-              {task && taskHolder(task) ? `${taskHolder(task)} has it` : 'Nobody has it yet'}
             </span>
           </div>
         )}
