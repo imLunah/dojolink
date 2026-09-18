@@ -154,7 +154,7 @@ function ProgressBar({ pct, color, delay = 0.3, label, value }) {
 
 // ─── Activity bar chart ───────────────────────────────────────────────────────
 
-function ActivityChart({ logs }) {
+export function ActivityChart({ logs }) {
   // Roadmap bulk-completions are stored as logs for curriculum tracking, but are NOT sessions —
   // exclude them from the activity chart and the session count.
   const sessions = logs.filter((l) => !l.from_roadmap);
@@ -617,15 +617,17 @@ function ModuleProgress({ program, enrollment, logs }) {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-export default function ProgressVisuals({ programs, sessionLogs, childName }) {
+export default function ProgressVisuals({ programs, sessionLogs, childName, showActivity = true }) {
   const create = programs.find((p) => p.program === 'CREATE');
   const others = programs.filter((p) => p.program !== 'CREATE');
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:items-start">
-      <div className="xl:col-span-2">
-        <ActivityChart logs={sessionLogs} />
-      </div>
+      {showActivity && (
+        <div className="xl:col-span-2">
+          <ActivityChart logs={sessionLogs} />
+        </div>
+      )}
       {create && (
         <div className="xl:col-span-2">
           <BeltJourney enrollment={create} logs={sessionLogs.filter((l) => l.program === 'CREATE')} childName={childName} />
