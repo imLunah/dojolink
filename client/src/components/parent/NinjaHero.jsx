@@ -119,8 +119,14 @@ export default function NinjaHero({ program, name, eyebrow, belt, level, tone, p
             it (the ninja's box ends at the column edge less its own 24px) and
             still close enough to belong to the banner rather than to the far
             corner of a wide screen. Phones keep the corner: there is no
-            margin to move into. */}
-        {right && <div className="absolute top-0 right-0 z-10 lg:right-[-56px]">{right}</div>}
+            margin to move into.
+
+            That margin only exists once the banner is wider than the 1152px
+            column. Below that it is the column's 24px of padding, and a flat
+            56px pushed the button past the banner's edge, where overflow cut
+            it in half. So the offset is the margin there actually is, less
+            16px of breathing room, and never more than 56px. */}
+        {right && <div className="absolute top-0 right-0 z-10 lg:right-[calc(-1*clamp(8px,50cqw-568px,56px))]">{right}</div>}
 
         {/* The words reserve their own room with padding rather than sharing a
             flex row with the ninja: the cheer pose is a wider picture than the
