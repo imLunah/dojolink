@@ -216,18 +216,41 @@ textarea:focus-visible {
   .dark .glass-panel.glass-frost { background-color: #252c3e; }
 }
 
-/* The nav is solid. It sat as frosted glass for a while, and the page colour
-   bleeding through it made the rail look washed out and half there. It is the
-   frame of the app, so it is opaque, with a lit inner rim and nothing else.
+/* ── Chrome: the app's own edges ──
+   The third material, and the last. Cards are clear, menus are frosted, and
+   the nav is between the two: translucent enough that the page shows through
+   as colour, blurred enough that none of it can be read.
 
-   Two class names deep so `.dark .bg-white` cannot win over it. */
+   The nav, and only the nav. Dialogs and the side panel wore this for one
+   commit and it was wrong: a surface that has come up to be dealt with cannot
+   be see-through, because what shows through it is the page it is covering,
+   and the two read as one grey thing with the answer somewhere inside it. They
+   are solid. Glass is for what stays, not for what interrupts.
+
+   Chrome is not a card and must not look like one. It has no lift and no drop
+   shadow, because it is not sitting on the page, it is the edge of it. What it
+   has is a lit inner rim, which is the only part of the material you can see on
+   a surface that never moves.
+
+   Two class names deep, same reason as the other two. */
 .glass-chrome.glass-edge {
-  background-color: #fff;
+  background-color: rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(20px) saturate(1.7);
+  -webkit-backdrop-filter: blur(20px) saturate(1.7);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
 }
 .dark .glass-chrome.glass-edge {
-  background-color: #1c2132;
+  background-color: rgb(28 33 50 / 0.74);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chrome.glass-edge {
+    background-color: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .dark .glass-chrome.glass-edge { background-color: #1c2132; }
 }
 
 /* An open menu hangs off the bottom of its card, and every glass pane is its
