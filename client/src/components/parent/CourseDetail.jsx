@@ -363,8 +363,9 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
                   </div>
                   {/* The concepts the level teaches, which is the EXPLORE half of
                       each build/explore/solve set. The project rows say what gets
-                      made; this says what it was for. */}
-                  {concepts.length > 0 && (
+                      made; this says what it was for. Parents only: staff
+                      asked for it off their side. */}
+                  {!block && concepts.length > 0 && (
                     <div className="px-4 pb-4 -mt-1">
                       <p className="font-ninja text-[11px] font-extrabold uppercase tracking-[0.08em] text-ninja-muted">Concepts</p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
