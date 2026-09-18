@@ -50,9 +50,9 @@ function StudentHero({ student, programs, sessions, belt, locationName, birthday
           className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-white/15 font-ninja text-xl font-black text-white backdrop-blur-sm transition-transform duration-150 active:scale-[0.97]">←</button>
         <div className="flex items-center gap-2">
           {canEdit && <button type="button" onClick={onEdit} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-3.5 font-ninja text-[13px] font-extrabold text-white backdrop-blur-sm transition-transform duration-150 active:scale-[0.97]"><PencilIcon size={15} aria-hidden />Edit</button>}
-          {canLog && <button type="button" onClick={onLog} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-white px-3.5 font-ninja text-[13px] font-extrabold text-[#0c3d99] shadow-sm transition-transform duration-150 active:scale-[0.97]"><PlusIcon size={16} aria-hidden />Log session</button>}
+          {canLog && <button type="button" onClick={onLog} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#fff] px-3.5 font-ninja text-[13px] font-extrabold text-[#0c3d99] shadow-sm transition-transform duration-150 active:scale-[0.97]"><PlusIcon size={16} aria-hidden />Log session</button>}
           <button type="button" onClick={onNote} aria-label={hasNote ? 'Open pinned note' : 'Add pinned note'}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#315383] shadow-sm transition-transform duration-150 active:scale-[0.97]">
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#fff] text-[#315383] shadow-sm transition-transform duration-150 active:scale-[0.97]">
             <Pin className={`h-[18px] w-[18px] -rotate-12 ${hasNote ? 'text-ninja-blue' : ''}`} />
           </button>
         </div>
