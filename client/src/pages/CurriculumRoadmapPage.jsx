@@ -8,19 +8,6 @@ import CurriculumResources from '../components/shared/CurriculumResources';
 
 const CourseDetail = lazy(() => import('../components/parent/CourseDetail'));
 
-// Program colour is used as a 2px rule under the active tab and nowhere else.
-// It marks which program you are in without filling a control with brand colour,
-// which is what made every control on this page read as a tinted chip.
-const PROGRAM_COLOR = {
-  'CREATE': '#60a5fa',
-  'JR': '#a78bfa',
-  'AI Academy': '#22d3ee',
-  'Robotics Academy': '#38a1ff',
-  'VR Coding': '#2dd4bf',
-};
-const DEFAULT_COLOR = '#38a1ff';
-const colorFor = (program) => PROGRAM_COLOR[program] || DEFAULT_COLOR;
-
 // Course is the curriculum read the way a parent reads their child's course:
 // the same hero, belt road, level card and level ladder, with nobody on it.
 const SECTIONS = [
@@ -28,26 +15,40 @@ const SECTIONS = [
   { key: 'resources', label: 'Resources' },
 ];
 
-// One tab treatment for the whole page: text carries the state, a rule under the
-// active one carries the position. No filled backgrounds, no chips.
-//
-// The rule is the tab's own bottom border rather than a bar positioned against
-// the container, so a row that wraps to a second line still underlines the right
-// tab instead of leaving the marker floating on the row below.
-function Tab({ active, color = 'rgb(var(--ninja-navy))', onClick, children }) {
+const SLIDE = { type: 'spring', stiffness: 480, damping: 38 };
+
+// A segmented control: a sunken track and one raised pill that slides to the
+// choice, so the eye follows it instead of hunting for an underline. The pill
+// is `bg-white`, which the dark theme maps to its raised surface, so it lifts
+// off the track in both themes. `layoutId` must be unique per control.
+function Segmented({ items, value, onChange, layoutId, label, className = '' }) {
   return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={`flex items-center gap-2 px-1 pb-2 border-b-2 font-ninja text-sm transition-colors ${
-        active
-          ? 'font-bold text-ninja-navy'
-          : 'font-semibold text-ninja-muted hover:text-ninja-navy border-transparent'
-      }`}
-      style={active ? { borderBottomColor: color } : undefined}
-    >
-      {children}
-    </button>
+    <div role="tablist" aria-label={label}
+      className={`inline-flex items-center gap-1 p-1 rounded-[16px] bg-ninja-navy/[0.05] border border-ninja-border ${className}`}>
+      {items.map((it) => {
+        const active = it.key === value;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(it.key)}
+            className={`relative flex-shrink-0 inline-flex items-center gap-2 h-10 rounded-[12px] font-ninja text-sm whitespace-nowrap transition-colors duration-150 active:scale-[0.97] ${it.logo ? 'pl-2 pr-3.5' : 'px-3.5'} ${active ? 'font-extrabold text-ninja-navy' : 'font-bold text-ninja-muted hover:text-ninja-navy'}`}
+          >
+            {active && (
+              <motion.span layoutId={layoutId} transition={SLIDE} aria-hidden
+                className="absolute inset-0 rounded-[12px] bg-white shadow-[0_1px_2px_rgb(6_13_26_/_0.08),0_4px_12px_-4px_rgb(6_13_26_/_0.18)] ring-1 ring-ninja-border" />
+            )}
+            {it.logo && (
+              <img src={it.logo} alt="" draggable={false}
+                className={`relative w-7 h-7 object-contain transition-[opacity,filter] duration-150 ${active ? '' : 'opacity-60 saturate-50'}`} />
+            )}
+            <span className="relative">{it.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -69,7 +70,6 @@ export default function CurriculumRoadmapPage() {
   }, []);
 
   const current = programs.find((p) => p.program === activeProgram);
-  const color = colorFor(activeProgram);
 
   return (
     <Layout>
@@ -84,29 +84,20 @@ export default function CurriculumRoadmapPage() {
 
         {!loading && !error && programs.length > 0 && (
           <>
-            {/* Program tabs. Logo identifies the program, the rule marks the one
-                you are in. Scrolls sideways on a phone rather than wrapping into
-                a block of buttons. */}
-            <div className="flex flex-wrap gap-x-6 gap-y-2 border-b border-ninja-border mt-7">
-              {programs.map((p) => (
-                <Tab
-                  key={p.program}
-                  active={p.program === activeProgram}
-                  color={colorFor(p.program)}
-                  onClick={() => { setActiveProgram(p.program); setSection('course'); }}
-                >
-                  {PROGRAM_LOGOS[p.program] && (
-                    <img
-                      src={PROGRAM_LOGOS[p.program]}
-                      alt=""
-                      className={`w-5 h-5 object-contain transition-opacity ${
-                        p.program === activeProgram ? '' : 'opacity-50'
-                      }`}
-                    />
-                  )}
-                  {p.program}
-                </Tab>
-              ))}
+            {/* Programs on the left, what to read about the chosen one on
+                the right. The program row scrolls sideways on a phone rather
+                than wrapping into a block of buttons. */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-6 mb-5">
+              <div className="-mx-4 px-4 sm:mx-0 sm:px-0 max-w-full overflow-x-auto no-scrollbar">
+                <Segmented
+                  label="Programs"
+                  layoutId="curriculum-program"
+                  value={activeProgram}
+                  onChange={(key) => { setActiveProgram(key); setSection('course'); }}
+                  items={programs.map((p) => ({ key: p.program, label: p.program, logo: PROGRAM_LOGOS[p.program] }))}
+                />
+              </div>
+              <Segmented label="Section" layoutId="curriculum-section" value={section} onChange={setSection} items={SECTIONS} />
             </div>
 
             <AnimatePresence mode="wait">
@@ -118,21 +109,6 @@ export default function CurriculumRoadmapPage() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <div className="flex justify-end pt-5 pb-4">
-                    <div className="flex gap-5">
-                      {SECTIONS.map((s) => (
-                        <Tab
-                          key={s.key}
-                          active={section === s.key}
-                          color={color}
-                          onClick={() => setSection(s.key)}
-                        >
-                          {s.label}
-                        </Tab>
-                      ))}
-                    </div>
-                  </div>
-
                   {section === 'course' ? (
                     <Suspense fallback={<SkeletonCards count={1} height={260} label={`Loading ${current.program}`} />}>
                       <CourseDetail key={current.program} enrollment={{ program: current.program }} mode="reference" />
