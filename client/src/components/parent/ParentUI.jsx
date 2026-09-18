@@ -98,8 +98,12 @@ export function Hero({ program, size = 'card', className = '', style = {}, child
           />
         </>
       )}
+      {/* A staff banner is one height whatever the program: CREATE's, which
+          carries the belt road under its title. The others sit at the same
+          top with the room below, so switching programs does not move the
+          title or the page underneath. */}
       {size === 'page' || size === 'bleed'
-        ? <div className="lg:relative lg:max-w-6xl lg:mx-auto lg:px-6 lg:pt-14 lg:pb-12">{children}</div>
+        ? <div className={`lg:relative lg:max-w-6xl lg:mx-auto lg:px-6 lg:pt-14 lg:pb-12 ${size === 'bleed' ? 'lg:min-h-[18.5rem]' : ''}`}>{children}</div>
         : children}
     </div>
   );
