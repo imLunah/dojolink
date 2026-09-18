@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BugIcon, Globe2Icon, GraduationCapIcon, TrophyIcon, WrenchIcon } from 'lucide-react';
 import { Hero, PinnedHero, PageSheet, Emblem, BeltRoad, BeltStickers, LevelPills, LevelMedal, hasLevelMedal, Group, Row, Tile, StatusDot, StatusText, BackChip } from './ParentUI';
@@ -13,6 +13,7 @@ import { Tilt } from '../ui/Tilt';
 import { KIT_SHORT } from '../../lib/programTheme';
 import { useCurriculum } from '../../context/CurriculumContext';
 import BeltIcon from '../ui/BeltIcon';
+import useStaffBleed from '../../lib/useStaffBleed';
 
 // One course, opened from a child's profile.
 //
@@ -59,14 +60,31 @@ const PROJECT_KIND = {
 // The page's two halves. A parent's page pins the banner and slides the rest
 // over it on a sheet; the staff layout has neither, so there the banner is
 // just the first block on the page.
-function Frame({ block, hero, children }) {
-  if (block) return <div className="space-y-4">{hero}{children}</div>;
+// On the staff side a page can put its own row between the banner and the
+// course (`between`), or show something else under the banner altogether
+// (`body`): the Curriculum page's program switcher and its Resources tab.
+function Frame({ block, hero, between, body, children }) {
+  if (block) {
+    return (
+      <div className="space-y-4">
+        <StaffBleed>{hero}</StaffBleed>
+        {between}
+        {body ?? children}
+      </div>
+    );
+  }
   return (
     <div className="relative">
       <PinnedHero>{hero}</PinnedHero>
       <PageSheet>{children}</PageSheet>
     </div>
   );
+}
+
+// The staff banner, pulled out to the page's top and side edges on a desktop.
+function StaffBleed({ children }) {
+  const { ref, style } = useStaffBleed();
+  return <div ref={ref} style={style}>{children}</div>;
 }
 
 function ProjectKindIcon({ kind, status }) {
@@ -105,7 +123,7 @@ function ProjectRow({ p, first, reference }) {
   );
 }
 
-function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
+function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode, between, body }) {
   const reference = mode === 'reference';
   const block = mode !== 'parent';
   // The curriculum has no ninja wearing a belt, so it opens on White and
@@ -171,20 +189,23 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
     : [earned ? 'Earned' : 'Ahead', levels.length ? `${levels.length} level${levels.length === 1 ? '' : 's'}` : null, belted?.language, next ? `earns ${next}` : null].filter(Boolean).join(' · ');
 
   if (!belt) {
+    const Wrap = block ? StaffBleed : Fragment;
     return (
       <div className="space-y-4">
-        <Hero program="CREATE" size={block ? 'feature' : 'page'}>
+        <Wrap>
+        <Hero program="CREATE" size={block ? 'bleed' : 'page'}>
           {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <p className="font-ninja text-[12px] font-extrabold opacity-85">CREATE · {childName}</p>
           <p className="font-ninja font-extrabold text-[32px] leading-tight mt-1">White belt ahead</p>
           <p className="font-ninja text-[13px] opacity-85 mt-1">The belt road starts with the first logged session.</p>
         </Hero>
+        </Wrap>
       </div>
     );
   }
 
   const hero = (
-        <Hero program="CREATE" size={block ? 'feature' : 'page'} className={block ? '' : '!mt-0'}>
+        <Hero program="CREATE" size={block ? 'bleed' : 'page'} className={block ? '' : '!mt-0'}>
           {/* The belt IS the hero's art on every width. Desktop: it is scenery,
               and scenery has to stay legible as the thing it is. Blown up to
               twice the banner it stopped being a belt at all — the frame filled
@@ -234,7 +255,7 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
               everything written. */}
           <span
             aria-hidden
-            className={`hidden lg:block absolute inset-y-[-15%] aspect-square pointer-events-none ${block ? 'right-[-3rem]' : 'right-[calc(50%-50cqw-3rem)]'}`}
+            className="hidden lg:block absolute inset-y-[-15%] right-[calc(50%-50cqw-3rem)] aspect-square pointer-events-none"
             style={{
               zIndex: -1,
               maskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
@@ -280,7 +301,7 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
   );
 
   return (
-    <Frame block={block} hero={hero}>
+    <Frame block={block} hero={hero} between={between} body={body}>
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
             <AnimatePresence mode="wait" initial={false}>
@@ -505,7 +526,7 @@ const nameKey = (...parts) => JSON.stringify(parts);
 // belongs to, capstone on the row and lesson badges on the open module's own
 // list. The whole-collection view lives in the sticker book page, where a
 // collection belongs.
-function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
+function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, between, body }) {
   const reference = mode === 'reference';
   const block = mode !== 'parent';
   const p = enrollment.program;
@@ -576,7 +597,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
     : (current?.working ? `Module ${current.working.index} of ${current.modules.length} · ${current.working.name}` : started ? `${current.sessions} session${current.sessions === 1 ? '' : 's'}` : 'Just getting started');
 
   const hero = (
-        <Hero program={p} size={block ? 'feature' : 'page'} className={block ? '' : '!mt-0'}>
+        <Hero program={p} size={block ? 'bleed' : 'page'} className={block ? '' : '!mt-0'}>
           {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -596,7 +617,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
   );
 
   return (
-    <Frame block={block} hero={hero}>
+    <Frame block={block} hero={hero} between={between} body={body}>
         <div className="space-y-4">
           {open && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
@@ -679,7 +700,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
 
 // `mode` is 'parent' (the portal's own page), 'staff' (one ninja, in the staff
 // layout) or 'reference' (the curriculum, no ninja). See the top of the file.
-export default function CourseDetail({ enrollment, logs = [], childName, backTo, backLabel = 'Back to profile', mode = 'parent' }) {
-  const props = { enrollment, logs, childName, backTo, backLabel, mode };
+export default function CourseDetail({ enrollment, logs = [], childName, backTo, backLabel = 'Back to profile', mode = 'parent', between, body }) {
+  const props = { enrollment, logs, childName, backTo, backLabel, mode, between, body };
   return enrollment.program === 'CREATE' ? <CreateDetail {...props} /> : <TrackDetail {...props} />;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Layout from '../components/layout/Layout';
 import { api } from '../api/client';
 import { PROGRAM_LOGOS } from '../utils/beltConfig';
@@ -71,55 +71,44 @@ export default function CurriculumRoadmapPage() {
 
   const current = programs.find((p) => p.program === activeProgram);
 
+  // Programs on the left, what to read about the chosen one on the right.
+  // It sits under the banner, the way the parent course puts its page under
+  // the hero. The program row scrolls sideways on a phone rather than
+  // wrapping into a block of buttons.
+  const switcher = (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 max-w-full overflow-x-auto no-scrollbar">
+        <Segmented
+          label="Programs"
+          layoutId="curriculum-program"
+          value={activeProgram}
+          onChange={(key) => { setActiveProgram(key); setSection('course'); }}
+          items={programs.map((p) => ({ key: p.program, label: p.program, logo: PROGRAM_LOGOS[p.program] }))}
+        />
+      </div>
+      <Segmented label="Section" layoutId="curriculum-section" value={section} onChange={setSection} items={SECTIONS} />
+    </div>
+  );
+
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="font-ninja font-extrabold text-2xl text-ninja-navy">Curriculum</h1>
-        <p className="font-ninja text-sm text-ninja-muted mt-1">
-          Every program, module and lesson, plus the reference material for each.
-        </p>
+        {/* The banner is the top of the page and says "Curriculum" itself. */}
+        <h1 className="sr-only">Curriculum</h1>
 
-        {loading && <div className="mt-8"><SkeletonList rows={6} label="Loading curriculum" /></div>}
+        {loading && <SkeletonList rows={6} label="Loading curriculum" />}
         {error && <p className="font-ninja text-sm text-ninja-red py-12 text-center">{error}</p>}
 
-        {!loading && !error && programs.length > 0 && (
-          <>
-            {/* Programs on the left, what to read about the chosen one on
-                the right. The program row scrolls sideways on a phone rather
-                than wrapping into a block of buttons. */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-6 mb-5">
-              <div className="-mx-4 px-4 sm:mx-0 sm:px-0 max-w-full overflow-x-auto no-scrollbar">
-                <Segmented
-                  label="Programs"
-                  layoutId="curriculum-program"
-                  value={activeProgram}
-                  onChange={(key) => { setActiveProgram(key); setSection('course'); }}
-                  items={programs.map((p) => ({ key: p.program, label: p.program, logo: PROGRAM_LOGOS[p.program] }))}
-                />
-              </div>
-              <Segmented label="Section" layoutId="curriculum-section" value={section} onChange={setSection} items={SECTIONS} />
-            </div>
-
-            <AnimatePresence mode="wait">
-              {current && (
-                <motion.div
-                  key={current.program}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  {section === 'course' ? (
-                    <Suspense fallback={<SkeletonCards count={1} height={260} label={`Loading ${current.program}`} />}>
-                      <CourseDetail key={current.program} enrollment={{ program: current.program }} mode="reference" />
-                    </Suspense>
-                  ) : (
-                    <CurriculumResources program={current.program} />
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
+        {!loading && !error && current && (
+          <Suspense fallback={<SkeletonCards count={1} height={260} label={`Loading ${current.program}`} />}>
+            <CourseDetail
+              key={current.program}
+              enrollment={{ program: current.program }}
+              mode="reference"
+              between={switcher}
+              body={section === 'resources' ? <CurriculumResources program={current.program} /> : undefined}
+            />
+          </Suspense>
         )}
       </div>
     </Layout>
