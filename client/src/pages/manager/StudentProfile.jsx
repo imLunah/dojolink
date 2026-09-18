@@ -127,11 +127,11 @@ export default function StudentProfile() {
             studentNumber={`#${String(student.id).padStart(4, '0')}`}
             belt={create?.belt_level} level={create?.level} tone={student.ninja_skin_tone}
             programCount={programs.length} sessionCount={activityLogs.length} className="!mt-0"
-            left={<button type="button" onClick={() => navigate('/manager/students')} aria-label="Back to roster" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/35 bg-white/15 font-ninja text-xl font-black text-white backdrop-blur-sm">←</button>}
+            left={<button type="button" onClick={() => navigate('/manager/students')} aria-label="Back to roster" className="lg:ml-5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/35 bg-white/15 font-ninja text-xl font-black text-white backdrop-blur-sm">←</button>}
             right={<div className="flex items-center gap-2">
               {manager && !isReadOnly && <button type="button" onClick={() => setShowEdit(true)} className="hidden sm:inline-flex h-11 items-center gap-2 rounded-xl border border-white/35 bg-white/15 px-4 font-ninja text-sm font-extrabold text-white backdrop-blur-sm"><PencilIcon size={16} />Edit</button>}
-              {!isReadOnly && programs.length > 0 && <button type="button" onClick={() => navigate(logUrl)} className="hidden sm:inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 font-ninja text-sm font-extrabold text-[#0c3d99]"><PlusIcon size={17} />Log session</button>}
-              <button type="button" onClick={() => setShowNote(true)} aria-label="Open pinned note" className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#315383]"><Pin className="h-[18px] w-[18px] -rotate-12" /></button>
+              {!isReadOnly && programs.length > 0 && <button type="button" onClick={() => navigate(logUrl)} className="hidden sm:inline-flex h-11 items-center gap-2 rounded-xl bg-[#fff] px-4 font-ninja text-sm font-extrabold text-[#0c3d99]"><PlusIcon size={17} />Log session</button>}
+              <button type="button" onClick={() => setShowNote(true)} aria-label="Open pinned note" className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#fff] text-[#315383]"><Pin className="h-[18px] w-[18px] -rotate-12" /></button>
             </div>} />
         </PinnedHero>
 
