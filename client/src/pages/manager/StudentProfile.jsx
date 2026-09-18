@@ -453,6 +453,78 @@ function DesktopActivityChart({ logs }) {
   );
 }
 
+// The staff-facing version of the parent portal's profile masthead. It keeps
+// the same quick visual read, but swaps parent-facing decoration for the
+// operational details a sensei needs while working with the ninja.
+function StudentHero({ student, programs, createEnrollment, activitySessions, locationName, isBirthday, isManager, isReadOnly, canEditSticker, onEditSticker, onEdit, onLog }) {
+  const joined = student.created_at
+    ? new Date(student.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : '—';
+  const currentBelt = createEnrollment?.belt_level;
+  const age = student.birthday
+    ? Math.floor((Date.now() - new Date(student.birthday.split('T')[0] + 'T00:00:00')) / (365.25 * 24 * 60 * 60 * 1000))
+    : null;
+  const stats = [
+    { label: 'Student number', value: `#${String(student.id).padStart(4, '0')}` },
+    { label: 'Sessions', value: activitySessions.length },
+    { label: 'Programs', value: programs.length },
+    { label: 'Current belt', value: currentBelt || '—', belt: currentBelt },
+  ];
+
+  return (
+    <motion.section
+      className="relative isolate overflow-hidden rounded-[28px] px-5 py-6 text-white sm:px-7 sm:py-7 lg:min-h-[300px] lg:px-10 lg:py-9"
+      style={{ background: 'linear-gradient(125deg, rgb(var(--ninja-blue)) 0%, #1553bf 58%, #103b8e 100%)' }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div className="pointer-events-none absolute -right-12 -top-20 h-72 w-72 rounded-full bg-cyan-300/15 blur-3xl" />
+      <img src="/profile/ninja-wave.png" alt="" aria-hidden="true"
+        className="pointer-events-none absolute -bottom-16 right-2 hidden w-[300px] select-none object-contain drop-shadow-2xl lg:block xl:right-10 xl:w-[340px]" />
+
+      <div className="relative z-10 max-w-3xl lg:max-w-[68%]">
+        <div className="flex flex-wrap items-start justify-between gap-4 lg:flex-nowrap">
+          <div className="min-w-0 flex-1">
+            <p className="font-ninja text-[11px] font-black uppercase tracking-[0.14em] text-white/70 sm:text-xs">Ninja since {joined}</p>
+            <h1 className="mt-1.5 font-ninja text-3xl font-black leading-[1.05] tracking-[-0.03em] sm:text-4xl lg:text-5xl">
+              {student.full_name}{isBirthday && <span className="ml-2">🎂</span>}
+            </h1>
+            <p className="mt-2 font-ninja text-sm font-bold text-white/75">
+              {[locationName, age != null ? `Age ${age}` : null].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <div className="lg:hidden">
+            <StudentAvatar student={student} canEditSticker={canEditSticker} onEditSticker={onEditSticker} />
+          </div>
+          <div className="flex w-full flex-shrink-0 items-center gap-2 lg:w-auto">
+            {isManager && !isReadOnly && (
+              <button type="button" onClick={onEdit}
+                className="rounded-xl border border-white/30 bg-white/10 px-3.5 py-2 font-ninja text-sm font-extrabold text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-[0.97]">Edit</button>
+            )}
+            {programs.length > 0 && !isReadOnly && (
+              <button type="button" onClick={onLog}
+                className="rounded-xl bg-white px-3.5 py-2 font-ninja text-sm font-black text-ninja-blue shadow-sm transition-transform active:scale-[0.97]">Log session</button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-9 lg:mt-16">
+          {stats.map((stat) => (
+            <div key={stat.label} className="min-w-0">
+              <div className="flex items-center gap-2">
+                {stat.belt && <BeltIcon belt={stat.belt} size={28} className="h-7 w-7 flex-shrink-0" />}
+                <p className="truncate font-ninja text-2xl font-black leading-none sm:text-3xl">{stat.value}</p>
+              </div>
+              <p className="mt-1.5 font-ninja text-[10px] font-black uppercase tracking-[0.1em] text-white/65 sm:text-xs">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.section>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StudentProfile() {
   const { id } = useParams();
@@ -545,17 +617,7 @@ export default function StudentProfile() {
   const activitySessions = [...sessionLogs, ...clubSessions];
   const locationName = user?.availableLocations?.find(l => l.id === student.location_id)?.name;
 
-  // Desktop stats
-  const now = new Date();
-  const sessionsThisMonth = activitySessions.filter((l) => {
-    const d = new Date(String(l.session_date).split('T')[0] + 'T00:00:00');
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
   const displayLogs = [...sessionLogs].sort((a, b) => new Date(b.session_date) - new Date(a.session_date));
-  const sortedSessions = [...activitySessions].sort((a, b) => new Date(b.session_date) - new Date(a.session_date));
-  const lastSessionStr = sortedSessions[0]
-    ? new Date(String(sortedSessions[0].session_date).split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : '—';
 
   return (
     <Layout>
@@ -571,44 +633,28 @@ export default function StudentProfile() {
           ← Back to Roster
         </motion.button>
 
+        <StudentHero
+          student={student}
+          programs={programs}
+          createEnrollment={createEnrollment}
+          activitySessions={activitySessions}
+          locationName={locationName}
+          isBirthday={isStudentBirthday}
+          isManager={isManager}
+          isReadOnly={isReadOnly}
+          canEditSticker={canEditSticker}
+          onEditSticker={() => setShowStickerPicker(true)}
+          onEdit={() => setShowEdit(true)}
+          onLog={() => navigate(`/sensei/student/${student.id}?programs=${encodeURIComponent(programs.map((p) => p.program).join(','))}`)}
+        />
+
         {/* ── Mobile layout ───────────────────────────────────────────────── */}
         <motion.div
-          className="lg:hidden space-y-4"
+          className="lg:hidden mt-4 space-y-4"
           variants={stagger}
           initial="hidden"
           animate="show"
         >
-          {/* Compact header */}
-          <motion.div variants={fadeUp} className="bg-white rounded-2xl p-4 shadow-sm border border-ninja-border">
-            <div className="flex items-center gap-3">
-              <StudentAvatar
-                student={student}
-                canEditSticker={canEditSticker}
-                onEditSticker={() => setShowStickerPicker(true)}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <h1 className="text-xl font-bold font-ninja text-ninja-navy leading-tight">{student.full_name}{isStudentBirthday && <span className="ml-2">🎂</span>}</h1>
-                  {isManager && !isReadOnly && (
-                    <button
-                      onClick={() => setShowEdit(true)}
-                      className="text-ninja-blue font-ninja text-sm font-semibold flex-shrink-0"
-                    >
-                      Edit
-                    </button>
-                  )}
-                </div>
-                <p className="text-ninja-muted font-ninja text-sm mt-0.5 truncate">
-                  {[
-                    locationName,
-                    programs.map(p => p.program === 'Robotics Academy' ? 'Robotics' : p.program === 'AI Academy' ? 'AI' : p.program).join(' · '),
-                    `Joined ${student.created_at ? new Date(student.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'}`,
-                  ].filter(Boolean).join(' · ')}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-
           {/* Pinned Note — first so senseis can't miss it. Parent note folded in. */}
           <motion.div variants={fadeUp}>
             <PinnedNote
@@ -660,61 +706,12 @@ export default function StudentProfile() {
             </motion.div>
           )}
 
-          {/* Log Progress CTA */}
-          {!isReadOnly && programs.length > 0 && (
-            <motion.button
-              variants={fadeUp}
-              onClick={() => navigate(`/sensei/student/${student.id}?programs=${encodeURIComponent(programs.map(p => p.program).join(','))}`)}
-              className="w-full bg-ninja-blue text-white font-ninja font-bold py-3.5 rounded-2xl shadow-sm"
-            >
-              Log Progress
-            </motion.button>
-          )}
         </motion.div>
 
         {/* ── Desktop layout (lg+) ── */}
         <div className="hidden lg:block">
-
-          {/* Page header */}
-          <motion.div
-            className="flex items-start justify-between gap-4 mb-6"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div>
-              <h1 className="text-2xl font-bold font-ninja text-ninja-navy leading-tight">{student.full_name}{isStudentBirthday && <span className="ml-2">🎂</span>}</h1>
-              <p className="text-ninja-muted font-ninja text-sm mt-1">
-                {[
-                  programs.map((p) => p.program === 'Robotics Academy' ? 'Robotics' : p.program === 'AI Academy' ? 'AI' : p.program).join(' · '),
-                  `Joined ${student.created_at ? new Date(student.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'}`,
-                  locationName,
-                  student.parent_name && `Parent: ${student.parent_name}`,
-                ].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {isManager && !isReadOnly && (
-                <button
-                  onClick={() => setShowEdit(true)}
-                  className="border border-ninja-border text-ninja-navy font-ninja font-semibold text-sm px-4 py-2 rounded-xl hover:bg-ninja-bg transition-colors"
-                >
-                  Edit
-                </button>
-              )}
-              {programs.length > 0 && !isReadOnly && (
-                <button
-                  onClick={() => navigate(`/sensei/student/${student.id}?programs=${encodeURIComponent(programs.map((p) => p.program).join(','))}`)}
-                  className="bg-ninja-blue text-white font-ninja font-bold text-sm px-4 py-2 rounded-xl hover:bg-ninja-blue/90 transition-colors"
-                >
-                  + Log Session
-                </button>
-              )}
-            </div>
-          </motion.div>
-
           {/* Two-column layout */}
-          <div className="flex gap-6 items-start">
+          <div className="mt-5 flex gap-6 items-start">
 
             {/* Left column */}
             <motion.div
@@ -779,46 +776,17 @@ export default function StudentProfile() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1], delay: 0.12 }}
             >
-              {/* Student info card */}
+              {/* Small operational details that do not belong in the public-facing hero. */}
               <div className="bg-white rounded-2xl p-5 border border-ninja-border shadow-sm">
-                <div className="flex flex-col items-center text-center mb-4">
-                  <div className="mb-3">
-                    <StudentAvatar
-                      student={student}
-                      size="lg"
-                      delay={0.22}
-                      canEditSticker={canEditSticker}
-                      onEditSticker={() => setShowStickerPicker(true)}
-                    />
+                <p className="mb-3 font-ninja text-xs font-black uppercase tracking-[0.08em] text-ninja-muted">Ninja details</p>
+                <div className="flex items-center gap-3">
+                  <StudentAvatar student={student} canEditSticker={canEditSticker} onEditSticker={() => setShowStickerPicker(true)} />
+                  <div className="min-w-0">
+                    <p className="font-ninja text-sm font-bold text-ninja-navy">Code.AI sticker</p>
+                    <p className="font-ninja text-xs leading-snug text-ninja-muted">
+                      {canEditSticker ? 'Tap the avatar to update it.' : 'Available for JR ninjas.'}
+                    </p>
                   </div>
-                  <h2 className="font-ninja font-bold text-ninja-navy text-lg leading-tight">{student.full_name}</h2>
-                  <p className="text-ninja-muted font-ninja text-sm mt-0.5">
-                    {student.birthday
-                      ? `Age ${Math.floor((Date.now() - new Date(student.birthday.split('T')[0] + 'T00:00:00')) / (365.25 * 24 * 60 * 60 * 1000))} · `
-                      : ''}
-                    Member since {student.created_at ? new Date(student.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—'}
-                  </p>
-                </div>
-
-                {/* Stats 2×2 */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {[
-                    { label: 'Sessions', value: activitySessions.length },
-                    { label: 'This month', value: sessionsThisMonth },
-                    { label: 'Current belt', value: createEnrollment?.belt_level || '—' },
-                    { label: 'Last session', value: lastSessionStr },
-                  ].map((s, i) => (
-                    <motion.div
-                      key={s.label}
-                      className="bg-ninja-bg rounded-xl p-3"
-                      initial={{ opacity: 0, scale: 0.92 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.3, ease: 'easeOut', delay: i * 0.06 + 0.3 }}
-                    >
-                      <p className="text-ninja-muted font-ninja text-xs">{s.label}</p>
-                      <p className="font-ninja font-black text-ninja-navy text-lg leading-tight mt-0.5 truncate">{s.value}</p>
-                    </motion.div>
-                  ))}
                 </div>
 
                 {/* Parent contact */}
