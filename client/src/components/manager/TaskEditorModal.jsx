@@ -561,7 +561,7 @@ function TaskComments({ task, canComment, onCount }) {
             <div key={c.id} className="flex gap-2">
               <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
               <div className="min-w-0">
-                <p className="font-ninja text-sm text-ninja-navy break-words"><Linkify>{c.body}</Linkify></p>
+                <p className="font-ninja text-sm text-ninja-navy break-words whitespace-pre-wrap"><Linkify>{c.body}</Linkify></p>
                 <p className="font-ninja text-xs text-ninja-muted mt-0.5">
                   {c.author_name || 'No longer here'} · {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
@@ -574,23 +574,39 @@ function TaskComments({ task, canComment, onCount }) {
       ) : null}
 
       {canComment && (
-        <form onSubmit={post} className="flex items-center gap-2">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            maxLength={2000}
-            placeholder={comments?.length ? 'Reply…' : 'Say how it is going…'}
-            aria-label="Add a comment"
-            className="flex-1 rounded-xl bg-white border border-ninja-border focus:border-ninja-blue transition-colors px-3 py-2 font-ninja text-sm text-ninja-navy"
-          />
-          <button
-            type="submit"
-            disabled={!text.trim() || posting}
-            aria-label="Post comment"
-            className="w-9 h-9 flex items-center justify-center rounded-xl border border-ninja-border text-ninja-muted hover:text-ninja-blue hover:border-ninja-blue transition-colors flex-shrink-0 disabled:opacity-50"
-          >
-            <SendIcon size={15} strokeWidth={2.25} />
-          </button>
+        <form onSubmit={post}>
+          {/* A box to write in, not a field to fill: room for a few lines of
+              how it is going, with the send button sitting in its corner.
+              Enter posts, the way a chat does; Shift+Enter starts a new line. */}
+          <div className="relative rounded-2xl bg-white border border-ninja-border focus-within:border-ninja-blue transition-colors">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (text.trim() && !posting) e.currentTarget.form.requestSubmit();
+                }
+              }}
+              maxLength={2000}
+              rows={4}
+              placeholder={comments?.length ? 'Reply…' : 'Say how it is going…'}
+              aria-label="Add a comment"
+              className="block w-full min-h-[120px] resize-y rounded-2xl bg-transparent px-4 pt-3 pb-14 font-ninja text-[15px] leading-relaxed text-ninja-navy focus:outline-none"
+            />
+            <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2">
+              <span className="hidden sm:inline font-ninja text-[11px] text-ninja-muted">Shift+Enter for a new line</span>
+              <button
+                type="submit"
+                disabled={!text.trim() || posting}
+                aria-label="Post comment"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-ninja-blue text-white font-ninja text-sm font-bold hover:bg-ninja-blue-hover transition-[background-color,opacity,transform] duration-150 active:scale-95 disabled:opacity-40 disabled:active:scale-100"
+              >
+                <SendIcon size={15} strokeWidth={2.25} aria-hidden="true" />
+                Post
+              </button>
+            </div>
+          </div>
         </form>
       )}
       {error && <p className="mt-1.5 font-ninja text-xs text-ninja-red">{error}</p>}
