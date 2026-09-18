@@ -118,7 +118,7 @@ export function useStickerZoom() {
 // lessons", which is a better answer than any static sentence and is only
 // knowable by the caller; CREATE's own "Complete White Belt Level 1" stays the
 // default so nothing at that call site had to change.
-export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement, earnedLabel }) {
+export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement, earnedLabel, reference = false }) {
   const locked = requirement || stickerRequirement(item);
   const { controls, shake } = useLockedShake();
   return (
@@ -158,7 +158,7 @@ export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement,
             className={`h-[82px] w-[82px] select-none object-contain ${isEarned ? 'drop-shadow-[0_8px_9px_rgb(6_13_26_/_0.16)]' : 'grayscale opacity-25'}`}
           />
         </TiltLayer>
-        <TiltLayer
+        {!reference && <TiltLayer
           depth={34}
           as={motion.span}
           aria-hidden="true"
@@ -167,7 +167,7 @@ export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement,
           {isEarned
             ? <CheckIcon size={15} strokeWidth={3.2} />
             : <LockKeyholeIcon size={14} strokeWidth={2.6} />}
-        </TiltLayer>
+        </TiltLayer>}
       </div>
       {rarity && (
         <TiltLayer depth={26} as={motion.span} className="mt-2 inline-flex">
@@ -177,8 +177,10 @@ export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement,
       <TiltLayer depth={18} as={motion.p} className={`${rarity ? 'mt-1.5' : 'mt-2'} font-ninja text-[13.5px] font-extrabold leading-tight ${isEarned ? 'text-ninja-navy' : 'text-ninja-navy/55'}`}>
         {item.title}
       </TiltLayer>
-      <p className={`mt-1 font-ninja text-[11px] leading-snug ${isEarned ? 'font-bold text-emerald-600' : 'text-ninja-muted'}`}>
-        {isEarned ? (earnedLabel || 'Earned') : locked}
+      {/* The curriculum has nobody to have earned anything, so every sticker
+          says what earns it. */}
+      <p className={`mt-1 font-ninja text-[11px] leading-snug ${isEarned && !reference ? 'font-bold text-emerald-600' : 'text-ninja-muted'}`}>
+        {reference ? locked : isEarned ? (earnedLabel || 'Earned') : locked}
       </p>
     </Tilt>
     </motion.div>
@@ -188,7 +190,7 @@ export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement,
 // Only an earned sticker opens this now (a locked one rattles instead), but
 // the locked half stays: it is one line, and it is the honest thing to show
 // if another surface ever opens a sticker that has not been earned.
-export function StickerZoom({ item, isEarned, onClose, flat, rarity, requirement, detail }) {
+export function StickerZoom({ item, isEarned, onClose, flat, rarity, requirement, detail, reference = false }) {
   const closeRef = useRef(null);
   const locked = requirement || stickerRequirement(item);
   // CREATE stickers describe themselves out of the belt curriculum. A module
@@ -265,10 +267,10 @@ export function StickerZoom({ item, isEarned, onClose, flat, rarity, requirement
           <h3 className="mt-4 font-ninja text-[21px] font-extrabold leading-tight text-ninja-navy">{item.title}</h3>
 
           <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ninja text-[11.5px] font-extrabold ${isEarned ? 'bg-emerald-500/12 text-emerald-600' : 'bg-ninja-navy/[0.06] text-ninja-muted'}`}>
+            {!reference && <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ninja text-[11.5px] font-extrabold ${isEarned ? 'bg-emerald-500/12 text-emerald-600' : 'bg-ninja-navy/[0.06] text-ninja-muted'}`}>
               {isEarned ? <CheckIcon size={13} strokeWidth={3.2} /> : <LockKeyholeIcon size={12} strokeWidth={2.6} />}
               {isEarned ? 'Earned' : 'Not earned yet'}
-            </span>
+            </span>}
             <RarityChip rarity={rarity} />
           </div>
 
@@ -277,7 +279,7 @@ export function StickerZoom({ item, isEarned, onClose, flat, rarity, requirement
               the level block below carries the only description we can stand
               behind. A sentence in this slot would have to be invented, which
               is the mistake this whole set replaced. */}
-          {!isEarned && (
+          {(!isEarned || reference) && (
             <p className="mx-auto mt-3 max-w-[34ch] text-balance font-ninja text-[14px] leading-relaxed text-ninja-navy/85">
               {locked}
             </p>
@@ -475,7 +477,9 @@ export function StickerBook({ belt, level, logs, href, className = '' }) {
 // profile, from the card that summarises it, and this page is already showing
 // the stickers — a row at the bottom of a grid of stickers offering to go and
 // see the stickers is a door back into the room you are standing in.
-export default function StickerCollection({ belt, earnedIds, earnedTotal, childName }) {
+// `reference` is the curriculum's copy of the grid: no ninja, so every sticker
+// is shown in colour with what earns it, and nothing is counted.
+export default function StickerCollection({ belt, earnedIds, earnedTotal, childName, reference = false }) {
   const { zoomed, open, close } = useStickerZoom();
   const flat = useReducedMotion();
   const rarity = useStickerRarity();
@@ -494,12 +498,16 @@ export default function StickerCollection({ belt, earnedIds, earnedTotal, childN
             <h2 className="font-ninja text-[17px] font-extrabold">{belt} belt stickers</h2>
           </div>
           <p className="mt-1 font-ninja text-[12.5px] text-ninja-muted">
-            {earnedTotal} of {CREATE_STICKERS.length} earned across CREATE. Tap one to open it.
+            {reference
+              ? `${stickers.length} sticker${stickers.length === 1 ? '' : 's'} on this belt. Tap one to open it.`
+              : `${earnedTotal} of ${CREATE_STICKERS.length} earned across CREATE. Tap one to open it.`}
           </p>
         </div>
-        <div className="flex-shrink-0 whitespace-nowrap pt-0.5 font-ninja text-[12px] font-extrabold text-ninja-blue">
-          {earnedHere} of {stickers.length} earned
-        </div>
+        {!reference && (
+          <div className="flex-shrink-0 whitespace-nowrap pt-0.5 font-ninja text-[12px] font-extrabold text-ninja-blue">
+            {earnedHere} of {stickers.length} earned
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 px-3 pb-3 sm:grid-cols-3 sm:px-4 lg:grid-cols-5">
@@ -507,10 +515,11 @@ export default function StickerCollection({ belt, earnedIds, earnedTotal, childN
           <StickerCard
             key={item.id}
             item={item}
-            isEarned={earnedIds.has(item.id)}
+            isEarned={reference || earnedIds.has(item.id)}
             onOpen={open}
             flat={flat}
             rarity={rarity?.[item.id]}
+            reference={reference}
           />
         ))}
       </div>
@@ -520,10 +529,11 @@ export default function StickerCollection({ belt, earnedIds, earnedTotal, childN
           <StickerZoom
             key={zoomed.id}
             item={zoomed}
-            isEarned={earnedIds.has(zoomed.id)}
+            isEarned={reference || earnedIds.has(zoomed.id)}
             onClose={close}
             flat={flat}
             rarity={rarity?.[zoomed.id]}
+            reference={reference}
           />
         )}
       </AnimatePresence>

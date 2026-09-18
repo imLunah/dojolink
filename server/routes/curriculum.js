@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { requireManager, requireSensei } = require('../middleware/auth');
 const { listResources, getResource } = require('../resources');
+const { stickerRarity } = require('../lib/stickerRarity');
+
+// GET /api/curriculum/sticker-rarity — the parent route's histogram, for the
+// staff course pages. See lib/stickerRarity.
+router.get('/sticker-rarity', requireSensei, stickerRarity);
 
 // GET /api/curriculum/resources — reference docs for the Resources tab.
 // Staff only: these documents contain lesson answers.

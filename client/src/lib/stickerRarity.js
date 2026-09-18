@@ -194,7 +194,11 @@ let _inflight = null;
 function load() {
   if (_cache) return Promise.resolve(_cache);
   if (!_inflight) {
-    _inflight = api.get('/parent/sticker-rarity')
+    // The same histogram sits behind a parent gate and a staff one. Asking
+    // the wrong one is a 401, and a 401 raises the session-expired modal, so
+    // the side of the app decides which door to knock on.
+    const path = window.location.pathname.startsWith('/parent') ? '/parent/sticker-rarity' : '/curriculum/sticker-rarity';
+    _inflight = api.get(path)
       .then((data) => { _cache = data || null; _inflight = null; return _cache; })
       .catch(() => { _inflight = null; return null; });
   }

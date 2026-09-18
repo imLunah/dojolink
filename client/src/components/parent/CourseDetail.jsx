@@ -35,9 +35,7 @@ import BeltIcon from '../ui/BeltIcon';
 //   'staff'      one ninja's course, opened from their staff profile. Same
 //                data, same page, but in the staff layout, which has no
 //                pinned banner and no sheet to ride over it, so the hero is a
-//                block at the top of the page instead. The sticker book stays
-//                off: it asks the parent API for rarity and links into the
-//                parent portal.
+//                block at the top of the page instead.
 //   'reference'  the curriculum itself, with no ninja at all. Every belt on
 //                the road is open, nothing is greyed out as not yet done, and
 //                the rows say what a level holds rather than how far anyone
@@ -417,14 +415,13 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
             </div>
           </div>
 
-          {mode === 'parent' && (
-            <StickerCollection
-              belt={viewBelt}
-              earnedIds={earnedStickerIds}
-              earnedTotal={earnedStickerIds.size}
-              childName={childName}
-            />
-          )}
+          <StickerCollection
+            belt={viewBelt}
+            earnedIds={earnedStickerIds}
+            earnedTotal={earnedStickerIds.size}
+            childName={childName}
+            reference={reference}
+          />
         </div>
     </Frame>
   );
