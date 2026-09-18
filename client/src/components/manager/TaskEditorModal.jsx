@@ -595,7 +595,6 @@ function TaskComments({ task, canComment, onCount }) {
               className="block w-full min-h-[120px] resize-y rounded-2xl bg-transparent px-4 pt-3 pb-14 font-ninja text-[15px] leading-relaxed text-ninja-navy focus:outline-none"
             />
             <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2">
-              <span className="hidden sm:inline font-ninja text-[11px] text-ninja-muted">Shift+Enter for a new line</span>
               <button
                 type="submit"
                 disabled={!text.trim() || posting}

@@ -14,6 +14,7 @@
   - Never mention Claude, Anthropic, or AI in commits, files, docs, or output. Ask first if ever needed.
   - Push to `sandbox` by default. Only push to `main` when user explicitly says so.
   - Inline confirm buttons for destructive actions — never `window.confirm()`.
+  - Build only what was asked. No unrequested extras in the UI: no keyboard hint lines ("Shift+Enter for a new line"), helper captions, badges, counters or explanatory text the user did not ask for. If an extra seems worth having, mention it in the reply instead of shipping it (18 Sep 2026: a hint added under the task comment box was removed on sight).
   - Draft files the user edits (e.g. `RELEASE_DRAFT.md`): NEVER publish their contents or delete the file until the user confirms the on-disk version is final — IDE buffers hold unsaved edits (s33: published a stale draft + `rm`'d the file, wiping the user's unsaved version; recovered only via the still-open editor tab). If the file on disk is identical to what you last wrote, assume their edits are NOT saved yet.
   - Tailwind mobile breakpoint for hamburger: `lg` (1024px), NOT `md`.
   - `admin` role bypasses ALL role gates server and client side. Never break this bypass.
