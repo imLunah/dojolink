@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BugIcon, Globe2Icon, GraduationCapIcon, TrophyIcon, WrenchIcon } from 'lucide-react';
+import { BugIcon, CheckIcon, Globe2Icon, GraduationCapIcon, TrophyIcon, WrenchIcon } from 'lucide-react';
 import { Hero, PinnedHero, PageSheet, Emblem, BeltRoad, BeltStickers, LevelPills, LevelMedal, hasLevelMedal, Group, Row, Tile, StatusDot, StatusText, BackChip } from './ParentUI';
 import { BELTS, getLevels } from '../../utils/beltConfig';
 import { levelProjects, levelStates, levelTitle, realSessions, trackModel, fmtDay } from '../../lib/parentProgress';
@@ -458,7 +458,27 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode, be
 // The lessons are always shown, earned or not. A locked badge with the lesson
 // it is waiting on is what makes the list a map of what is coming rather than
 // a receipt for what is done, which is the whole reason a ninja opens it.
-function LessonRow({ l, badge, index, reference }) {
+function LessonRow({ l, badge, index, reference, editing = false, checked = false, changed = false, onToggle }) {
+  // Staff editing a ninja's progress: the whole row is the checkbox. What it
+  // shows is what will be saved, and a row that differs from the log is
+  // tinted so the pending changes are visible before Save.
+  if (editing) {
+    return (
+      <li>
+        <button type="button" role="checkbox" aria-checked={checked} onClick={onToggle}
+          className={`w-full flex items-center gap-3 py-2 px-4 text-left transition-colors ${changed ? 'bg-ninja-blue/[0.08]' : 'hover:bg-ninja-navy/[0.03]'}`}>
+          <span aria-hidden className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 transition-colors ${checked ? 'bg-ninja-blue border-ninja-blue text-white' : 'border-ninja-navy/25'}`}>
+            {checked && <CheckIcon size={14} strokeWidth={3.2} />}
+          </span>
+          {badge && (
+            <img src={badge.src} alt="" aria-hidden draggable={false} loading="lazy"
+              className={`h-8 w-8 flex-shrink-0 object-contain ${checked ? '' : 'grayscale opacity-30'}`} />
+          )}
+          <span className={`min-w-0 flex-1 block truncate font-ninja text-[13.5px] font-bold ${checked ? 'text-ninja-navy' : 'text-ninja-navy/55'}`}>{l.title}</span>
+        </button>
+      </li>
+    );
+  }
   // The curriculum lists the lesson and its badge as they are, with no one
   // to have finished them.
   if (reference) {
@@ -526,7 +546,7 @@ const nameKey = (...parts) => JSON.stringify(parts);
 // belongs to, capstone on the row and lesson badges on the open module's own
 // list. The whole-collection view lives in the sticker book page, where a
 // collection belongs.
-function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, between, body }) {
+function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, between, body, onSaveLessons, onSaved }) {
   const reference = mode === 'reference';
   const block = mode !== 'parent';
   const p = enrollment.program;
@@ -577,6 +597,62 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
   const pickModule = (m) => {
     setDir(m.index > (selected?.index || 0) ? 1 : -1);
     setModuleName(m.name);
+  };
+
+  // EDITING PROGRESS (staff only). A draft of the lessons whose ticks differ
+  // from the log, keyed by kit, module and lesson, so it survives moving
+  // between modules and kits and is saved in one go. Save sends each kit's
+  // ticks and unticks as the roadmap's complete and uncomplete writes.
+  const editable = mode === 'staff' && typeof onSaveLessons === 'function';
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => new Map());
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  useEffect(() => { setEditing(false); setDraft(new Map()); setSaveError(''); }, [enrollment.id]);
+
+  const draftKey = (track, mod, lesson) => nameKey(track, mod, lesson);
+  const tickedNow = (track, mod, l) => {
+    const d = draft.get(draftKey(track, mod, l.name));
+    return d ? d.done : l.done;
+  };
+  const setTick = (next, track, mod, l, value) => {
+    const k = draftKey(track, mod, l.name);
+    if (value === l.done) next.delete(k);
+    else next.set(k, { track, module: mod, lesson: l.name, done: value });
+  };
+  const toggleLesson = (l) => setDraft((prev) => {
+    const next = new Map(prev);
+    setTick(next, open.name, selected.name, l, !tickedNow(open.name, selected.name, l));
+    return next;
+  });
+  const setModule = (value) => setDraft((prev) => {
+    const next = new Map(prev);
+    for (const l of selected.lessons) setTick(next, open.name, selected.name, l, value);
+    return next;
+  });
+  const cancelEdit = () => { setEditing(false); setDraft(new Map()); setSaveError(''); };
+  const saveEdit = async () => {
+    if (!draft.size) { cancelEdit(); return; }
+    setSaving(true);
+    setSaveError('');
+    try {
+      const byTrack = new Map();
+      for (const d of draft.values()) {
+        const g = byTrack.get(d.track) || { complete: [], uncomplete: [] };
+        (d.done ? g.complete : g.uncomplete).push({ module_name: d.module, lesson_name: d.lesson });
+        byTrack.set(d.track, g);
+      }
+      for (const [track, g] of byTrack) {
+        await onSaveLessons({ subProgram: multi ? track : null, ...g });
+      }
+      await onSaved?.();
+      setEditing(false);
+      setDraft(new Map());
+    } catch (err) {
+      setSaveError(err.message || 'Could not save the progress.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const cap = selected && open ? capstones.get(nameKey(open.name, selected.name)) : null;
@@ -651,11 +727,27 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
                         </Tilt>
                       )}
                     </div>
+                    {editable && selected && selected.lessons.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                        {editing ? (
+                          <>
+                            <button type="button" onClick={() => setModule(true)} className="h-8 px-3 rounded-lg border border-ninja-border font-ninja text-xs font-bold text-ninja-navy hover:border-ninja-blue hover:text-ninja-blue transition-colors">Mark all done</button>
+                            <button type="button" onClick={() => setModule(false)} className="h-8 px-3 rounded-lg border border-ninja-border font-ninja text-xs font-bold text-ninja-navy hover:border-ninja-blue hover:text-ninja-blue transition-colors">Clear all</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setEditing(true)} className="h-8 px-3 rounded-lg bg-ninja-blue text-white font-ninja text-xs font-bold hover:bg-ninja-blue-hover transition-colors active:scale-95">Edit progress</button>
+                        )}
+                      </div>
+                    )}
                     <div className={`mx-3 mb-3 rounded-[14px] overflow-hidden ${selected ? 'border border-ninja-navy/[0.06]' : ''}`}>
                       {selected && selected.lessons.length > 0 && (
                         <ul className="tint-inset">
                           {selected.lessons.map((l, li) => (
-                            <LessonRow key={l.name} l={l} index={li + 1} reference={reference} badge={art.get(nameKey(selected.name, l.name))} />
+                            <LessonRow key={l.name} l={l} index={li + 1} reference={reference} badge={art.get(nameKey(selected.name, l.name))}
+                              editing={editing}
+                              checked={editing && tickedNow(open.name, selected.name, l)}
+                              changed={editing && draft.has(draftKey(open.name, selected.name, l.name))}
+                              onToggle={() => toggleLesson(l)} />
                           ))}
                         </ul>
                       )}
@@ -666,6 +758,15 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
                         <p className="px-4 py-3 font-ninja text-sm text-ninja-muted tint-inset">No modules listed for this {unit.toLowerCase()} yet.</p>
                       )}
                     </div>
+                    {editing && (
+                      <div className="flex flex-wrap items-center justify-end gap-2 px-4 pb-4">
+                        {saveError && <p role="alert" className="mr-auto font-ninja text-xs text-ninja-red">{saveError}</p>}
+                        <button type="button" onClick={cancelEdit} disabled={saving} className="h-9 px-4 rounded-xl font-ninja text-sm font-bold text-ninja-muted hover:text-ninja-navy transition-colors disabled:opacity-50">Cancel</button>
+                        <button type="button" onClick={saveEdit} disabled={saving || !draft.size} className="h-9 px-4 rounded-xl bg-ninja-blue text-white font-ninja text-sm font-bold hover:bg-ninja-blue-hover transition-colors active:scale-95 disabled:opacity-40">
+                          {saving ? 'Saving…' : `Save${draft.size ? ` ${draft.size} change${draft.size === 1 ? '' : 's'}` : ''}`}
+                        </button>
+                      </div>
+                    )}
                   </Group>
                 </motion.div>
               </AnimatePresence>
@@ -700,7 +801,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
 
 // `mode` is 'parent' (the portal's own page), 'staff' (one ninja, in the staff
 // layout) or 'reference' (the curriculum, no ninja). See the top of the file.
-export default function CourseDetail({ enrollment, logs = [], childName, backTo, backLabel = 'Back to profile', mode = 'parent', between, body }) {
-  const props = { enrollment, logs, childName, backTo, backLabel, mode, between, body };
+export default function CourseDetail({ enrollment, logs = [], childName, backTo, backLabel = 'Back to profile', mode = 'parent', between, body, onSaveLessons, onSaved }) {
+  const props = { enrollment, logs, childName, backTo, backLabel, mode, between, body, onSaveLessons, onSaved };
   return enrollment.program === 'CREATE' ? <CreateDetail {...props} /> : <TrackDetail {...props} />;
 }

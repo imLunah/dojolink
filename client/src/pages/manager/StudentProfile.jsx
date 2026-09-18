@@ -1,9 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import BirthdayConfetti, { isBirthdayToday } from '../../components/shared/BirthdayConfetti';
-import RoadmapModal from '../../components/shared/RoadmapModal';
 import { motion } from 'framer-motion';
-import { BookOpenIcon, MapIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import BeltIcon from '../../components/ui/BeltIcon';
@@ -23,18 +21,9 @@ import { SkeletonProfile, SkeletonCards } from '../../components/ui/Skeleton';
 const CourseDetail = lazy(() => import('../../components/parent/CourseDetail'));
 const courseHref = (studentId, program) => `/manager/students/${studentId}/courses/${encodeURIComponent(program)}`;
 
-// The way into a course from its card on the profile.
-function OpenCourseLink({ to, className = '' }) {
-  return (
-    <Link
-      to={to}
-      className={`flex items-center justify-center gap-1.5 text-ninja-blue font-ninja font-semibold text-sm py-2 rounded-xl border border-ninja-blue/25 hover:bg-ninja-blue/5 transition-colors ${className}`}
-    >
-      <BookOpenIcon className="w-4 h-4" />
-      Open course
-    </Link>
-  );
-}
+// A course card on the profile IS the way into the course: the whole card
+// links there, where the ninja's progress is read and edited.
+const COURSE_CARD_LINK = 'block rounded-2xl transition-[transform,box-shadow] duration-150 hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ninja-blue/60';
 
 // ── Animation variants ────────────────────────────────────────────────────────
 const fadeUp = {
@@ -127,7 +116,7 @@ function MobileBeltJourney({ enrollment, courseTo }) {
     }
   }, [beltIdx]);
 
-  return (
+  const card = (
     <div className="bg-white rounded-2xl p-4 shadow-sm border border-ninja-border">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -200,9 +189,9 @@ function MobileBeltJourney({ enrollment, courseTo }) {
           </div>
         </div>
       )}
-      {courseTo && <OpenCourseLink to={courseTo} className="mt-3 w-full" />}
     </div>
   );
+  return courseTo ? <Link to={courseTo} className={COURSE_CARD_LINK} aria-label="Open the CREATE course">{card}</Link> : card;
 }
 
 const PROGRAM_CARD_GRADIENTS = {
@@ -219,13 +208,13 @@ const PROGRAM_CARD_BAR_COLORS = {
 };
 
 // ── Mobile: Non-CREATE program card ──────────────────────────────────────────
-function MobileProgramCard({ enrollment, onOpenRoadmap, courseTo }) {
+function MobileProgramCard({ enrollment, courseTo }) {
   const { program, percent_complete, last_sub_program, last_module_name, last_lesson_name, last_session_date } = enrollment;
   const gradient = PROGRAM_CARD_GRADIENTS[program] || 'linear-gradient(135deg, #0f172a, #1e293b)';
   const barColor = PROGRAM_CARD_BAR_COLORS[program] || 'rgb(var(--ninja-blue))';
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-ninja-border shadow-sm">
+    <Link to={courseTo} aria-label={`Open the ${program} course`} className={`${COURSE_CARD_LINK} overflow-hidden border border-ninja-border shadow-sm`}>
       {/* Hero banner */}
       <div style={{ background: gradient, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <motion.div
@@ -295,18 +284,8 @@ function MobileProgramCard({ enrollment, onOpenRoadmap, courseTo }) {
             </div>
           </div>
         )}
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <OpenCourseLink to={courseTo} />
-          <button
-            onClick={onOpenRoadmap}
-            className="flex items-center justify-center gap-1.5 text-ninja-blue font-ninja font-semibold text-sm py-2 rounded-xl border border-ninja-blue/25 hover:bg-ninja-blue/5 transition-colors"
-          >
-            <MapIcon className="w-4 h-4" />
-            Roadmap
-          </button>
-        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -356,7 +335,7 @@ function DesktopBeltJourney({ enrollment, courseTo }) {
   const progress = _levels.length && _pos >= 0 ? Math.round((_done / _levels.length) * 100) : null;
   const beltIdx = BELTS.findIndex((b) => b.name === belt_level);
 
-  return (
+  const card = (
     <div className="bg-white rounded-2xl p-5 border border-ninja-border shadow-sm">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
@@ -430,9 +409,9 @@ function DesktopBeltJourney({ enrollment, courseTo }) {
           </div>
         </div>
       )}
-      {courseTo && <OpenCourseLink to={courseTo} className="mt-4 w-full" />}
     </div>
   );
+  return courseTo ? <Link to={courseTo} className={COURSE_CARD_LINK} aria-label="Open the CREATE course">{card}</Link> : card;
 }
 
 // ── Desktop: Activity bar chart ───────────────────────────────────────────────
@@ -490,7 +469,6 @@ export default function StudentProfile() {
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [confirmHardDelete, setConfirmHardDelete] = useState(false);
   const [hardDeleting, setHardDeleting] = useState(false);
-  const [roadmapEnrollment, setRoadmapEnrollment] = useState(null);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
@@ -589,6 +567,15 @@ export default function StudentProfile() {
                 logs={courseLogs}
                 childName={student.full_name.split(' ')[0]}
                 backTo={`/manager/students/${student.id}`}
+                // Marking lessons done or not done, straight on the course.
+                // The same two writes the old roadmap dialog made, then the
+                // ninja is re-read so the page shows what was saved.
+                onSaveLessons={isReadOnly ? undefined : async ({ subProgram, complete, uncomplete }) => {
+                  const base = { program: openCourse.program, sub_program: subProgram || undefined };
+                  if (complete.length) await api.post(`/students/${student.id}/roadmap/complete`, { ...base, entries: complete });
+                  if (uncomplete.length) await api.post(`/students/${student.id}/roadmap/uncomplete`, { ...base, entries: uncomplete });
+                }}
+                onSaved={() => api.get(`/students/${student.id}`).then(setStudent).catch(() => {})}
               />
             </motion.div>
           </Suspense>
@@ -681,7 +668,7 @@ export default function StudentProfile() {
           {/* Other program cards */}
           {nonCreatePrograms.map((enrollment) => (
             <motion.div key={enrollment.program} variants={fadeUp}>
-              <MobileProgramCard enrollment={enrollment} onOpenRoadmap={() => setRoadmapEnrollment(enrollment)} courseTo={courseHref(student.id, enrollment.program)} />
+              <MobileProgramCard enrollment={enrollment} courseTo={courseHref(student.id, enrollment.program)} />
             </motion.div>
           ))}
 
@@ -795,7 +782,7 @@ export default function StudentProfile() {
               {/* Non-CREATE programs */}
               {nonCreatePrograms.map((enrollment) => (
                 <motion.div key={enrollment.program} variants={fadeUp}>
-                  <MobileProgramCard enrollment={enrollment} onOpenRoadmap={() => setRoadmapEnrollment(enrollment)} courseTo={courseHref(student.id, enrollment.program)} />
+                  <MobileProgramCard enrollment={enrollment} courseTo={courseHref(student.id, enrollment.program)} />
                 </motion.div>
               ))}
 
@@ -959,16 +946,6 @@ export default function StudentProfile() {
         onClose={() => setShowStickerPicker(false)}
         student={student}
         onSaved={(sticker) => setStudent((prev) => ({ ...prev, codeorg_sticker: sticker }))}
-      />
-      <RoadmapModal
-        open={!!roadmapEnrollment}
-        onClose={() => setRoadmapEnrollment(null)}
-        student={student}
-        enrollment={roadmapEnrollment}
-        onUpdate={() => {
-          setRoadmapEnrollment(null);
-          api.get(`/students/${student.id}`).then(data => setStudent(data)).catch(() => {});
-        }}
       />
     </Layout>
   );
