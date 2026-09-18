@@ -518,14 +518,15 @@ function TaskCard({ task, canManage, canMove, canDelete, grabbable, swipeable, s
 // restamps position across every column: handed a subset it would renumber the
 // cards it could see and scramble the order of the ones it could not.
 export default function TaskBoard({
-  tasks, canManage, canCreate = canManage, canClearDone = canCreate, filtered = false, leavingId = null,
+  tasks, canManage, canCreate = canManage, canClearDone = canCreate, leavingId = null,
   onEdit, onDelete, onRestore, onReorder, onCompose, onClearDone,
 }) {
   const wide = useDragEnabled();
   const { user } = useAuth();
-  // A drag measures the gaps between the cards on screen. With cards hidden,
-  // those gaps describe a board that isn't there.
-  const dragEnabled = wide && !filtered;
+  // A filtered board (My Tasks) drags like the full one. It is handed only the
+  // cards on screen, so the gaps a drag measures are the real ones, and the
+  // server fits the order it sends back into the full board.
+  const dragEnabled = wide;
   const reduce = useReducedMotion();
   const grouped = useMemo(() => groupByColumn(tasks), [tasks]);
 

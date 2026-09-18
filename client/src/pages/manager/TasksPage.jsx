@@ -114,20 +114,10 @@ export default function TasksPage({ mode = 'manager' }) {
     setTasks(next);
     setError('');
     try {
-      if (mineOnly) {
-        // A sensei sees only their slice of the center board. Restamping that
-        // slice would create positions that collide with invisible cards, so
-        // their arrows/swipes persist only the one meaningful change: stage.
-        const moved = next.find((task) => {
-          const before = previous.find((old) => old.id === task.id);
-          return before && before.column_key !== task.column_key;
-        });
-        if (!moved) return;
-        const saved = await api.patch(`/director-tasks/${moved.id}`, { column_key: moved.column_key });
-        setTasks((rows) => rows.map((task) => (task.id === saved.id ? { ...task, ...saved } : task)));
-        return;
-      }
-      await api.patch('/director-tasks/reorder', { items: reorderPayload(next) });
+      // My Tasks is one person's slice of the center board. The server fits
+      // a partial order into the slots those cards already hold, so the cards
+      // they cannot see keep their places.
+      await api.patch('/director-tasks/reorder', { items: reorderPayload(next), partial: mineOnly });
     } catch (err) {
       setTasks(previous);
       setError(err.message || 'Could not save the new order.');
@@ -400,7 +390,6 @@ export default function TasksPage({ mode = 'manager' }) {
             canManage={canInteract}
             canCreate={canCreate}
             canClearDone={canCreate}
-            filtered={mineOnly}
             onCompose={openComposer}
             onEdit={(task) => openEditor({ task })}
             onDelete={softDelete}

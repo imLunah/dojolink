@@ -375,9 +375,43 @@ router.post('/:id/restore', requireManager, requireOwnLocation, async (req, res)
 // knows the arrangement it just drew; sending it whole means a dropped card and
 // the cards that shifted under it commit in one transaction rather than as a
 // burst of PATCHes that can half-apply.
-router.patch('/reorder', requireManager, requireOwnLocation, async (req, res) => {
+// Fit one person's order of their own cards into the whole board.
+//
+// Per column, the slots are the positions the person's cards already occupy
+// there, lowest first. Their cards in that column, in the order they left
+// them, take those slots in turn. A card arriving from another column has no
+// slot here yet, so it gets a fresh one past the end of the column. The cards
+// they cannot see are never written, so they cannot move.
+function fitPartialOrder(board, items) {
+  const byId = new Map(board.map((r) => [r.id, r]));
+  const out = [];
+  for (const col of COLUMNS) {
+    const mine = items
+      .filter((it) => it.column_key === col && byId.has(it.id))
+      .sort((a, b) => a.position - b.position);
+    if (!mine.length) continue;
+    const slots = mine
+      .map((it) => byId.get(it.id))
+      .filter((r) => r.column_key === col)
+      .map((r) => r.position)
+      .sort((a, b) => a - b);
+    let end = Math.max(-1, ...board.filter((r) => r.column_key === col).map((r) => r.position));
+    while (slots.length < mine.length) slots.push(++end);
+    mine.forEach((it, i) => out.push({ id: it.id, column_key: col, position: slots[i] }));
+  }
+  return out;
+}
+
+router.patch('/reorder', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
-  const { items } = req.body;
+  let { items } = req.body;
+  // A PARTIAL board is one person's slice of it: My Tasks shows a sensei only
+  // the cards assigned to them, and numbering that slice 0, 1, 2 would collide
+  // with the cards they cannot see. So a partial order is not written as sent.
+  // It is fitted into the slots those same cards already hold, column by
+  // column (see fitPartialOrder), and every card nobody moved keeps its place.
+  // Anyone who is not a director is partial whether they say so or not.
+  const partial = req.body.partial === true || !['manager', 'admin'].includes(req.session.role);
 
   if (!Array.isArray(items)) return res.status(400).json({ error: 'items must be an array' });
   if (items.length > 500) return res.status(400).json({ error: 'Too many items' });
@@ -410,6 +444,20 @@ router.patch('/reorder', requireManager, requireOwnLocation, async (req, res) =>
   } catch (err) {
     console.error('Error checking reorder permissions:', err);
     return res.status(500).json({ error: 'Failed to reorder tasks' });
+  }
+
+  if (partial) {
+    try {
+      const { rows: board } = await pool.query(
+        `SELECT id, column_key, position FROM director_tasks
+         WHERE location_id = $1 AND archived_at IS NULL`,
+        [req.session.activeLocationId]
+      );
+      items = fitPartialOrder(board, items);
+    } catch (err) {
+      console.error('Error fitting a partial reorder:', err);
+      return res.status(500).json({ error: 'Failed to reorder tasks' });
+    }
   }
 
   const client = await pool.connect();
