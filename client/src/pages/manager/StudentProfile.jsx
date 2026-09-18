@@ -118,10 +118,6 @@ export default function StudentProfile() {
   const logs = student?.progress_logs || [];
   const realLogs = logs.filter((log) => log.notes !== 'Marked complete from roadmap');
   const portalLogs = logs.map((log) => ({ ...log, from_roadmap: log.notes === 'Marked complete from roadmap' }));
-  const activityLogs = [
-    ...realLogs.map((log) => ({ ...log, from_roadmap: false })),
-    ...(student?.club_sessions || []).map((session) => ({ ...session, from_roadmap: false })),
-  ];
   const firstName = student?.full_name?.split(' ')[0] || '';
   const create = programs.find((program) => program.program === 'CREATE');
   const locationName = user?.availableLocations?.find((location) => location.id === student?.location_id)?.name;
@@ -170,12 +166,12 @@ export default function StudentProfile() {
     <Layout>
       {birthday && <BirthdayConfetti />}
       <div className="space-y-5 lg:space-y-7">
-        <StudentHero student={student} programs={programs} sessions={activityLogs.length} belt={create?.belt_level}
+        <StudentHero student={student} programs={programs} sessions={realLogs.length} belt={create?.belt_level}
           locationName={locationName} birthday={birthday} canEdit={manager && !isReadOnly} canLog={!isReadOnly && programs.length > 0}
           hasNote={Boolean(student.pinned_note?.trim() || student.special_instructions?.trim())}
           onBack={() => navigate('/manager/students')} onEdit={() => setShowEdit(true)} onLog={() => navigate(logUrl)} onNote={() => setShowNote(true)} />
 
-        <ActivityChart logs={activityLogs} />
+        <ActivityChart logs={realLogs} />
 
         <PageTitle title="Courses" eyebrow={`${firstName} · ${programs.length} program${programs.length === 1 ? '' : 's'}`} className="pt-2" />
         {programs.length > 0 ? (
