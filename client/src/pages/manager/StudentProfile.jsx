@@ -118,6 +118,7 @@ export default function StudentProfile() {
   const logs = student?.progress_logs || [];
   const realLogs = logs.filter((log) => log.notes !== 'Marked complete from roadmap');
   const portalLogs = logs.map((log) => ({ ...log, from_roadmap: log.notes === 'Marked complete from roadmap' }));
+  const clubSessions = student?.club_sessions || [];
   const firstName = student?.full_name?.split(' ')[0] || '';
   const create = programs.find((program) => program.program === 'CREATE');
   const locationName = user?.availableLocations?.find((location) => location.id === student?.location_id)?.name;
@@ -195,9 +196,9 @@ export default function StudentProfile() {
         )}
 
         <PageTitle title="Sessions" eyebrow={realLogs.length ? `${realLogs.length} in all` : ''} className="pt-2" />
-        {realLogs.length > 0 ? (
+        {realLogs.length + clubSessions.length > 0 ? (
           <div className={`${FLAT} overflow-hidden px-4`}>
-            <ProgressHistory logs={realLogs} enrolledPrograms={programs.map((program) => program.program)} onLogUpdated={updateLog} onLogDeleted={removeLog} />
+            <ProgressHistory logs={realLogs} clubs={clubSessions} enrolledPrograms={programs.map((program) => program.program)} onLogUpdated={updateLog} onLogDeleted={removeLog} />
           </div>
         ) : (
           <div className={`${FLAT} p-8 text-center`}><p className="font-ninja text-sm text-ninja-muted">Sessions show up here as soon as a sensei logs one for {firstName}.</p></div>
