@@ -173,7 +173,7 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
   if (!belt) {
     return (
       <div className="space-y-4">
-        <Hero program="CREATE" size={block ? 'block' : 'page'}>
+        <Hero program="CREATE" size={block ? 'feature' : 'page'}>
           {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <p className="font-ninja text-[12px] font-extrabold opacity-85">CREATE · {childName}</p>
           <p className="font-ninja font-extrabold text-[32px] leading-tight mt-1">White belt ahead</p>
@@ -184,7 +184,7 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) 
   }
 
   const hero = (
-        <Hero program="CREATE" size={block ? 'block' : 'page'} className={block ? '' : '!mt-0'}>
+        <Hero program="CREATE" size={block ? 'feature' : 'page'} className={block ? '' : '!mt-0'}>
           {/* The belt IS the hero's art on every width. Desktop: it is scenery,
               and scenery has to stay legible as the thing it is. Blown up to
               twice the banner it stopped being a belt at all — the frame filled
@@ -576,7 +576,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
     : (current?.working ? `Module ${current.working.index} of ${current.modules.length} · ${current.working.name}` : started ? `${current.sessions} session${current.sessions === 1 ? '' : 's'}` : 'Just getting started');
 
   const hero = (
-        <Hero program={p} size={block ? 'block' : 'page'} className={block ? '' : '!mt-0'}>
+        <Hero program={p} size={block ? 'feature' : 'page'} className={block ? '' : '!mt-0'}>
           {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">

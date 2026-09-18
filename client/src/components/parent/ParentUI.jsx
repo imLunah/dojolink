@@ -66,6 +66,11 @@ export function Hero({ program, size = 'card', className = '', style = {}, child
     ? '-mx-4 sm:-mx-6 -mt-5 rounded-t-none rounded-b-[34px] px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-6 lg:mr-0 lg:ml-[calc(50%-50cqw)] lg:w-[100cqw] lg:-mt-7 lg:rounded-b-[40px] lg:p-0'
     : size === 'block'
       ? 'rounded-[22px] px-5 py-5 lg:rounded-[26px] lg:px-7 lg:py-6'
+      // 'feature' is the page hero's size and breathing room for a page that
+      // cannot bleed it to the edges (the staff layout): all four corners
+      // rounded, the same tall padding the page hero's inner box carries.
+      : size === 'feature'
+        ? 'rounded-[28px] px-6 pt-7 pb-6 lg:rounded-[40px] lg:px-12 lg:pt-14 lg:pb-12'
       : 'p-4 rounded-[18px]';
   // The banner art is an <img> zoomed 4%, not a background: the files carry
   // a hard band a few pixels wide along their edges, and the zoom crops it
