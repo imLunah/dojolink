@@ -126,7 +126,7 @@ export function StickerCard({ item, isEarned, onOpen, flat, rarity, requirement,
     <Tilt
       as={motion.button}
       amount={TILT}
-      glare={isEarned}
+      glare={isEarned ? 'light' : false}
       disabled={flat}
       type="button"
       onClick={() => (isEarned ? onOpen(item) : shake())}

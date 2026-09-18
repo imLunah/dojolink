@@ -38,6 +38,8 @@ export function Tilt({
   // Resting 2D rotation, for art already pinned to the page at an angle.
   rest = 0,
   scale = 1.03,
+  // `true` everywhere, or 'light' for light mode only: soft-light white is
+  // a sheen on a pale card but a bright blob on a dark one.
   glare = false,
   perspective = 800,
   disabled = false,
@@ -109,7 +111,7 @@ export function Tilt({
           <motion.span
             aria-hidden="true"
             style={{ backgroundImage: glareBg, opacity: lift }}
-            className="pointer-events-none absolute inset-0 rounded-[inherit] mix-blend-soft-light"
+            className={`pointer-events-none absolute inset-0 rounded-[inherit] mix-blend-soft-light ${glare === 'light' ? 'dark:hidden' : ''}`}
           />
         )}
         {children}
