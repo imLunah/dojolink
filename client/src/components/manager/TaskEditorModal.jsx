@@ -152,12 +152,15 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
     }
   };
 
-  // One form, two shells. On a desktop board a card opens beside the column it
-  // came out of, so the board it belongs to is still readable while it is being
-  // edited; on a phone there is no beside, and it takes the screen.
-  const Shell = isDesktop ? FloatingPanel : Modal;
+  // One form, two shells. On a desktop board an existing card opens beside the
+  // column it came out of, so the board it belongs to is still readable while
+  // it is being edited. A new task has no card on the board to sit beside, so
+  // it opens in the middle as a dialog, and on a phone there is no beside
+  // either, so it takes the screen.
+  const docked = isDesktop && !!task;
+  const Shell = docked ? FloatingPanel : Modal;
   const shellProps = {
-    width: isDesktop ? 'w-[27rem]' : 'max-w-lg',
+    width: docked ? 'w-[27rem]' : 'max-w-lg',
     canDismiss: !dirty,
     guardHint: 'Unsaved changes. Save them, or Cancel to discard.',
     refuseSignal,
