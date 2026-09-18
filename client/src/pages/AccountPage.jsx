@@ -585,6 +585,9 @@ export default function AccountPage() {
       <div>
         <label className="block text-ninja-muted text-xs font-ninja mb-1.5">New Password</label>
         <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" autoComplete="new-password" className={FIELD} />
+        <p className="mt-1.5 text-xs font-ninja text-ninja-muted">
+          Password must be at least 6 characters and include an uppercase letter and a special character.
+        </p>
       </div>
       <div>
         <label className="block text-ninja-muted text-xs font-ninja mb-1.5">Confirm New Password</label>
