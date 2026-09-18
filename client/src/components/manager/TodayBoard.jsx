@@ -261,7 +261,6 @@ export default function TodayBoard({
             const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
             const realPrograms = uniquePrograms.filter(Boolean);
             const primaryProgram = realPrograms[0] || null;
-            const hasGeneric = uniquePrograms.some((p) => !p);
             const beltFor = (p) => group.assignments.find((a) => a.program === p)?.belt_level || null;
             const removeId = group.assignments[0].id;
 
@@ -342,13 +341,6 @@ export default function TodayBoard({
                     )}
                   </div>
                 </div>
-                {hasGeneric && (
-                  <div className="flex items-center mb-2">
-                    <span className="inline-flex items-center text-xs font-ninja font-bold px-2 py-0.5 rounded-md bg-ninja-border/20 text-ninja-muted border border-ninja-border">
-                      Class TBD
-                    </span>
-                  </div>
-                )}
                 {group.assignments[0].sensei_name && (
                   <p className="text-ninja-muted font-ninja text-xs mt-1">
                     Sensei: {group.assignments[0].sensei_name}
@@ -384,7 +376,6 @@ export default function TodayBoard({
           const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
           const realPrograms = uniquePrograms.filter(Boolean);
           const primaryProgram = realPrograms[0] || null;
-          const hasGeneric = uniquePrograms.some((p) => !p);
           const beltFor = (p) => group.assignments.find((a) => a.program === p)?.belt_level || null;
           const removeId = group.assignments[0].id;
 
@@ -455,13 +446,6 @@ export default function TodayBoard({
                   )}
                 </div>
               </div>
-              {hasGeneric && (
-                <div className="flex items-center">
-                  <span className="inline-flex items-center text-sm font-ninja font-bold px-2.5 py-1 rounded-md bg-ninja-border/20 text-ninja-muted border border-ninja-border">
-                    Class TBD
-                  </span>
-                </div>
-              )}
               {allDone ? (
                 <p className="text-green-600 font-ninja font-semibold text-xs">Logged ✓</p>
               ) : isOverdue ? (
