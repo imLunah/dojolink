@@ -536,6 +536,7 @@ export default function StudentProfile() {
   // Code.AI stickers only apply to JR ninjas (JR curriculum runs on Code.AI)
   const canEditSticker = !isReadOnly && programs.some((p) => p.program === 'JR');
   const logs = student.progress_logs || [];
+  const clubSessions = student.club_sessions || [];
   // Roadmap bulk-completions are stored as progress_logs for curriculum tracking, but they are
   // NOT real sessions — a session only counts when there's an actual logged session. Drop the
   // roadmap marks before building the activity stats (and the Recent Progress list below).
@@ -643,11 +644,11 @@ export default function StudentProfile() {
           )}
 
           {/* Recent Progress */}
-          {displayLogs.length > 0 && (
+          {displayLogs.length + clubSessions.length > 0 && (
             <motion.div variants={fadeUp} className="bg-white rounded-2xl p-4 shadow-sm border border-ninja-border">
               <h2 className="font-ninja font-bold text-ninja-navy mb-3">Recent Progress</h2>
               <div className="max-h-80 overflow-y-auto no-scrollbar">
-                <ProgressHistory logs={displayLogs} enrolledPrograms={programs.map((p) => p.program)} onLogUpdated={handleLogUpdated} onLogDeleted={handleLogDeleted} />
+                <ProgressHistory logs={displayLogs} clubs={clubSessions} enrolledPrograms={programs.map((p) => p.program)} onLogUpdated={handleLogUpdated} onLogDeleted={handleLogDeleted} />
               </div>
             </motion.div>
           )}
@@ -757,11 +758,11 @@ export default function StudentProfile() {
               </motion.div>
 
               {/* Recent Progress */}
-              {displayLogs.length > 0 && (
+              {displayLogs.length + clubSessions.length > 0 && (
                 <motion.div variants={fadeUp} className="bg-white rounded-2xl p-5 border border-ninja-border shadow-sm">
                   <h2 className="font-ninja font-bold text-ninja-navy mb-3">Recent Progress</h2>
                   <div className="max-h-[32rem] overflow-y-auto no-scrollbar">
-                    <ProgressHistory logs={displayLogs} enrolledPrograms={programs.map((p) => p.program)} onLogUpdated={handleLogUpdated} onLogDeleted={handleLogDeleted} />
+                    <ProgressHistory logs={displayLogs} clubs={clubSessions} enrolledPrograms={programs.map((p) => p.program)} onLogUpdated={handleLogUpdated} onLogDeleted={handleLogDeleted} />
                   </div>
                 </motion.div>
               )}

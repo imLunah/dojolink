@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PencilIcon, ReplyIcon } from 'lucide-react';
 import { formatDate, today } from '../../utils/dateUtils';
 import { STATUSES } from '../../utils/beltConfig';
@@ -18,6 +19,7 @@ import LazyMarkdownEditor from './LazyMarkdownEditor';
 import MarkdownView from './MarkdownView';
 import { authorName } from '../../lib/authors';
 import Linkify from './Linkify';
+import { toSlug } from '../../utils/clubUtils';
 
 function LogComment({ comment }) {
   return (
@@ -342,7 +344,10 @@ function groupEdges(dayLogs) {
   }]));
 }
 
-export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpdated, onLogDeleted }) {
+// `clubs` is club attendance ({ id, club_name, session_date }). It sits in the
+// day it happened as a plain line linking to the club session, but it is not a
+// log: nothing to edit, react to or delete here, and it is never a session.
+export default function ProgressHistory({ logs = [], clubs = [], enrolledPrograms, onLogUpdated, onLogDeleted }) {
   const { user, isReadOnly } = useAuth();
   const isManager = ['manager', 'admin'].includes(user?.role);
 
@@ -423,7 +428,7 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
     }
   };
 
-  if (logs.length === 0) {
+  if (logs.length === 0 && clubs.length === 0) {
     return (
       <div className="text-center py-8 text-ninja-muted font-ninja">
         No progress logs yet.
@@ -465,16 +470,25 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
         // Group logs by session_date. Keyed on the calendar day alone: a log
         // whose date was just edited carries a bare YYYY-MM-DD while the rest
         // arrived as timestamps, and the two would head their own days.
+        const dayOf = (row) => String(row.session_date || '').split('T')[0];
         const groups = visible.reduce((acc, log) => {
-          const key = String(log.session_date || '').split('T')[0];
+          const key = dayOf(log);
           if (!acc[key]) acc[key] = [];
           acc[key].push(log);
           return acc;
         }, {});
-        const dates = Object.keys(groups).sort((a, b) => new Date(b) - new Date(a));
+        // A club is not in any program, so a program filter hides it.
+        const clubGroups = (filter ? [] : clubs).reduce((acc, club) => {
+          const key = dayOf(club);
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(club);
+          return acc;
+        }, {});
+        const dates = [...new Set([...Object.keys(groups), ...Object.keys(clubGroups)])].sort((a, b) => new Date(b) - new Date(a));
 
         return dates.map((date) => {
-          const dayLogs = groups[date];
+          const dayLogs = groups[date] || [];
+          const dayClubs = clubGroups[date] || [];
           // Resolve the name first, so a day logged entirely by a deleted account
           // still collapses to one header line instead of falling through to the
           // per-entry byline and printing nothing at all.
@@ -645,6 +659,18 @@ export default function ProgressHistory({ logs = [], enrolledPrograms, onLogUpda
                     </div>
                   );
                 })}
+                {dayClubs.map((club, i) => (
+                  <Link
+                    key={`club-${club.id}`}
+                    to={`/clubs/${toSlug(club.club_name)}/sessions/${club.id}`}
+                    className={`flex items-center gap-2.5 px-4 py-3 rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
+                      dayLogs.length > 0 || i > 0 ? 'border-t border-ninja-border/60' : ''
+                    }`}
+                  >
+                    <span className="font-ninja text-[11px] font-bold uppercase tracking-wide text-ninja-muted">Club</span>
+                    <span className="font-ninja text-sm font-semibold text-ninja-navy">{club.club_name}</span>
+                  </Link>
+                ))}
               </div>
             </div>
           );

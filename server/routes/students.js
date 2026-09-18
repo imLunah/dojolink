@@ -165,6 +165,16 @@ router.get('/:id', requireAuth, async (req, res) => {
       delete student.parent_phone;
     }
 
+    // Club attendance, shown in the profile's history. It is not a session and
+    // must not be counted as one.
+    const { rows: clubSessions } = await pool.query(`
+      SELECT cs.id, cs.club_name, cs.session_date
+      FROM club_attendees ca
+      JOIN club_sessions cs ON ca.club_session_id = cs.id
+      WHERE ca.student_id = $1
+      ORDER BY cs.session_date DESC, cs.created_at DESC
+    `, [id]);
+
     // Most recent pending check-in date — used by LogEntryForm to display the correct session date
     const { rows: assignmentRows } = await pool.query(
       `SELECT session_date FROM daily_assignments
@@ -176,7 +186,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       ? new Date(assignmentRows[0].session_date).toISOString().split('T')[0]
       : null;
 
-    res.json({ ...student, progress_logs: progressLogs, pending_checkin_date });
+    res.json({ ...student, progress_logs: progressLogs, club_sessions: clubSessions, pending_checkin_date });
   } catch (err) {
     console.error('Error fetching student:', err);
     res.status(500).json({ error: 'Failed to fetch student' });
