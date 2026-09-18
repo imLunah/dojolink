@@ -60,18 +60,28 @@ export default function MarkdownEditor({ value, onChange, placeholder, variant =
       // A link in a note is usually there to be opened, and an editor you
       // cannot open a link from makes people retype the address by hand. So a
       // press opens it — in a NEW tab, which is the whole reason this is safe
-      // to do from inside a form: nothing being typed is lost. Returning false
-      // leaves ProseMirror to do what it would have done anyway, so the caret
+      // to do from inside a form: nothing being typed is lost.
+      //
+      // On the DOM's own `click`, not ProseMirror's handleClick. That one runs
+      // inside mouseup, and Safari only lets a page open a tab from a click:
+      // from mouseup the caret landed, the popup blocker ate the tab, and the
+      // link looked dead. Returning false leaves ProseMirror alone, so the caret
       // still lands where it was pressed and the link is still editable.
-      handleClick: (view, pos, event) => {
-        if (event.button !== 0) return false;
-        const a = event.target?.closest?.('a');
-        const href = a?.getAttribute('href');
-        // Only the schemes a browser should be asked to open. Anything else in
-        // a stored note is not a destination, whatever it claims to be.
-        if (!href || !/^(https?|mailto):/i.test(href)) return false;
-        window.open(href, '_blank', 'noopener,noreferrer');
-        return false;
+      handleDOMEvents: {
+        click: (view, event) => {
+          if (event.button !== 0) return false;
+          // A drag that selected part of the link ends in a click too. That is
+          // somebody selecting text, not somebody going somewhere.
+          if (!view.state.selection.empty) return false;
+          const a = event.target?.closest?.('a');
+          if (!a || !view.dom.contains(a)) return false;
+          const href = a.getAttribute('href');
+          // Only the schemes a browser should be asked to open. Anything else in
+          // a stored note is not a destination, whatever it claims to be.
+          if (!href || !/^(https?|mailto):/i.test(href)) return false;
+          window.open(href, '_blank', 'noopener,noreferrer');
+          return false;
+        },
       },
       attributes: {
         class: bare
