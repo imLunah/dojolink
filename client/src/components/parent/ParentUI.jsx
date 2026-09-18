@@ -535,7 +535,10 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
       onPointerCancel={endDrag}
       className={`overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing lg:cursor-default lg:active:cursor-default select-none -mx-1 px-1 ${className}`}
       aria-label="Belt road" role={onSelect ? 'group' : 'img'}>
-      <div className="flex items-start min-w-max pr-3 lg:pr-0">
+      {/* At least as wide as its belts (so a narrow screen scrolls), and as
+          wide as the box when there is room, so the connectors below can
+          spread the belts across it instead of bunching them at the left. */}
+      <div className="flex items-start min-w-max w-full pr-3 lg:pr-0">
         {BELTS.map((b, i) => {
           const state = idx < 0 ? 'ahead' : i < idx ? 'earned' : i === idx ? 'current' : 'ahead';
           const size = i === sel ? cur : icon;
@@ -569,7 +572,7 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
                   they are wider at lg because the gap either side of a belt
                   inside its column is wider there. */}
               {i < BELTS.length - 1 && (
-                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-1 lg:min-w-[34px] lg:max-w-[64px] ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ width: compact || tight ? 6 : 8, height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
+                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-1 lg:min-w-[34px] lg:max-w-[64px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ minWidth: compact || tight ? 6 : 8, width: compact || tight ? 6 : 8, height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
               )}
             </div>
           );

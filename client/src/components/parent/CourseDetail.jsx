@@ -296,7 +296,7 @@ function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode, be
               first screen — which is the thing a parent opens this page for. */}
           {/* The curriculum lights the road to its far end: with nobody on it,
               no belt is "ahead" of anyone. */}
-          <BeltRoad current={reference ? BELTS[BELTS.length - 1].name : belt} selected={viewBelt} onSelect={pickBelt} onHero fit className="mt-5" />
+          <BeltRoad current={reference ? BELTS[BELTS.length - 1].name : belt} selected={viewBelt} onSelect={pickBelt} onHero fit={!block} className="mt-5" />
         </Hero>
   );
 
