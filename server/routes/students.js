@@ -158,15 +158,6 @@ router.get('/:id', requireAuth, async (req, res) => {
       ORDER BY pl.session_date DESC, pl.created_at DESC
     `, [id, req.session.userId]);
 
-    // Club attendance — counts as activity sessions alongside progress logs
-    const { rows: clubSessions } = await pool.query(`
-      SELECT cs.id, cs.club_name, cs.session_date
-      FROM club_attendees ca
-      JOIN club_sessions cs ON ca.club_session_id = cs.id
-      WHERE ca.student_id = $1
-      ORDER BY cs.session_date DESC, cs.created_at DESC
-    `, [id]);
-
     // Strip parent contact fields for senseis
     if (!isManager) {
       delete student.parent_name;
@@ -185,7 +176,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       ? new Date(assignmentRows[0].session_date).toISOString().split('T')[0]
       : null;
 
-    res.json({ ...student, progress_logs: progressLogs, club_sessions: clubSessions, pending_checkin_date });
+    res.json({ ...student, progress_logs: progressLogs, pending_checkin_date });
   } catch (err) {
     console.error('Error fetching student:', err);
     res.status(500).json({ error: 'Failed to fetch student' });

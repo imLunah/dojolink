@@ -536,13 +536,11 @@ export default function StudentProfile() {
   // Code.AI stickers only apply to JR ninjas (JR curriculum runs on Code.AI)
   const canEditSticker = !isReadOnly && programs.some((p) => p.program === 'JR');
   const logs = student.progress_logs || [];
-  const clubSessions = student.club_sessions || [];
   // Roadmap bulk-completions are stored as progress_logs for curriculum tracking, but they are
   // NOT real sessions — a session only counts when there's an actual logged session. Drop the
   // roadmap marks before building the activity stats (and the Recent Progress list below).
   const sessionLogs = logs.filter((l) => l.notes !== 'Marked complete from roadmap');
-  // Club attendance counts as activity sessions alongside real progress logs (chart + stats only).
-  const activitySessions = [...sessionLogs, ...clubSessions];
+  const activitySessions = sessionLogs;
   const locationName = user?.availableLocations?.find(l => l.id === student.location_id)?.name;
 
   // Desktop stats
