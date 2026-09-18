@@ -547,8 +547,7 @@ function TaskComments({ task, canComment, onCount }) {
       ) : comments.length > 0 ? (
         <div className="space-y-2.5 mb-2.5">
           {comments.map((c) => (
-            <div key={c.id} className="flex gap-2">
-              <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
+            <div key={c.id}>
               <div className="min-w-0">
                 <p className="font-ninja text-sm text-ninja-navy break-words whitespace-pre-wrap"><Linkify>{c.body}</Linkify></p>
                 <p className="font-ninja text-xs text-ninja-muted mt-0.5">
