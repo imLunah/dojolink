@@ -5,13 +5,12 @@ import Layout from '../../components/layout/Layout';
 import BirthdayConfetti, { isBirthdayToday } from '../../components/shared/BirthdayConfetti';
 import PinnedNote, { Pin } from '../../components/shared/PinnedNote';
 import ProgressHistory from '../../components/shared/ProgressHistory';
-import ProgressVisuals from '../../components/parent/ProgressVisuals';
-import { Group, PageTitle, Row, Tile, PinnedHero, PageSheet } from '../../components/parent/ParentUI';
-import NinjaHero from '../../components/parent/NinjaHero';
-import { StickerBook } from '../../components/parent/StickerCollection';
+import ProgressVisuals, { ActivityChart } from '../../components/parent/ProgressVisuals';
+import { Group, PageTitle, Row, Tile } from '../../components/parent/ParentUI';
 import EditStudentModal from '../../components/manager/EditStudentModal';
 import StickerPickerModal from '../../components/shared/StickerPickerModal';
 import RoadmapModal from '../../components/shared/RoadmapModal';
+import BeltIcon from '../../components/ui/BeltIcon';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import { SkeletonProfile } from '../../components/ui/Skeleton';
@@ -32,6 +31,57 @@ function ageFromBirthday(value) {
 
 function joinedLabel(value) {
   return value ? new Date(value).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '—';
+}
+
+function StudentHero({ student, programs, sessions, belt, locationName, birthday, canEdit, canLog, hasNote, onBack, onEdit, onLog, onNote }) {
+  const age = ageFromBirthday(student.birthday);
+  const since = joinedLabel(student.created_at);
+  return (
+    <section
+      className="relative left-1/2 -mt-[max(env(safe-area-inset-top),1.25rem)] w-[calc(100%+2rem)] -translate-x-1/2 overflow-hidden rounded-b-[38px] px-6 pb-8 pt-[max(env(safe-area-inset-top),1.25rem)] text-white sm:-mt-[max(env(safe-area-inset-top),1.25rem)] sm:w-[calc(100%+3rem)] sm:px-10 lg:-mt-8 lg:min-h-[390px] lg:w-[calc(100%+4rem)] lg:px-16 lg:pb-12 lg:pt-8"
+      style={{ background: 'linear-gradient(125deg, #2f74e6 0%, #1355c9 56%, #0c3d99 100%)' }}
+    >
+      <div aria-hidden className="absolute -right-16 -top-20 h-96 w-96 rounded-full bg-cyan-300/15 blur-3xl" />
+      <img src="/profile/ninja-wave.png" alt="" aria-hidden draggable={false}
+        className="pointer-events-none absolute -bottom-20 right-[-4.5rem] w-[270px] select-none object-contain drop-shadow-2xl sm:right-[-2rem] sm:w-[330px] lg:-bottom-24 lg:right-[3%] lg:w-[440px]" />
+
+      <div className="relative z-10 flex items-center justify-between gap-3">
+        <button type="button" onClick={onBack} aria-label="Back to roster"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-white/15 font-ninja text-xl font-black text-white backdrop-blur-sm transition-transform duration-150 active:scale-[0.97]">←</button>
+        <div className="flex items-center gap-2">
+          {canEdit && <button type="button" onClick={onEdit} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/30 bg-white/15 px-3.5 font-ninja text-[13px] font-extrabold text-white backdrop-blur-sm transition-transform duration-150 active:scale-[0.97]"><PencilIcon size={15} aria-hidden />Edit</button>}
+          {canLog && <button type="button" onClick={onLog} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-white px-3.5 font-ninja text-[13px] font-extrabold text-[#0c3d99] shadow-sm transition-transform duration-150 active:scale-[0.97]"><PlusIcon size={16} aria-hidden />Log session</button>}
+          <button type="button" onClick={onNote} aria-label={hasNote ? 'Open pinned note' : 'Add pinned note'}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#315383] shadow-sm transition-transform duration-150 active:scale-[0.97]">
+            <Pin className={`h-[18px] w-[18px] -rotate-12 ${hasNote ? 'text-ninja-blue' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      <div className="relative z-10 mt-8 max-w-[68%] lg:mt-7">
+        <p className="font-ninja text-[11px] font-black uppercase tracking-[0.14em] text-white/75 sm:text-xs">Ninja since {since}</p>
+        <h1 className="mt-1 font-ninja text-[38px] font-black leading-none tracking-[-0.035em] sm:text-5xl lg:text-6xl">{student.full_name}{birthday ? ' 🎂' : ''}</h1>
+        <p className="mt-2 font-ninja text-[13px] font-bold text-white/75">{[locationName, age != null ? `Age ${age}` : null].filter(Boolean).join(' · ')}</p>
+      </div>
+
+      <div className="relative z-10 mt-14 grid max-w-[72%] grid-cols-2 gap-x-6 gap-y-5 sm:flex sm:flex-wrap sm:gap-x-10 lg:mt-20">
+        {[
+          { label: 'Student number', value: `#${String(student.id).padStart(4, '0')}` },
+          { label: 'Sessions', value: sessions },
+          { label: 'Programs', value: programs.length },
+          { label: 'Belt', value: belt || '—', belt },
+        ].map((item) => (
+          <div key={item.label} className="min-w-0">
+            <div className="flex items-center gap-2">
+              {item.belt && <BeltIcon belt={item.belt} size={28} />}
+              <p className="truncate font-ninja text-2xl font-black leading-none sm:text-3xl">{item.value}</p>
+            </div>
+            <p className="mt-1.5 font-ninja text-[10px] font-black uppercase tracking-[0.1em] text-white/65 sm:text-xs">{item.label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 export default function StudentProfile() {
@@ -119,27 +169,18 @@ export default function StudentProfile() {
   return (
     <Layout>
       {birthday && <BirthdayConfetti />}
-      <div>
-        <PinnedHero>
-          <NinjaHero program="CREATE" name={`${student.full_name}${birthday ? ' 🎂' : ''}`}
-            eyebrow={`Ninja since ${joinedLabel(student.created_at)}`}
-            secondary={[locationName, ageFromBirthday(student.birthday) != null ? `Age ${ageFromBirthday(student.birthday)}` : null].filter(Boolean).join(' · ')}
-            studentNumber={`#${String(student.id).padStart(4, '0')}`}
-            belt={create?.belt_level} level={create?.level} tone={student.ninja_skin_tone}
-            programCount={programs.length} sessionCount={activityLogs.length} className="!mt-0"
-            left={<button type="button" onClick={() => navigate('/manager/students')} aria-label="Back to roster" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/35 bg-white/15 font-ninja text-xl font-black text-white backdrop-blur-sm">←</button>}
-            right={<div className="flex items-center gap-2">
-              {manager && !isReadOnly && <button type="button" onClick={() => setShowEdit(true)} className="hidden sm:inline-flex h-11 items-center gap-2 rounded-xl border border-white/35 bg-white/15 px-4 font-ninja text-sm font-extrabold text-white backdrop-blur-sm"><PencilIcon size={16} />Edit</button>}
-              {!isReadOnly && programs.length > 0 && <button type="button" onClick={() => navigate(logUrl)} className="hidden sm:inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 font-ninja text-sm font-extrabold text-[#0c3d99]"><PlusIcon size={17} />Log session</button>}
-              <button type="button" onClick={() => setShowNote(true)} aria-label="Open pinned note" className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#315383]"><Pin className="h-[18px] w-[18px] -rotate-12" /></button>
-            </div>} />
-        </PinnedHero>
+      <div className="space-y-5 lg:space-y-7">
+        <StudentHero student={student} programs={programs} sessions={activityLogs.length} belt={create?.belt_level}
+          locationName={locationName} birthday={birthday} canEdit={manager && !isReadOnly} canLog={!isReadOnly && programs.length > 0}
+          hasNote={Boolean(student.pinned_note?.trim() || student.special_instructions?.trim())}
+          onBack={() => navigate('/manager/students')} onEdit={() => setShowEdit(true)} onLog={() => navigate(logUrl)} onNote={() => setShowNote(true)} />
 
-        <PageSheet>
-          <div className="mx-auto max-w-6xl space-y-5 px-4 pb-8 sm:px-6 lg:space-y-7">
+        <ActivityChart logs={activityLogs} />
+
+        <PageTitle title="Courses" eyebrow={`${firstName} · ${programs.length} program${programs.length === 1 ? '' : 's'}`} className="pt-2" />
         {programs.length > 0 ? (
           <>
-            <ProgressVisuals programs={programs} sessionLogs={portalLogs} childName={firstName} />
+            <ProgressVisuals programs={programs} sessionLogs={portalLogs} childName={firstName} showActivity={false} />
             {(programs.some((program) => program.program !== 'CREATE') || canEditSticker) && (
               <Group title="Course tools" className="mt-4">
                 {canEditSticker && (
@@ -157,11 +198,9 @@ export default function StudentProfile() {
           <div className={`${FLAT} p-8 text-center`}><p className="font-ninja text-sm text-ninja-muted">{firstName} is not enrolled in a program yet.</p></div>
         )}
 
-        <StickerBook belt={create?.belt_level} level={create?.level} logs={portalLogs} />
-
         <PageTitle title="Sessions" eyebrow={realLogs.length ? `${realLogs.length} in all` : ''} className="pt-2" />
         {realLogs.length > 0 ? (
-          <div className={`${FLAT} max-h-[min(58vh,520px)] overflow-y-auto overscroll-contain px-4`}>
+          <div className={`${FLAT} overflow-hidden px-4`}>
             <ProgressHistory logs={realLogs} enrolledPrograms={programs.map((program) => program.program)} onLogUpdated={updateLog} onLogDeleted={removeLog} />
           </div>
         ) : (
@@ -198,8 +237,6 @@ export default function StudentProfile() {
             )}
           </section>
         )}
-          </div>
-        </PageSheet>
       </div>
 
       <Modal isOpen={showNote} onClose={() => setShowNote(false)} title="Pinned note">

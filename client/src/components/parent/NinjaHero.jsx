@@ -61,7 +61,7 @@ function Stat({ value, label, lead, delay = 0, className = '' }) {
   );
 }
 
-export default function NinjaHero({ program, name, eyebrow, secondary, studentNumber, belt, level, tone, programCount, sessionCount, left, right, className = '' }) {
+export default function NinjaHero({ program, name, eyebrow, belt, level, tone, programCount, sessionCount, right, className = '' }) {
   const still = useReducedMotion();
   const [cheering, setCheering] = useState(false);
   const wrap = useRef(null);
@@ -120,8 +120,7 @@ export default function NinjaHero({ program, name, eyebrow, secondary, studentNu
             still close enough to belong to the banner rather than to the far
             corner of a wide screen. Phones keep the corner: there is no
             margin to move into. */}
-        {left && <div className="absolute top-0 left-0 z-20 lg:left-[-56px]">{left}</div>}
-        {right && <div className="absolute top-0 right-0 z-20 lg:right-[-56px]">{right}</div>}
+        {right && <div className="absolute top-0 right-0 z-10 lg:right-[-56px]">{right}</div>}
 
         {/* The words reserve their own room with padding rather than sharing a
             flex row with the ninja: the cheer pose is a wider picture than the
@@ -140,12 +139,10 @@ export default function NinjaHero({ program, name, eyebrow, secondary, studentNu
                 <h1 className="font-ninja font-extrabold text-[29px] sm:text-[44px] lg:text-[54px] leading-[0.95] tracking-[-0.03em] mt-1.5 break-words">
                   {name}
                 </h1>
-                {secondary && <p className="mt-3 font-ninja text-[13px] font-bold opacity-75">{secondary}</p>}
               </motion.div>
             </div>
 
             <div className="flex items-end gap-5 sm:gap-9">
-              {studentNumber && <Stat value={studentNumber} label="Student number" delay={0.06} className="hidden lg:block" />}
               <Stat value={sessionCount} label="Sessions" delay={0.1} />
               {/* Two stats is all a phone fits before the labels start
                   truncating, and the programs are named in full in the
