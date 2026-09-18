@@ -1083,7 +1083,7 @@ export default function TaskBoard({
               {canCreate && (
                 <button
                   type="button"
-                  onClick={(e) => onCompose(col.key, e.currentTarget.getBoundingClientRect())}
+                  onClick={() => onCompose(col.key)}
                   aria-label={`Add task to ${col.label}`}
                   title={`Add task to ${col.label}`}
                   className="w-7 h-7 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-blue hover:bg-white dark:hover:bg-white/5 transition-colors flex-shrink-0 active:scale-90 duration-150"
@@ -1164,11 +1164,11 @@ export default function TaskBoard({
             {canCreate && col.key !== 'done' && (
               // Most cards on this board are one sentence somebody thought of
               // while standing up. This is the way in for those: the line the
-              // sentence gets typed on opens in the middle of the screen, out
-              // of this control, with the column already chosen.
+              // sentence gets typed on opens in the middle of the screen with
+              // the column already chosen.
               <button
                 type="button"
-                onClick={(e) => onCompose(col.key, e.currentTarget.getBoundingClientRect())}
+                onClick={() => onCompose(col.key)}
                 aria-label={`Add a task to ${col.label}`}
                 className="mt-3 w-full px-3 py-2.5 rounded-xl bg-transparent border border-transparent hover:border-ninja-border hover:text-ninja-navy font-ninja text-sm text-ninja-muted text-left transition-colors duration-150"
               >
