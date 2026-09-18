@@ -122,7 +122,10 @@ function MobileBeltJourney({ enrollment, courseTo }) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <img src={PROGRAM_LOGOS['CREATE']} alt="CREATE" className="w-9 h-9 object-contain flex-shrink-0" />
-          <h2 className="font-ninja font-bold text-ninja-navy">Belt Journey</h2>
+          <h2 className="flex items-center gap-1.5 font-ninja font-bold text-ninja-navy">
+            <span>Belt Journey</span>
+            {courseTo && <ChevronRightIcon size={18} strokeWidth={3} aria-hidden className="flex-shrink-0 opacity-60 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />}
+          </h2>
         </div>
         <div className="flex items-center gap-2">
           {maxLevel && (
@@ -130,7 +133,6 @@ function MobileBeltJourney({ enrollment, courseTo }) {
               {belt_level} #{belt_sublevel} of {maxLevel}
             </span>
           )}
-          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted transition-[color,transform] duration-200 group-hover:text-ninja-navy group-hover:translate-x-0.5" strokeWidth={2.5} />}
         </div>
       </div>
 
@@ -230,8 +232,9 @@ function MobileProgramCard({ enrollment, courseTo }) {
           <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 3, fontFamily: 'Nunito, sans-serif' }}>
             Code Ninjas
           </p>
-          <h2 style={{ color: 'white', fontWeight: 800, fontSize: 18, lineHeight: 1.1, fontFamily: 'Nunito, sans-serif' }}>
-            {program}
+          <h2 style={{ color: 'white', fontWeight: 800, fontSize: 18, lineHeight: 1.1, fontFamily: 'Nunito, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>{program}</span>
+            <ChevronRightIcon size={19} strokeWidth={3} aria-hidden className="flex-shrink-0 opacity-60 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
           </h2>
           {last_session_date && (
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 3, fontFamily: 'Nunito, sans-serif' }}>
@@ -249,7 +252,6 @@ function MobileProgramCard({ enrollment, courseTo }) {
             style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.45))' }}
           />
         )}
-        <ChevronRightIcon aria-hidden className="w-6 h-6 flex-shrink-0 text-white opacity-60 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-hover:translate-x-0.5" strokeWidth={2.5} />
       </div>
 
       {/* Card body */}
@@ -345,7 +347,10 @@ function DesktopBeltJourney({ enrollment, courseTo }) {
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <img src={PROGRAM_LOGOS['CREATE']} alt="CREATE" className="w-9 h-9 object-contain flex-shrink-0" />
-          <h2 className="font-ninja font-bold text-ninja-navy">Belt Journey</h2>
+          <h2 className="flex items-center gap-1.5 font-ninja font-bold text-ninja-navy">
+            <span>Belt Journey</span>
+            {courseTo && <ChevronRightIcon size={18} strokeWidth={3} aria-hidden className="flex-shrink-0 opacity-60 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />}
+          </h2>
         </div>
         <div className="flex items-center gap-2">
           {maxLevel && (
@@ -353,7 +358,6 @@ function DesktopBeltJourney({ enrollment, courseTo }) {
               {belt_level} #{belt_sublevel} of {maxLevel}
             </span>
           )}
-          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted transition-[color,transform] duration-200 group-hover:text-ninja-navy group-hover:translate-x-0.5" strokeWidth={2.5} />}
         </div>
       </div>
 
