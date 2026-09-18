@@ -2,6 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import BirthdayConfetti, { isBirthdayToday } from '../../components/shared/BirthdayConfetti';
 import { motion } from 'framer-motion';
+import { ChevronRightIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import BeltIcon from '../../components/ui/BeltIcon';
@@ -123,11 +124,14 @@ function MobileBeltJourney({ enrollment, courseTo }) {
           <img src={PROGRAM_LOGOS['CREATE']} alt="CREATE" className="w-9 h-9 object-contain flex-shrink-0" />
           <h2 className="font-ninja font-bold text-ninja-navy">Belt Journey</h2>
         </div>
-        {maxLevel && (
-          <span className="text-ninja-muted font-ninja text-sm">
-            {belt_level} #{belt_sublevel} of {maxLevel}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {maxLevel && (
+            <span className="text-ninja-muted font-ninja text-sm">
+              {belt_level} #{belt_sublevel} of {maxLevel}
+            </span>
+          )}
+          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted" strokeWidth={2.5} />}
+        </div>
       </div>
 
       <div ref={scrollRef} className="overflow-x-auto -mx-4 px-4 no-scrollbar">
@@ -245,6 +249,7 @@ function MobileProgramCard({ enrollment, courseTo }) {
             style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.45))' }}
           />
         )}
+        <ChevronRightIcon aria-hidden className="w-6 h-6 flex-shrink-0 text-white/60" strokeWidth={2.5} />
       </div>
 
       {/* Card body */}
@@ -342,11 +347,14 @@ function DesktopBeltJourney({ enrollment, courseTo }) {
           <img src={PROGRAM_LOGOS['CREATE']} alt="CREATE" className="w-9 h-9 object-contain flex-shrink-0" />
           <h2 className="font-ninja font-bold text-ninja-navy">Belt Journey</h2>
         </div>
-        {maxLevel && (
-          <span className="text-ninja-muted font-ninja text-sm">
-            {belt_level} #{belt_sublevel} of {maxLevel}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {maxLevel && (
+            <span className="text-ninja-muted font-ninja text-sm">
+              {belt_level} #{belt_sublevel} of {maxLevel}
+            </span>
+          )}
+          {courseTo && <ChevronRightIcon aria-hidden className="w-5 h-5 flex-shrink-0 text-ninja-muted" strokeWidth={2.5} />}
+        </div>
       </div>
 
       {/* Icon + connector row */}
