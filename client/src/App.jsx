@@ -92,6 +92,7 @@ export default function App() {
             <Route path="/manager/events/:id/edit" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />
             <Route path="/manager/students/new" element={<ProtectedRoute role="manager"><AddStudentPage /></ProtectedRoute>} />
             <Route path="/manager/students/:id" element={<ProtectedRoute role="sensei"><StudentProfile /></ProtectedRoute>} />
+            <Route path="/manager/students/:id/courses/:program" element={<ProtectedRoute role="sensei"><StudentProfile /></ProtectedRoute>} />
 
             {/* Sensei routes */}
             <Route path="/sensei/dashboard"    element={<ProtectedRoute role="sensei"><SenseiDashboard /></ProtectedRoute>} />

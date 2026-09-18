@@ -29,6 +29,19 @@ import BeltIcon from '../ui/BeltIcon';
 // Robotics), read off the curriculum and the log by trackModel: the same hero
 // in their own art, the tracks as pills, the open track's modules, and the
 // other tracks.
+//
+// The staff side reads the same page two more ways, picked by `mode`:
+//
+//   'staff'      one ninja's course, opened from their staff profile. Same
+//                data, same page, but in the staff layout, which has no
+//                pinned banner and no sheet to ride over it, so the hero is a
+//                block at the top of the page instead. The sticker book stays
+//                off: it asks the parent API for rarity and links into the
+//                parent portal.
+//   'reference'  the curriculum itself, with no ninja at all. Every belt on
+//                the road is open, nothing is greyed out as not yet done, and
+//                the rows say what a level holds rather than how far anyone
+//                is through it.
 
 const EASE_OUT = [0.23, 1, 0.32, 1];
 
@@ -44,6 +57,19 @@ const PROJECT_KIND = {
   Adventure: { Icon: TrophyIcon, color: '#4fc390' },
   Project: { Icon: TrophyIcon, color: '#4fc390' },
 };
+
+// The page's two halves. A parent's page pins the banner and slides the rest
+// over it on a sheet; the staff layout has neither, so there the banner is
+// just the first block on the page.
+function Frame({ block, hero, children }) {
+  if (block) return <div className="space-y-4">{hero}{children}</div>;
+  return (
+    <div className="relative">
+      <PinnedHero>{hero}</PinnedHero>
+      <PageSheet>{children}</PageSheet>
+    </div>
+  );
+}
 
 function ProjectKindIcon({ kind, status }) {
   const { Icon, color } = PROJECT_KIND[kind] || PROJECT_KIND.Project;
@@ -64,8 +90,14 @@ function useTrackModel(enrollment, logs) {
 }
 
 
-function ProjectRow({ p, first }) {
+function ProjectRow({ p, first, reference }) {
   const adventure = p.kind === 'Adventure';
+  if (reference) {
+    return (
+      <Row first={first} inset lead={<ProjectKindIcon kind={p.kind} />}
+        title={p.name} subtitle={p.kind} />
+    );
+  }
   const sub = adventure
     ? (p.status === 'todo' ? 'Adventure · unlocks last' : `Adventure${p.date ? ` · ${fmtDay(p.date)}` : ''}`)
     : `${p.kind}${p.date ? ` · ${p.status === 'done' ? 'done' : 'last'} ${fmtDay(p.date)}` : ''}`;
@@ -75,8 +107,12 @@ function ProjectRow({ p, first }) {
   );
 }
 
-function CreateDetail({ enrollment, logs, childName, backTo }) {
-  const belt = enrollment.belt_level;
+function CreateDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
+  const reference = mode === 'reference';
+  const block = mode !== 'parent';
+  // The curriculum has no ninja wearing a belt, so it opens on White and
+  // lights the whole road: every belt is there to be read.
+  const belt = reference ? (enrollment.belt_level || BELTS[0].name) : enrollment.belt_level;
   const currentLevel = Number(enrollment.belt_sublevel) || (getLevels(belt)[0] ?? 1);
   const beltIdx = BELTS.findIndex((b) => b.name === belt);
   const pos = getLevels(belt).indexOf(currentLevel) + 1;
@@ -100,8 +136,8 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
   // opened at all. Only the belt actually being worn has a level part way in,
   // which is the one case levelStates was written for.
   const states = useMemo(
-    () => levelStates(viewBelt, onBelt ? currentLevel : earned ? Infinity : -1),
-    [viewBelt, onBelt, earned, currentLevel]);
+    () => levelStates(viewBelt, reference ? -1 : onBelt ? currentLevel : earned ? Infinity : -1),
+    [viewBelt, onBelt, earned, currentLevel, reference]);
   const projects = useMemo(() => levelProjects(viewBelt, level, logs), [viewBelt, level, logs]);
   const done = projects.filter((p) => p.status === 'done').length;
   const sessions = realSessions(logs);
@@ -130,15 +166,17 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
     () => stickerProgress({ belt, level: currentLevel, logs }).earnedIds,
     [belt, currentLevel, logs]);
 
-  const summary = onBelt
+  const summary = reference
+    ? [levels.length ? `${levels.length} level${levels.length === 1 ? '' : 's'}` : null, belted?.language, next ? `earns ${next}` : null].filter(Boolean).join(' · ')
+    : onBelt
     ? [`Level ${currentLevel}`, levels.length ? `${pos} of ${levels.length}` : null, belted?.language, next ? `earns ${next}` : null, sessions.length ? `${sessions.length} session${sessions.length === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')
     : [earned ? 'Earned' : 'Ahead', levels.length ? `${levels.length} level${levels.length === 1 ? '' : 's'}` : null, belted?.language, next ? `earns ${next}` : null].filter(Boolean).join(' · ');
 
   if (!belt) {
     return (
       <div className="space-y-4">
-        <Hero program="CREATE" size="page">
-          {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label="Back to profile" /></div>}
+        <Hero program="CREATE" size={block ? 'block' : 'page'}>
+          {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <p className="font-ninja text-[12px] font-extrabold opacity-85">CREATE · {childName}</p>
           <p className="font-ninja font-extrabold text-[32px] leading-tight mt-1">White belt ahead</p>
           <p className="font-ninja text-[13px] opacity-85 mt-1">The belt road starts with the first logged session.</p>
@@ -147,10 +185,8 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
     );
   }
 
-  return (
-    <div className="relative">
-      <PinnedHero>
-        <Hero program="CREATE" size="page" className="!mt-0">
+  const hero = (
+        <Hero program="CREATE" size={block ? 'block' : 'page'} className={block ? '' : '!mt-0'}>
           {/* The belt IS the hero's art on every width. Desktop: it is scenery,
               and scenery has to stay legible as the thing it is. Blown up to
               twice the banner it stopped being a belt at all — the frame filled
@@ -200,7 +236,7 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
               everything written. */}
           <span
             aria-hidden
-            className="hidden lg:block absolute inset-y-[-15%] right-[calc(50%-50cqw-3rem)] aspect-square pointer-events-none"
+            className={`hidden lg:block absolute inset-y-[-15%] aspect-square pointer-events-none ${block ? 'right-[-3rem]' : 'right-[calc(50%-50cqw-3rem)]'}`}
             style={{
               zIndex: -1,
               maskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
@@ -219,11 +255,11 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
           {/* The belt's own poster stickers, after the belt art so they land in
               front of it rather than behind. */}
           <BeltStickers belt={viewBelt} />
-          {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label="Back to profile" /></div>}
+          {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <div className="flex items-center lg:items-start justify-between gap-5">
             <div className="flex items-center gap-4 min-w-0">
               <div className="min-w-0">
-                <p className="font-ninja text-[12px] font-extrabold opacity-85 truncate">CREATE · {childName}</p>
+                <p className="font-ninja text-[12px] font-extrabold opacity-85 truncate">CREATE · {reference ? 'Curriculum' : childName}</p>
                 <p className="font-ninja font-extrabold text-[36px] lg:text-[32px] leading-none mt-1 tracking-[-0.015em]">{viewBelt} belt</p>
                 <p className="font-ninja text-[13px] opacity-85 mt-2 truncate">{summary}</p>
               </div>
@@ -239,11 +275,14 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
               list below, where they have room for their names and dates, and
               the road now says where the ninja is on the whole ladder from the
               first screen — which is the thing a parent opens this page for. */}
-          <BeltRoad current={belt} selected={viewBelt} onSelect={pickBelt} onHero fit className="mt-5" />
+          {/* The curriculum lights the road to its far end: with nobody on it,
+              no belt is "ahead" of anyone. */}
+          <BeltRoad current={reference ? BELTS[BELTS.length - 1].name : belt} selected={viewBelt} onSelect={pickBelt} onHero fit className="mt-5" />
         </Hero>
-      </PinnedHero>
+  );
 
-      <PageSheet>
+  return (
+    <Frame block={block} hero={hero}>
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
             <AnimatePresence mode="wait" initial={false}>
@@ -254,7 +293,7 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
                 exit={{ opacity: 0, x: -8 * dir }}
                 transition={{ duration: 0.18, ease: EASE_OUT }}
               >
-                <Group tint={levelState === 'current' ? 'green' : levelState === 'done' ? 'blue' : undefined}>
+                <Group tint={reference ? 'blue' : levelState === 'current' ? 'green' : levelState === 'done' ? 'blue' : undefined}>
                   {/* The game itself, straight off the wall poster, tilted into
                       the corner like a photo dropped on the card.
 
@@ -275,8 +314,8 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
                         corners drift, and the card has room for them. */}
                     <div className="flex items-start gap-3 pl-4 pr-4 pt-3.5 pb-3">
                     <div className="min-w-0 flex-1">
-                      <p className="font-ninja text-[11px] font-extrabold uppercase tracking-[0.08em]" style={levelState ? { color: 'var(--tint-ink)' } : undefined}>
-                        Level {level}{levelState === 'current' ? ' · now' : levelState === 'done' ? ' · done' : ' · ahead'}
+                      <p className="font-ninja text-[11px] font-extrabold uppercase tracking-[0.08em]" style={levelState || reference ? { color: 'var(--tint-ink)' } : undefined}>
+                        Level {level}{reference ? '' : levelState === 'current' ? ' · now' : levelState === 'done' ? ' · done' : ' · ahead'}
                       </p>
                       {/* The poster's name for the level. Only when we have none
                           does it fall back to the old guess made from the level's
@@ -287,7 +326,9 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
                         </p>
                       )}
                       <p className="font-ninja text-[12.5px] v2 text-ninja-muted mt-0.5">
-                        {[`${done} of ${projects.length} projects`, started ? `started ${fmtDay(started)}` : null].filter(Boolean).join(' · ')}
+                        {reference
+                          ? `${projects.length} project${projects.length === 1 ? '' : 's'}`
+                          : [`${done} of ${projects.length} projects`, started ? `started ${fmtDay(started)}` : null].filter(Boolean).join(' · ')}
                       </p>
                     </div>
                     {/* The 3 degree rest angle is what pins it to the card like
@@ -316,8 +357,8 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
                       <p className="font-ninja text-[13.5px] leading-relaxed text-ninja-navy/85 px-4 pb-3 -mt-1">{info.quest}</p>
                     )}
                   </div>
-                  <div className={`mx-3 mb-3 rounded-[14px] overflow-hidden ${levelState ? 'border border-ninja-navy/[0.06]' : ''}`}>
-                    {projects.map((p, i) => <ProjectRow key={p.name} p={p} first={i === 0} />)}
+                  <div className={`mx-3 mb-3 rounded-[14px] overflow-hidden ${levelState || reference ? 'border border-ninja-navy/[0.06]' : ''}`}>
+                    {projects.map((p, i) => <ProjectRow key={p.name} p={p} first={i === 0} reference={reference} />)}
                     {projects.length === 0 && <p className="px-4 py-3 font-ninja text-sm text-ninja-muted">No projects listed for this level yet.</p>}
                   </div>
                   {/* The concepts the level teaches, which is the EXPLORE half of
@@ -346,8 +387,19 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
             </AnimatePresence>
 
             <div className="space-y-4">
-              <Group title={onBelt ? 'All levels' : `${viewBelt} levels`}>
+              <Group title={onBelt && !reference ? 'All levels' : `${viewBelt} levels`}>
                 {states.map((s, i) => {
+                  if (reference) {
+                    return (
+                      <Row key={s.level} first={i === 0} onClick={() => pick(s.level)} active={s.level === level}
+                        lead={hasLevelMedal(viewBelt, s.level)
+                          ? <LevelMedal belt={viewBelt} level={s.level} tilt />
+                          : <Tile>{s.level}</Tile>}
+                        title={`Level ${s.level}`}
+                        subtitle={`${s.projectCount} project${s.projectCount === 1 ? '' : 's'}`}
+                      />
+                    );
+                  }
                   const finished = sessions.filter((l) => l.belt_level_at === viewBelt && Number(l.belt_sublevel_at) === s.level && l.status_at === 'Completed').map((l) => String(l.session_date).split('T')[0]).sort();
                   const lastDone = finished[finished.length - 1] || null;
                   return (
@@ -364,15 +416,16 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
             </div>
           </div>
 
-          <StickerCollection
-            belt={viewBelt}
-            earnedIds={earnedStickerIds}
-            earnedTotal={earnedStickerIds.size}
-            childName={childName}
-          />
+          {mode === 'parent' && (
+            <StickerCollection
+              belt={viewBelt}
+              earnedIds={earnedStickerIds}
+              earnedTotal={earnedStickerIds.size}
+              childName={childName}
+            />
+          )}
         </div>
-      </PageSheet>
-    </div>
+    </Frame>
   );
 }
 
@@ -386,7 +439,21 @@ function CreateDetail({ enrollment, logs, childName, backTo }) {
 // The lessons are always shown, earned or not. A locked badge with the lesson
 // it is waiting on is what makes the list a map of what is coming rather than
 // a receipt for what is done, which is the whole reason a ninja opens it.
-function LessonRow({ l, badge }) {
+function LessonRow({ l, badge, index, reference }) {
+  // The curriculum lists the lesson and its badge as they are, with no one
+  // to have finished them.
+  if (reference) {
+    return (
+      <li className="flex items-center gap-3 py-2 px-4">
+        {badge ? (
+          <img src={badge.src} alt="" aria-hidden draggable={false} loading="lazy" className="h-8 w-8 flex-shrink-0 object-contain" />
+        ) : (
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center font-ninja text-[12px] font-extrabold tabular-nums text-ninja-muted">{index}</span>
+        )}
+        <span className="min-w-0 flex-1 block truncate font-ninja text-[13.5px] font-bold text-ninja-navy">{l.title}</span>
+      </li>
+    );
+  }
   return (
     <li className="flex items-center gap-3 py-2 px-4">
       {/* Robotics awards its badge at the module, not the lesson, so its
@@ -440,7 +507,9 @@ const nameKey = (...parts) => JSON.stringify(parts);
 // belongs to, capstone on the row and lesson badges on the open module's own
 // list. The whole-collection view lives in the sticker book page, where a
 // collection belongs.
-function TrackDetail({ enrollment, logs, childName, backTo }) {
+function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode }) {
+  const reference = mode === 'reference';
+  const block = mode !== 'parent';
   const p = enrollment.program;
   const { curriculum, subPrograms } = useCurriculum();
   const model = useTrackModel(enrollment, logs);
@@ -450,7 +519,7 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
   useEffect(() => { setOpenIdx(current ? current.index : 1); }, [enrollment.id, current?.index]);
   const open = tracks.find((t) => t.index === openIdx) || current;
   const pick = (i) => { setDir(i > openIdx ? 1 : -1); setOpenIdx(i); };
-  const pills = tracks.map((t) => ({ level: t.index, label: t.short, state: t.state }));
+  const pills = tracks.map((t) => ({ level: t.index, label: t.short, state: reference ? 'ahead' : t.state }));
   const started = current?.sessions > 0;
 
   // The badge for each lesson, looked up by the module and lesson it belongs
@@ -492,25 +561,28 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
   };
 
   const cap = selected && open ? capstones.get(nameKey(open.name, selected.name)) : null;
-  const stateSuffix = selected ? (selected.status === 'working' ? ' · now' : selected.status === 'done' ? ' · done' : ' · ahead') : '';
-  const selectedSub = selected ? [
+  const stateSuffix = reference ? '' : selected ? (selected.status === 'working' ? ' · now' : selected.status === 'done' ? ' · done' : ' · ahead') : '';
+  const selectedSub = reference
+    ? (selected?.lessons.length ? `${selected.lessons.length} lesson${selected.lessons.length === 1 ? '' : 's'}` : '')
+    : selected ? [
     selected.lessons.length ? `${selected.lessonsDone} of ${selected.lessons.length} lesson${selected.lessons.length === 1 ? '' : 's'}` : null,
     selected.status === 'done' && selected.date ? `done ${fmtDay(selected.date)}` : null,
     selected.status === 'working' && selected.date ? `working on it · ${fmtDay(selected.date)}` : null,
   ].filter(Boolean).join(' · ') : '';
 
-  const meta = multi
+  const moduleTotal = tracks.reduce((n, t) => n + t.modules.length, 0);
+  const meta = reference
+    ? [multi ? `${tracks.length} ${unit.toLowerCase()}s` : null, `${moduleTotal} module${moduleTotal === 1 ? '' : 's'}`].filter(Boolean).join(' · ')
+    : multi
     ? (current ? `${unit} ${current.index} of ${tracks.length} · ${current.name}` : 'Just getting started')
     : (current?.working ? `Module ${current.working.index} of ${current.modules.length} · ${current.working.name}` : started ? `${current.sessions} session${current.sessions === 1 ? '' : 's'}` : 'Just getting started');
 
-  return (
-    <div className="relative">
-      <PinnedHero>
-        <Hero program={p} size="page" className="!mt-0">
-          {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label="Back to profile" /></div>}
+  const hero = (
+        <Hero program={p} size={block ? 'block' : 'page'} className={block ? '' : '!mt-0'}>
+          {backTo && <div className="mb-10 lg:mb-6"><BackChip to={backTo} label={backLabel} /></div>}
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="hidden lg:block font-ninja text-[12px] font-extrabold opacity-85 truncate">{p} · {childName}</p>
+              <p className="hidden lg:block font-ninja text-[12px] font-extrabold opacity-85 truncate">{p} · {reference ? 'Curriculum' : childName}</p>
               <p className="font-ninja font-extrabold text-[36px] lg:text-[32px] leading-[1.02] mt-1 tracking-[-0.015em]">{p}</p>
               <p className="font-ninja text-[13px] opacity-85 mt-2 truncate">{meta}</p>
             </div>
@@ -523,9 +595,10 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
             </>
           )}
         </Hero>
-      </PinnedHero>
+  );
 
-      <PageSheet>
+  return (
+    <Frame block={block} hero={hero}>
         <div className="space-y-4">
           {open && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
@@ -533,10 +606,10 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
                 <motion.div key={`${open.index}-${selected?.name || 'none'}`}
                   initial={{ opacity: 0, x: 10 * dir }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 * dir }}
                   transition={{ duration: 0.18, ease: EASE_OUT }}>
-                  <Group tint={selected?.status === 'working' ? 'green' : selected?.status === 'done' ? 'blue' : undefined}>
+                  <Group tint={reference ? 'blue' : selected?.status === 'working' ? 'green' : selected?.status === 'done' ? 'blue' : undefined}>
                     <div className="flex items-start gap-3 pl-4 pr-4 pt-3.5 pb-3">
                       <div className="min-w-0 flex-1">
-                        <p className="font-ninja text-[11px] font-extrabold uppercase tracking-[0.08em]" style={selected && selected.status !== 'todo' ? { color: 'var(--tint-ink)' } : { color: 'rgb(var(--ninja-muted))' }}>
+                        <p className="font-ninja text-[11px] font-extrabold uppercase tracking-[0.08em]" style={reference || (selected && selected.status !== 'todo') ? { color: 'var(--tint-ink)' } : { color: 'rgb(var(--ninja-muted))' }}>
                           {[multi ? open.name : null, selected ? selected.name : 'Modules'].filter(Boolean).join(' · ')}{stateSuffix}
                         </p>
                         {/* The achievement's own name for the module, the way
@@ -555,15 +628,15 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
                       {cap && (
                         <Tilt rest={3} amount={9} className="flex-shrink-0 mt-0.5">
                           <img src={cap.src} alt="" aria-hidden draggable={false}
-                            className={`h-[84px] w-[84px] sm:h-[104px] sm:w-[104px] select-none object-contain ${cap.earned ? 'drop-shadow-[0_12px_16px_rgb(6_13_26_/_0.25)]' : 'opacity-30 grayscale'}`} />
+                            className={`h-[84px] w-[84px] sm:h-[104px] sm:w-[104px] select-none object-contain ${reference || cap.earned ? 'drop-shadow-[0_12px_16px_rgb(6_13_26_/_0.25)]' : 'opacity-30 grayscale'}`} />
                         </Tilt>
                       )}
                     </div>
                     <div className={`mx-3 mb-3 rounded-[14px] overflow-hidden ${selected ? 'border border-ninja-navy/[0.06]' : ''}`}>
                       {selected && selected.lessons.length > 0 && (
                         <ul className="tint-inset">
-                          {selected.lessons.map((l) => (
-                            <LessonRow key={l.name} l={l} badge={art.get(nameKey(selected.name, l.name))} />
+                          {selected.lessons.map((l, li) => (
+                            <LessonRow key={l.name} l={l} index={li + 1} reference={reference} badge={art.get(nameKey(selected.name, l.name))} />
                           ))}
                         </ul>
                       )}
@@ -582,15 +655,15 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
                 {open.modules.map((m, i) => {
                   const sticker = capstones.get(nameKey(open.name, m.name));
                   return (
-                    <Row key={m.name} first={i === 0} onClick={() => pickModule(m)} active={selected?.name === m.name} dim={m.status === 'todo'}
+                    <Row key={m.name} first={i === 0} onClick={() => pickModule(m)} active={selected?.name === m.name} dim={!reference && m.status === 'todo'}
                       // The module's own achievement, not its number: earned in
                       // colour, waiting in grey. A module with no sticker falls
                       // back to the numbered tile, the same as a kit with no art.
                       lead={sticker
-                        ? <ModuleBadge sticker={sticker} earned={sticker.earned} />
-                        : <Tile tint={m.status === 'done' ? 'rgb(34 197 94 / 0.14)' : m.status === 'working' ? 'rgb(var(--ninja-blue) / 0.14)' : 'rgb(var(--ninja-navy) / 0.06)'} color={m.status === 'done' ? '#15803d' : m.status === 'working' ? undefined : 'rgb(var(--ninja-muted))'}>{m.index}</Tile>}
+                        ? <ModuleBadge sticker={sticker} earned={reference || sticker.earned} />
+                        : reference ? <Tile>{m.index}</Tile> : <Tile tint={m.status === 'done' ? 'rgb(34 197 94 / 0.14)' : m.status === 'working' ? 'rgb(var(--ninja-blue) / 0.14)' : 'rgb(var(--ninja-navy) / 0.06)'} color={m.status === 'done' ? '#15803d' : m.status === 'working' ? undefined : 'rgb(var(--ninja-muted))'}>{m.index}</Tile>}
                       title={m.name}
-                      subtitle={[
+                      subtitle={reference ? (m.lessons.length ? `${m.lessons.length} lesson${m.lessons.length === 1 ? '' : 's'}` : null) : [
                         m.lessons.length ? `${m.lessonsDone} of ${m.lessons.length} lesson${m.lessons.length === 1 ? '' : 's'}` : null,
                         m.status === 'working' ? 'now' : m.status === 'done' && m.date ? `done ${fmtDay(m.date)}` : null,
                       ].filter(Boolean).join(' · ') || null}
@@ -602,13 +675,13 @@ function TrackDetail({ enrollment, logs, childName, backTo }) {
             </div>
           )}
         </div>
-      </PageSheet>
-    </div>
+    </Frame>
   );
 }
 
-export default function CourseDetail({ enrollment, logs, childName, backTo }) {
-  return enrollment.program === 'CREATE'
-    ? <CreateDetail enrollment={enrollment} logs={logs} childName={childName} backTo={backTo} />
-    : <TrackDetail enrollment={enrollment} logs={logs} childName={childName} backTo={backTo} />;
+// `mode` is 'parent' (the portal's own page), 'staff' (one ninja, in the staff
+// layout) or 'reference' (the curriculum, no ninja). See the top of the file.
+export default function CourseDetail({ enrollment, logs = [], childName, backTo, backLabel = 'Back to profile', mode = 'parent' }) {
+  const props = { enrollment, logs, childName, backTo, backLabel, mode };
+  return enrollment.program === 'CREATE' ? <CreateDetail {...props} /> : <TrackDetail {...props} />;
 }

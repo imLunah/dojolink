@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import BirthdayConfetti, { isBirthdayToday } from '../../components/shared/BirthdayConfetti';
 import RoadmapModal from '../../components/shared/RoadmapModal';
 import { motion } from 'framer-motion';
-import { MapIcon } from 'lucide-react';
+import { BookOpenIcon, MapIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import BeltIcon from '../../components/ui/BeltIcon';
@@ -15,7 +15,26 @@ import StickerPickerModal from '../../components/shared/StickerPickerModal';
 import { stickerUrl, stickerLabel } from '../../utils/stickers';
 import { api } from '../../api/client';
 import { BELTS, getMaxLevel, getLevels, getBelt, PROGRAM_LOGOS } from '../../utils/beltConfig';
-import { SkeletonProfile } from '../../components/ui/Skeleton';
+import { SkeletonProfile, SkeletonCards } from '../../components/ui/Skeleton';
+
+// The course a ninja is in, drawn the way the parent portal draws it. Loaded
+// on demand: it carries the curriculum art and most of the profile never
+// opens it.
+const CourseDetail = lazy(() => import('../../components/parent/CourseDetail'));
+const courseHref = (studentId, program) => `/manager/students/${studentId}/courses/${encodeURIComponent(program)}`;
+
+// The way into a course from its card on the profile.
+function OpenCourseLink({ to, className = '' }) {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center justify-center gap-1.5 text-ninja-blue font-ninja font-semibold text-sm py-2 rounded-xl border border-ninja-blue/25 hover:bg-ninja-blue/5 transition-colors ${className}`}
+    >
+      <BookOpenIcon className="w-4 h-4" />
+      Open course
+    </Link>
+  );
+}
 
 // ── Animation variants ────────────────────────────────────────────────────────
 const fadeUp = {
@@ -82,7 +101,7 @@ function StudentAvatar({ student, size = 'md', canEditSticker, onEditSticker, de
 }
 
 // ── Mobile: Belt Journey card ─────────────────────────────────────────────────
-function MobileBeltJourney({ enrollment }) {
+function MobileBeltJourney({ enrollment, courseTo }) {
   const { belt_level, belt_sublevel, current_project, project_status } = enrollment;
   const belt = getBelt(belt_level);
   const maxLevel = getMaxLevel(belt_level);
@@ -181,6 +200,7 @@ function MobileBeltJourney({ enrollment }) {
           </div>
         </div>
       )}
+      {courseTo && <OpenCourseLink to={courseTo} className="mt-3 w-full" />}
     </div>
   );
 }
@@ -199,7 +219,7 @@ const PROGRAM_CARD_BAR_COLORS = {
 };
 
 // ── Mobile: Non-CREATE program card ──────────────────────────────────────────
-function MobileProgramCard({ enrollment, onOpenRoadmap }) {
+function MobileProgramCard({ enrollment, onOpenRoadmap, courseTo }) {
   const { program, percent_complete, last_sub_program, last_module_name, last_lesson_name, last_session_date } = enrollment;
   const gradient = PROGRAM_CARD_GRADIENTS[program] || 'linear-gradient(135deg, #0f172a, #1e293b)';
   const barColor = PROGRAM_CARD_BAR_COLORS[program] || 'rgb(var(--ninja-blue))';
@@ -275,13 +295,16 @@ function MobileProgramCard({ enrollment, onOpenRoadmap }) {
             </div>
           </div>
         )}
-        <button
-          onClick={onOpenRoadmap}
-          className="mt-3 w-full flex items-center justify-center gap-1.5 text-ninja-blue font-ninja font-semibold text-sm py-2 rounded-xl border border-ninja-blue/25 hover:bg-ninja-blue/5 transition-colors"
-        >
-          <MapIcon className="w-4 h-4" />
-          View Roadmap
-        </button>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <OpenCourseLink to={courseTo} />
+          <button
+            onClick={onOpenRoadmap}
+            className="flex items-center justify-center gap-1.5 text-ninja-blue font-ninja font-semibold text-sm py-2 rounded-xl border border-ninja-blue/25 hover:bg-ninja-blue/5 transition-colors"
+          >
+            <MapIcon className="w-4 h-4" />
+            Roadmap
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -322,7 +345,7 @@ function MobileActivityChart({ logs }) {
 }
 
 // ── Desktop: Belt Journey card ─────────────────────────────────────────────────
-function DesktopBeltJourney({ enrollment }) {
+function DesktopBeltJourney({ enrollment, courseTo }) {
   const { belt_level, belt_sublevel, current_project, project_status } = enrollment;
   const belt = getBelt(belt_level);
   const maxLevel = getMaxLevel(belt_level);
@@ -407,6 +430,7 @@ function DesktopBeltJourney({ enrollment }) {
           </div>
         </div>
       )}
+      {courseTo && <OpenCourseLink to={courseTo} className="mt-4 w-full" />}
     </div>
   );
 }
@@ -455,7 +479,7 @@ function DesktopActivityChart({ logs }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StudentProfile() {
-  const { id } = useParams();
+  const { id, program: programParam } = useParams();
   const navigate = useNavigate();
   const { user, isReadOnly, viewAs } = useAuth();
   const [student, setStudent] = useState(null);
@@ -544,6 +568,35 @@ export default function StudentProfile() {
   const activitySessions = sessionLogs;
   const locationName = user?.availableLocations?.find(l => l.id === student.location_id)?.name;
 
+  // A course opened from one of the cards below: the parent portal's course
+  // page, reading this ninja's own log. The staff log carries the note text
+  // where the parent API sends a flag, so the roadmap's bulk mark-complete is
+  // flagged here the same way before the page reads it.
+  const openCourse = programParam ? programs.find((p) => p.program === decodeURIComponent(programParam)) : null;
+  if (programParam) {
+    if (!openCourse) return <Layout><p className="text-ninja-muted font-ninja text-center py-12">{student.full_name.split(' ')[0]} is not in {decodeURIComponent(programParam)}.</p></Layout>;
+    const courseLogs = logs
+      .filter((l) => l.program === openCourse.program)
+      .map((l) => ({ ...l, from_roadmap: l.notes === 'Marked complete from roadmap' }));
+    return (
+      <Layout>
+        <div className="max-w-6xl mx-auto">
+          <Suspense fallback={<SkeletonCards count={1} height={260} label={`Loading ${openCourse.program}`} />}>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}>
+              <CourseDetail
+                mode="staff"
+                enrollment={openCourse}
+                logs={courseLogs}
+                childName={student.full_name.split(' ')[0]}
+                backTo={`/manager/students/${student.id}`}
+              />
+            </motion.div>
+          </Suspense>
+        </div>
+      </Layout>
+    );
+  }
+
   // Desktop stats
   const now = new Date();
   const sessionsThisMonth = activitySessions.filter((l) => {
@@ -621,14 +674,14 @@ export default function StudentProfile() {
           {/* Belt Journey (CREATE) */}
           {createEnrollment?.belt_level && (
             <motion.div variants={fadeUp}>
-              <MobileBeltJourney enrollment={createEnrollment} />
+              <MobileBeltJourney enrollment={createEnrollment} courseTo={courseHref(student.id, 'CREATE')} />
             </motion.div>
           )}
 
           {/* Other program cards */}
           {nonCreatePrograms.map((enrollment) => (
             <motion.div key={enrollment.program} variants={fadeUp}>
-              <MobileProgramCard enrollment={enrollment} onOpenRoadmap={() => setRoadmapEnrollment(enrollment)} />
+              <MobileProgramCard enrollment={enrollment} onOpenRoadmap={() => setRoadmapEnrollment(enrollment)} courseTo={courseHref(student.id, enrollment.program)} />
             </motion.div>
           ))}
 
@@ -735,14 +788,14 @@ export default function StudentProfile() {
               {/* Belt Journey */}
               {createEnrollment?.belt_level && (
                 <motion.div variants={fadeUp}>
-                  <DesktopBeltJourney enrollment={createEnrollment} />
+                  <DesktopBeltJourney enrollment={createEnrollment} courseTo={courseHref(student.id, 'CREATE')} />
                 </motion.div>
               )}
 
               {/* Non-CREATE programs */}
               {nonCreatePrograms.map((enrollment) => (
                 <motion.div key={enrollment.program} variants={fadeUp}>
-                  <MobileProgramCard enrollment={enrollment} onOpenRoadmap={() => setRoadmapEnrollment(enrollment)} />
+                  <MobileProgramCard enrollment={enrollment} onOpenRoadmap={() => setRoadmapEnrollment(enrollment)} courseTo={courseHref(student.id, enrollment.program)} />
                 </motion.div>
               ))}
 
