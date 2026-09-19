@@ -201,7 +201,9 @@ export function trackModel({ program, enrollment, logs, curriculum, subPrograms,
     const tlogs = multi ? sessions.filter((l) => l.sub_program === name) : sessions;
     const byModule = new Map();
     for (const l of tlogs) {
-      if (!l.module_name) continue;
+      // A module the curriculum has never heard of is custom work, and it
+      // goes to the Custom track below rather than onto the end of this one.
+      if (!l.module_name || !moduleNames.includes(l.module_name)) continue;
       const d = String(l.session_date).split('T')[0];
       const e = byModule.get(l.module_name) || { first: d, last: d };
       if (d < e.first) e.first = d;
@@ -213,8 +215,7 @@ export function trackModel({ program, enrollment, logs, curriculum, subPrograms,
     for (const m of byModule.keys()) {
       if (furthest === null || order(m) > order(furthest) || (order(m) === order(furthest) && byModule.get(m).last > byModule.get(furthest).last)) furthest = m;
     }
-    const all = [...moduleNames, ...[...byModule.keys()].filter((m) => !moduleNames.includes(m))];
-    const modules = all.map((m, j) => {
+    const modules = moduleNames.map((m, j) => {
       const hit = byModule.get(m);
       const names = lessonsOf.get(m) || [];
       const titles = lessonTitles(names);
@@ -259,5 +260,52 @@ export function trackModel({ program, enrollment, logs, curriculum, subPrograms,
     t.state = i === curIdx ? 'current' : i < curIdx && t.sessions > 0 ? 'done' : 'ahead';
   });
 
-  return { multi, tracks, current: tracks[curIdx] || tracks[0] || null, unit: program === 'Robotics Academy' ? 'Kit' : 'Track' };
+  // CUSTOM. A sensei can log a module and lesson that are not in the
+  // curriculum (the log form's "Custom..." option). Those have no place in
+  // any track, so they gather in a track of their own, after the real ones:
+  // one module per custom module name, in the order the ninja first did them,
+  // with the lessons the log names under it. A lesson is done once any log
+  // marks it Completed; the latest custom module is the one being worked on.
+  const known = (l) => {
+    if (multi) return keys.includes(l.sub_program) && ((curriculum?.[l.sub_program]) || []).some((m) => m.module === l.module_name);
+    return ((curriculum?.[program]) || []).some((m) => m.module === l.module_name);
+  };
+  const customLogs = sessions.filter((l) => l.module_name && !known(l))
+    .sort((a, b) => String(a.session_date).localeCompare(String(b.session_date)));
+  if (customLogs.length) {
+    const byName = new Map();
+    for (const l of customLogs) {
+      const d = String(l.session_date).split('T')[0];
+      const m = byName.get(l.module_name) || { first: d, last: d, lessons: new Map() };
+      if (d > m.last) m.last = d;
+      if (l.lesson_name) {
+        const les = m.lessons.get(l.lesson_name) || { name: l.lesson_name, title: l.lesson_name, done: false, date: null };
+        if (l.status_at === 'Completed' && !les.done) { les.done = true; les.date = d; }
+        m.lessons.set(l.lesson_name, les);
+      }
+      byName.set(l.module_name, m);
+    }
+    const latest = [...byName.entries()].sort((a, b) => b[1].last.localeCompare(a[1].last))[0]?.[0];
+    const modules = [...byName.entries()].map(([name, m], j) => {
+      const lessons = [...m.lessons.values()];
+      return {
+        name, index: j + 1,
+        status: name === latest ? 'working' : 'done',
+        date: m.last, lessons,
+        lessonsDone: lessons.filter((x) => x.done).length,
+      };
+    });
+    const dates = customLogs.map((l) => String(l.session_date).split('T')[0]);
+    tracks.push({
+      name: 'Custom', short: 'Custom', custom: true, index: tracks.length + 1,
+      modules,
+      done: modules.filter((m) => m.status === 'done').length,
+      working: modules.find((m) => m.status === 'working') || null,
+      sessions: customLogs.length,
+      first: dates[0], last: dates[dates.length - 1],
+      state: 'ahead',
+    });
+  }
+
+  return { multi, tracks, hasCustom: customLogs.length > 0, current: tracks[curIdx] || tracks[0] || null, unit: program === 'Robotics Academy' ? 'Kit' : 'Track' };
 }

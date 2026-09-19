@@ -552,7 +552,11 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
   const p = enrollment.program;
   const { curriculum, subPrograms } = useCurriculum();
   const model = useTrackModel(enrollment, logs);
-  const { tracks, current, multi, unit } = model;
+  const { tracks, current, multi, unit, hasCustom } = model;
+  // The pills show whenever there is more than one thing to pick: a program
+  // of several tracks, or any program once it has custom work beside it.
+  const showPills = multi || hasCustom;
+  const standardCount = tracks.filter((t) => !t.custom).length;
   const [openIdx, setOpenIdx] = useState(current ? current.index : 1);
   const [dir, setDir] = useState(1);
   useEffect(() => { setOpenIdx(current ? current.index : 1); }, [enrollment.id, current?.index]);
@@ -603,7 +607,9 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
   // from the log, keyed by kit, module and lesson, so it survives moving
   // between modules and kits and is saved in one go. Save sends each kit's
   // ticks and unticks as the roadmap's complete and uncomplete writes.
-  const editable = mode === 'staff' && typeof onSaveLessons === 'function';
+  // Custom work is not in the curriculum, so there is nothing to tick off
+  // against: it is edited by logging, not here.
+  const editable = mode === 'staff' && typeof onSaveLessons === 'function' && !open?.custom;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => new Map());
   const [saving, setSaving] = useState(false);
@@ -667,9 +673,9 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
 
   const moduleTotal = tracks.reduce((n, t) => n + t.modules.length, 0);
   const meta = reference
-    ? [multi ? `${tracks.length} ${unit.toLowerCase()}s` : null, `${moduleTotal} module${moduleTotal === 1 ? '' : 's'}`].filter(Boolean).join(' · ')
+    ? [multi ? `${standardCount} ${unit.toLowerCase()}s` : null, `${moduleTotal} module${moduleTotal === 1 ? '' : 's'}`].filter(Boolean).join(' · ')
     : multi
-    ? (current ? `${unit} ${current.index} of ${tracks.length} · ${current.name}` : 'Just getting started')
+    ? (current ? `${unit} ${current.index} of ${standardCount} · ${current.name}` : 'Just getting started')
     : (current?.working ? `Module ${current.working.index} of ${current.modules.length} · ${current.working.name}` : started ? `${current.sessions} session${current.sessions === 1 ? '' : 's'}` : 'Just getting started');
 
   const hero = (
@@ -683,7 +689,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
             </div>
             <Emblem program={p} size={104} tilt />
           </div>
-          {multi && (
+          {showPills && (
             <>
               <div className="hidden lg:block mt-5"><LevelPills states={pills} value={openIdx} onChange={pick} onHero layoutId="track-pill-desktop" /></div>
               <div className="lg:hidden mt-4"><LevelPills states={pills} value={openIdx} onChange={pick} onHero layoutId="track-pill-mobile" /></div>
@@ -705,7 +711,7 @@ function TrackDetail({ enrollment, logs, childName, backTo, backLabel, mode, bet
                     <div className="flex items-start gap-3 pl-4 pr-4 pt-3.5 pb-3">
                       <div className="min-w-0 flex-1">
                         <p className="font-ninja text-[11px] font-extrabold uppercase tracking-[0.08em]" style={reference || (selected && selected.status !== 'todo') ? { color: 'var(--tint-ink)' } : { color: 'rgb(var(--ninja-muted))' }}>
-                          {[multi ? open.name : null, selected ? selected.name : 'Modules'].filter(Boolean).join(' · ')}{stateSuffix}
+                          {[multi || open.custom ? open.name : null, selected ? selected.name : 'Modules'].filter(Boolean).join(' · ')}{stateSuffix}
                         </p>
                         {/* The achievement's own name for the module, the way
                             CREATE prints the poster's name for a level. A
