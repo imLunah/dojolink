@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef } from 'react';
+import { createContext, Fragment, useContext, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { CheckIcon, ChevronRightIcon, StarIcon } from 'lucide-react';
@@ -543,7 +543,7 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
           const state = idx < 0 ? 'ahead' : i < idx ? 'earned' : i === idx ? 'current' : 'ahead';
           const size = i === sel ? cur : icon;
           return (
-            <div key={b.name} className="flex items-start">
+            <Fragment key={b.name}>
               <Cell belt={b.name} onSelect={onSelect} isSel={i === sel} compact={compact} tight={tight}>
                 {/* The icon springs between the two sizes rather than cutting
                     to them: the row's own height is pinned to the big size, so
@@ -570,11 +570,19 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
                   one side. The negative margins are what let the line reach
                   under the belts rather than stopping at the column's edge —
                   they are wider at lg because the gap either side of a belt
-                  inside its column is wider there. */}
+                  inside its column is wider there.
+
+                  Cell and connector are siblings in the row itself, not a pair
+                  boxed together: wrapped in their own little flex the connector
+                  could only grow inside a box already shrunk to fit it, so
+                  every belt sat 8px from the next one however wide the banner
+                  was. The widths are classes rather than inline style for the
+                  same reason — an inline `min-width: 8px` outranks any class,
+                  and the 34px floor at lg never reached the element. */}
               {i < BELTS.length - 1 && (
-                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-1 lg:min-w-[34px] lg:max-w-[64px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ minWidth: compact || tight ? 6 : 8, width: compact || tight ? 6 : 8, height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
+                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-1 lg:min-w-[34px] lg:max-w-[64px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${compact || tight ? 'w-[6px] min-w-[6px]' : 'w-[8px] min-w-[8px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
               )}
-            </div>
+            </Fragment>
           );
         })}
       </div>
