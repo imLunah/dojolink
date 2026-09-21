@@ -47,12 +47,12 @@ export default function ExpectedToday({
 }) {
   const own = useExpectedToday(date, { enabled: !feed });
   const state = feed || own;
+  const { user } = useAuth();
+  const canRenew = ['manager', 'admin'].includes(user?.role);
   // Renewing is a director's job: it needs their MyStudio password and a code
   // from their email. Senseis see this panel now that it follows the center
   // rather than a per-device flag, so the difference has to be said out loud
   // instead of offering all of them a link that goes nowhere for most.
-  const { user } = useAuth();
-  const canRenew = ['manager', 'admin'].includes(user?.role);
   const [adding, setAdding] = useState(() => new Set());
   const [accepted, setAccepted] = useState(() => new Set());
 
@@ -73,7 +73,7 @@ export default function ExpectedToday({
         // Remember the match so the next pull does not have to guess from the
         // name again. Best effort: the check-in already happened, and a failed
         // link is only a slower match tomorrow.
-        if (row.match === 'name') {
+        if (row.match === 'name' && canRenew) {
           api
             .post('/mystudio/link', {
               participant_id: row.participantId,
@@ -92,7 +92,7 @@ export default function ExpectedToday({
         });
       }
     },
-    [adding, date, onAdded]
+    [adding, canRenew, date, onAdded]
   );
 
   // Inside a dialog somebody opened on purpose, silence is an empty box. The

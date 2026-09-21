@@ -72,7 +72,7 @@ router.get('/my', requireSensei, async (req, res) => {
 });
 
 // POST /api/daily
-router.post('/', requireManager, requireOwnLocation, async (req, res) => {
+router.post('/', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   const { student_id, program, session_date } = req.body;
 

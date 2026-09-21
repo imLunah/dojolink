@@ -49,10 +49,9 @@ describe('auth + access control', () => {
     expect(res.status).toBe(403);
   });
 
-  it('refuses a sensei on a manager-only route (403)', async () => {
+  it('allows a sensei to check in a ninja at their assigned center', async () => {
     const { agent } = await login(app, 'sensei_a');
-    // POST /api/daily is requireManager — a sensei must be forbidden.
     const res = await csrf(agent.post('/api/daily')).send({ student_id: world.studentA, program: 'CREATE' });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
   });
 });

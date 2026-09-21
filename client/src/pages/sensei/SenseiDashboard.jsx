@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Layout from '../../components/layout/Layout';
 import TodayBoard from '../../components/manager/TodayBoard';
+import AddStudentToday from '../../components/manager/AddStudentToday';
 import DashboardFilters from '../../components/shared/DashboardFilters';
 import BoardStats from '../../components/shared/BoardStats';
 import ClubSessionsPanel from '../../components/shared/ClubSessionsPanel';
 import Modal from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
 import { ListTodoIcon, UsersIcon } from 'lucide-react';
 import { api } from '../../api/client';
 import { today, formatDate } from '../../utils/dateUtils';
@@ -89,10 +91,11 @@ export default function SenseiDashboard() {
   const [statusFilter, setStatusFilter] = useState('unlogged');
   const [programFilter, setProgramFilter] = useState(null);
   const [bookedOpen, setBookedOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, isReadOnly } = useAuth();
   const todayStr = today();
+  const [showAddModal, setShowAddModal] = useState(false);
 
-  // Read-only for senseis: they need to know who is coming, not to manage the
+  // Senseis can accept a booked ninja as a check-in, but cannot manage the
   // connection. The feed is held here rather than inside the panel so the icon
   // only appears when there is something behind it.
   //
@@ -110,6 +113,13 @@ export default function SenseiDashboard() {
   const showBooked = bookedFeed.loading || bookedCount > 0;
 
   const refresh = () => setRefreshKey(k => k + 1);
+
+  const handleAdded = (newAssignment) => {
+    // An overdue session can be reused and moved to today, so replace by id.
+    setAssignments((prev) => [...prev.filter((a) => a.id !== newAssignment.id), newAssignment]);
+  };
+
+  const existingEntries = assignments.map((a) => ({ student_id: a.student_id, program: a.program }));
 
   // New check-ins from the front desk appear without a reload. Shared with the
   // director's board, and unlike the bare interval this replaced, it stops while
@@ -195,6 +205,11 @@ export default function SenseiDashboard() {
                 either. What is left here is the work: who is booked, and what
                 is assigned to you. */}
             <MyTasksIcon locationId={user?.activeLocation?.id} />
+            {!isReadOnly && (
+              <Button onClick={() => setShowAddModal(true)} size="md">
+                + Check In Ninja
+              </Button>
+            )}
           </div>
         </motion.div>
 
@@ -204,7 +219,14 @@ export default function SenseiDashboard() {
           title="Booked in today"
           width="max-w-md"
         >
-          <ExpectedToday feed={bookedFeed} date={todayStr} readOnly bare />
+          <ExpectedToday
+            feed={bookedFeed}
+            date={todayStr}
+            onAdded={handleAdded}
+            existingStudentIds={new Set(assignments.map((a) => a.student_id))}
+            readOnly={isReadOnly}
+            bare
+          />
         </Modal>
 
         <motion.div variants={fadeUp}>
@@ -240,7 +262,7 @@ export default function SenseiDashboard() {
               assignments={filteredAssignments}
               statusFilter={statusFilter}
               canRemove={false}
-              emptyHint="Check-ins are added by a Center Director."
+              emptyHint={'Use the "+ Check In Ninja" button to get started.'}
             />
           </motion.div>
         )}
@@ -253,6 +275,13 @@ export default function SenseiDashboard() {
         />
 
       </motion.div>
+
+      <AddStudentToday
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdded={handleAdded}
+        existingEntries={existingEntries}
+      />
     </Layout>
   );
 }
