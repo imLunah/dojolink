@@ -123,59 +123,10 @@ textarea:focus-visible {
   background-color: #252c3e;
 }
 
-/* ── Clear glass ──
-   Apple's Liquid Glass is clear. It bends what is behind it rather than
-   scattering it, and you read the material off its edges, where a real lens is
-   thickest. Three attempts at putting colour on this card all failed the same
-   way, because every one of them was paint on a surface: a wash darkened it, a
-   white veil frosted it, a tinted rim and glow still asked the card to be a
-   colour first. The card is just glass now, the same for every one of them.
-
-   It started on the task board and is not the task board's any more: the
-   dashboard's panels wear it too, which is why the class says what the
-   material is rather than what it was first used on.
-
-   The layers Apple names:
-
-   illumination — a nearly clear pane with its saturation lifted, which is what
-     makes glass look lit rather than grey. Two pixels of blur, not twenty: the
-     heavy blur is exactly what turns glass into frost.
-   highlight — a white lip along the top edge and a faint rim around the rest,
-     light catching the bevel.
-   shadow — separation from the column, since a pane this clear cannot rely on
-     a stroke to say where it ends.
-
-   Two class names deep on purpose. `.dark .bg-white` above and `.dark
-   .shadow-sm` below are both two deep, and a single class would tie with them
-   and lose on source order, repainting every card grey and flattening its
-   shadow. */
-.glass-card.glass-clear {
-  background-color: rgb(255 255 255 / 0.55);
-  backdrop-filter: blur(2px) saturate(1.8);
-  -webkit-backdrop-filter: blur(2px) saturate(1.8);
-  border-color: rgb(255 255 255 / 0.6);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    inset 0 0 0 1px rgb(255 255 255 / 0.35),
-    0 8px 20px -10px rgb(15 23 42 / 0.22),
-    0 1px 2px rgb(15 23 42 / 0.06);
-}
-/* Dark glass is a dark veil, not a light one: a pane lifted with white sits in
-   FRONT of a dark page and reads as a lighter card, where glass should sit
-   behind it. But near-black went the other way and dropped the card out of the
-   board altogether. The veil is the app's own card colour instead, at 70%,
-   which lands between the column it sits on and the solid card it would be if
-   it were not glass. The lip and rim stay bright: they are the light on the
-   edge, and they are what keeps a darker pane from reading as a hole. */
-.dark .glass-card.glass-clear {
-  background-color: rgb(37 44 62 / 0.7);
-  border-color: rgb(255 255 255 / 0.11);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.18),
-    inset 0 0 0 1px rgb(255 255 255 / 0.05),
-    0 12px 28px -12px rgb(0 0 0 / 0.55),
-    0 2px 8px rgb(0 0 0 / 0.32);
-}
+/* The cards were clear liquid glass for a while — a translucent pane, lit
+   edges, a 2px backdrop blur. It came off: the cards are solid again (the
+   `.dark .bg-white` override above is the whole card surface), and glass
+   remains only on the surfaces below that float. */
 
 /* ── Floating menus: frosted glass ──
    Every action menu in the app, not just the board's. A menu is the heaviest
@@ -228,27 +179,6 @@ textarea:focus-visible {
 .dark .glass-chrome.glass-edge {
   background-color: #1c2132;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
-}
-
-/* An open menu hangs off the bottom of its card, and every glass pane is its
-   own stacking context, so the card below was painting straight over it and
-   blurring it on the way past. The card holding an open menu rises above its
-   siblings for as long as it is open.
-   
-   This was the task board's rule when the board was the only glass on the
-   page. Every card is glass now, so every card is a stacking context, and the
-   same thing would have happened under every menu in the app. */
-.glass-card:has([aria-expanded='true']) {
-  z-index: 30;
-  position: relative;
-}
-
-/* The refraction is spent where it can be seen. A resting card sits on a flat
-   column, so displacing that backdrop costs rasterisation and shows nothing;
-   the card under the pointer travels over the other cards and the columns, and
-   there the warp is the whole point. Same filter the mobile nav wears. */
-.task-card.task-lensed {
-  backdrop-filter: url(#liquidGlass) blur(2px) saturate(1.8);
 }
 
 /* A dropped card is a fresh mount in its new slot, so it has no old position to
@@ -362,17 +292,6 @@ textarea:focus-visible {
   .task-landing { animation: none; }
   /* The size still says it, without the shake saying it twice. */
   .task-armed { animation: none; transform: scale(1.02); }
-}
-
-/* Glass is a preference, not a requirement. Someone who has asked their system
-   for less transparency gets a plain card. */
-@media (prefers-reduced-transparency: reduce) {
-  .glass-card.glass-clear {
-    background-color: #fff;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  .dark .glass-card.glass-clear { background-color: #252c3e; }
 }
 
 /* ── Dark mode: input / select fields ── */

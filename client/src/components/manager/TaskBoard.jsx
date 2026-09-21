@@ -1385,7 +1385,7 @@ export default function TaskBoard({
                 hand-over) is transitioned. */}
             <div
               ref={faceRef}
-              className={`${CARD} ${TASK_SURFACE} task-lensed p-3.5 shadow-xl relative transition-[background-color,border-color,box-shadow,backdrop-filter] duration-200 ease-[var(--ease-out)] -rotate-1`}
+              className={`${CARD} ${TASK_SURFACE} p-3.5 shadow-xl relative transition-[background-color,border-color,box-shadow] duration-200 ease-[var(--ease-out)] -rotate-1`}
             >
               <TaskCardFace task={held.task} />
             </div>

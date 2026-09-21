@@ -24,13 +24,13 @@ export const COLUMN_KEYS = COLUMNS.map((c) => c.key);
 
 export const COLUMN_LABEL = Object.fromEntries(COLUMNS.map((c) => [c.key, c.label]));
 
-// The glass moved into CARD, which every card in the app now wears. What is
-// left here is the board's own: the drag lens, and the rule that lifts a card
-// above its siblings while its menu is open.
+// The board's card is the app's CARD; this class is only the board's own hook
+// on top of it. The glass the board once wore (and the drag lens that came
+// with it) is gone — the cards are solid everywhere now.
 //
 // Tasks still carry a `color` in the database. Nothing draws it: three passes
-// at a coloured card all read as paint on glass, and the board is quieter
-// without it. The column is left alone so the choice can come back.
+// at a coloured card all read as decoration the board is quieter without. The
+// column is left alone so the choice can come back.
 export const TASK_SURFACE = 'task-card';
 
 /* ------------------------------------------------------------ grouping -- */
