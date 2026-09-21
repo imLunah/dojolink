@@ -13,6 +13,7 @@ import { Skeleton, SkeletonList } from '../../components/ui/Skeleton';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, cardFields, reorderPayload } from '../../lib/taskBoard';
+import useLiveRefresh from '../../lib/useLiveRefresh';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -50,6 +51,7 @@ export default function TasksPage({ mode = 'manager' }) {
   }, [editor, editorDirty]);
   const [showArchived, setShowArchived] = useState(false);
   const [assignees, setAssignees] = useState([]);
+  const [mentions, setMentions] = useState([]);
   // The card on its way out. A delete asked for from the dialog or the list's
   // menu has nothing moving on screen to connect the press to the row closing
   // up, so the card is left where it is for a beat and shrinks out of it. The
@@ -80,9 +82,9 @@ export default function TasksPage({ mode = 'manager' }) {
     try { localStorage.setItem(mineOnly ? 'dj-my-tasks-view' : 'dj-tasks-view', next); } catch { /* private mode */ }
   };
 
-  const load = useCallback(() => {
+  const load = useCallback(({ quiet = false } = {}) => {
     let alive = true;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     const query = mineOnly ? '?mine=true' : showArchived ? '?archived=true' : '';
     api.get(`/director-tasks${query}`)
       .then((rows) => { if (alive) { setTasks(rows); setError(''); } })
@@ -92,6 +94,24 @@ export default function TasksPage({ mode = 'manager' }) {
   }, [mineOnly, showArchived]);
 
   useEffect(load, [load, user?.activeLocation?.id]);
+
+  const loadMentions = useCallback(() => {
+    api.get('/director-tasks/mentions')
+      .then((rows) => setMentions(rows || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadMentions();
+  }, [loadMentions, user?.activeLocation?.id]);
+
+  // A task comment may mention someone while this page is already open. The
+  // board and the small inbox refresh together so the notification can always
+  // open the task it points to.
+  useLiveRefresh(() => {
+    if (!showArchived) load({ quiet: true });
+    loadMentions();
+  }, { enabled: !showArchived });
 
   // Who the assignee filter can offer, fetched once here rather than by every
   // component that needs the list.
@@ -239,6 +259,13 @@ export default function TasksPage({ mode = 'manager' }) {
     }
   }, [tasks, dropAfterExit]);
 
+  const openMention = useCallback((mention) => {
+    const task = tasks.find((entry) => entry.id === mention.task_id);
+    if (task) openEditor({ task });
+    setMentions((items) => items.filter((item) => item.id !== mention.id));
+    api.post(`/director-tasks/mentions/${mention.id}/read`, {}).catch(() => {});
+  }, [openEditor, tasks]);
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -285,7 +312,7 @@ export default function TasksPage({ mode = 'manager' }) {
                 {showArchived
                   ? 'Deleted tasks are kept here for 14 days, then removed for good.'
                   : mineOnly
-                    ? 'Tasks assigned to you at this center.'
+                    ? 'Tasks assigned to you or this center.'
                     : canCreate
                     ? 'Assign tasks to this location'
                     : "You're viewing another center, so this board is read-only."}
@@ -340,6 +367,22 @@ export default function TasksPage({ mode = 'manager' }) {
           </div>
 
         </motion.header>
+
+        {!showArchived && mentions.length > 0 && (
+          <section className="space-y-2" aria-label="Task mentions">
+            {mentions.map((mention) => (
+              <button
+                key={mention.id}
+                type="button"
+                onClick={() => openMention(mention)}
+                className="block w-full rounded-xl border border-ninja-blue/30 bg-ninja-blue/10 px-4 py-3 text-left font-ninja text-sm text-ninja-navy transition-colors hover:bg-ninja-blue/15"
+              >
+                <span className="font-bold">{mention.author_name || 'A teammate'} mentioned you</span>
+                {mention.title && <span> on {mention.title}</span>}
+              </button>
+            ))}
+          </section>
+        )}
 
         {error && (
           <p role="status" className="font-ninja text-sm text-ninja-red">{error}</p>

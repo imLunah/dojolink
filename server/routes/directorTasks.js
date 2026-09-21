@@ -95,15 +95,24 @@ const carriesTask = (t, session) =>
   || t.assignee_id === session.userId
   || (t.assignee_center === true && ['manager', 'admin'].includes(session.role));
 const mayReadTask = (t, session) =>
-  ['manager', 'admin'].includes(session.role) || t.assignee_id === session.userId;
+  ['manager', 'admin'].includes(session.role)
+  || t.assignee_id === session.userId
+  || t.assignee_center === true
+  || t.mentioned === true;
 
 // The row a permission decision is made against, fetched fresh: the client's
 // copy of a card is whatever it last saw, not what is true.
-async function taskRow(pool, id, locationId) {
+async function taskRow(pool, id, locationId, userId) {
   const { rows } = await pool.query(
-    `SELECT id, created_by, assignee_id, assignee_center, column_key, archived_at
-     FROM director_tasks WHERE id = $1 AND location_id = $2`,
-    [id, locationId]
+    `SELECT t.id, t.created_by, t.assignee_id, t.assignee_center, t.column_key, t.archived_at,
+       EXISTS (
+         SELECT 1
+         FROM director_task_comment_mentions m
+         JOIN director_task_comments c ON c.id = m.comment_id
+         WHERE c.task_id = t.id AND m.user_id = $3
+       ) AS mentioned
+     FROM director_tasks t WHERE t.id = $1 AND t.location_id = $2`,
+    [id, locationId, userId]
   );
   return rows[0] || null;
 }
@@ -186,6 +195,20 @@ router.get('/assignees', requireManager, async (req, res) => {
   }
 });
 
+// GET /api/director-tasks/mentionables — staff who can be addressed from a
+// comment at this center. It deliberately uses membership, not home location:
+// a staff member covering Yorba Linda is part of Yorba Linda for mentions.
+router.get('/mentionables', requireSensei, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(ASSIGNEE_SELECT, [req.session.activeLocationId]);
+    res.json(rows.filter((staff) => staff.id !== req.session.userId));
+  } catch (err) {
+    console.error('Error fetching task mentionables:', err);
+    res.status(500).json({ error: 'Failed to fetch staff' });
+  }
+});
+
 // How long a deleted card is kept before the database forgets it. `archived_at`
 // is the day it was deleted; the column predates the name and is left alone
 // rather than migrated, since renaming it would rewrite every query here to say
@@ -226,13 +249,26 @@ router.get('/', requireSensei, async (req, res) => {
     await purgeExpired(pool);
     const { rows } = await pool.query(
       `${SELECT} WHERE t.location_id = $1
-       AND ($2::boolean OR t.assignee_id = $3)
+       AND (
+         $2::boolean
+         OR t.assignee_id = $3
+         OR ($4::boolean AND (
+           t.assignee_center = true
+           OR EXISTS (
+             SELECT 1
+             FROM director_task_comment_mentions m
+             JOIN director_task_comments c ON c.id = m.comment_id
+             WHERE c.task_id = t.id AND m.user_id = $3
+           )
+         ))
+       )
        AND t.archived_at IS ${archived ? 'NOT NULL' : 'NULL'}
        ORDER BY ${archived ? 't.archived_at DESC' : 't.position ASC'}, t.id ASC`,
       [
         req.session.activeLocationId,
         ['manager', 'admin'].includes(req.session.role) && !mine,
         req.session.userId,
+        req.session.role === 'sensei',
       ]
     );
     res.json(rows);
@@ -316,7 +352,7 @@ router.post('/archive-done', requireManager, requireOwnLocation, async (req, res
 router.post('/:id/archive', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId, req.session.userId);
     if (!current) return res.status(404).json({ error: 'Task not found' });
     if (!ownsTask(current, req.session)) {
       return res.status(403).json({ error: 'Only the person who made this task can delete it.' });
@@ -340,7 +376,7 @@ router.post('/:id/archive', requireManager, requireOwnLocation, async (req, res)
 router.post('/:id/restore', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId, req.session.userId);
     if (!current) return res.status(404).json({ error: 'Task not found' });
     if (!ownsTask(current, req.session)) {
       return res.status(403).json({ error: 'Only the person who made this task can put it back.' });
@@ -500,7 +536,7 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
 
   try {
-    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId, req.session.userId);
     if (!current) return res.status(404).json({ error: 'Task not found' });
 
     if (!ownsTask(current, req.session)) {
@@ -615,7 +651,7 @@ router.delete('/deleted', requireManager, requireOwnLocation, async (req, res) =
 router.delete('/:id', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const current = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    const current = await taskRow(pool, req.params.id, req.session.activeLocationId, req.session.userId);
     if (!current) return res.status(404).json({ error: 'Task not found' });
     if (!ownsTask(current, req.session)) {
       return res.status(403).json({ error: 'Only the person who made this task can delete it for good.' });
@@ -642,12 +678,67 @@ const COMMENT_SELECT = `
   LEFT JOIN users u ON u.id = c.author_id
 `;
 
+function readMentionIds(value) {
+  if (value === undefined) return { ids: [] };
+  if (!Array.isArray(value) || value.length > 50) return { error: 'Invalid mentions' };
+  const ids = [...new Set(value.map(Number))];
+  if (ids.some((id) => !Number.isInteger(id) || id < 1)) return { error: 'Invalid mentions' };
+  return { ids };
+}
+
+// GET /api/director-tasks/mentions — unread comment mentions for the signed-in
+// staff member. A mention also grants the recipient read access to that card,
+// so a notification never sends somebody to work they cannot open.
+router.get('/mentions', requireSensei, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(
+      `SELECT m.id, m.created_at, c.body, t.id AS task_id, t.title,
+              u.display_name AS author_name
+       FROM director_task_comment_mentions m
+       JOIN director_task_comments c ON c.id = m.comment_id
+       JOIN director_tasks t ON t.id = c.task_id
+       LEFT JOIN users u ON u.id = c.author_id
+       WHERE m.user_id = $1 AND m.read_at IS NULL
+         AND t.location_id = $2 AND t.archived_at IS NULL
+       ORDER BY m.created_at DESC`,
+      [req.session.userId, req.session.activeLocationId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching task mentions:', err);
+    res.status(500).json({ error: 'Failed to fetch task mentions' });
+  }
+});
+
+// POST /api/director-tasks/mentions/:id/read — only the notified staff member
+// can clear their own notification, and the task join scopes it to this center.
+router.post('/mentions/:id/read', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(
+      `UPDATE director_task_comment_mentions m
+       SET read_at = COALESCE(m.read_at, now())
+       FROM director_task_comments c, director_tasks t
+       WHERE m.id = $1 AND m.user_id = $2
+         AND c.id = m.comment_id AND t.id = c.task_id AND t.location_id = $3
+       RETURNING m.id`,
+      [req.params.id, req.session.userId, req.session.activeLocationId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Mention not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Error reading task mention:', err);
+    res.status(500).json({ error: 'Failed to update task mention' });
+  }
+});
+
 // GET /api/director-tasks/:id/comments — the thread under a card, oldest
 // first. Reading is the center's, same as the board itself.
 router.get('/:id/comments', requireSensei, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const task = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    const task = await taskRow(pool, req.params.id, req.session.activeLocationId, req.session.userId);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     if (!mayReadTask(task, req.session)) return res.status(404).json({ error: 'Task not found' });
     const { rows } = await pool.query(
@@ -668,10 +759,12 @@ router.get('/:id/comments', requireSensei, async (req, res) => {
 router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+  const mentions = readMentionIds(req.body?.mention_ids);
   if (!body) return res.status(400).json({ error: 'Say something first' });
   if (body.length > COMMENT_MAX) return res.status(400).json({ error: `Comment max ${COMMENT_MAX} characters` });
+  if (mentions.error) return res.status(400).json({ error: mentions.error });
   try {
-    const task = await taskRow(pool, req.params.id, req.session.activeLocationId);
+    const task = await taskRow(pool, req.params.id, req.session.activeLocationId, req.session.userId);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     if (!carriesTask(task, req.session)) {
       return res.status(403).json({ error: 'Comments are for the people on the card.' });
@@ -680,6 +773,20 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
       'INSERT INTO director_task_comments (task_id, author_id, body) VALUES ($1, $2, $3) RETURNING id',
       [task.id, req.session.userId, body]
     );
+    if (mentions.ids.length > 0) {
+      // Re-check every recipient at the write boundary. The picker is only a
+      // convenience; a crafted request must not notify somebody outside this
+      // center, and a person cannot notify themselves.
+      await pool.query(
+        `INSERT INTO director_task_comment_mentions (comment_id, user_id)
+         SELECT $1, u.id
+         FROM users u
+         WHERE u.id = ANY($2::int[]) AND u.active = true AND u.id <> $3
+           AND u.id IN (SELECT user_id FROM user_locations WHERE location_id = $4)
+         ON CONFLICT (comment_id, user_id) DO NOTHING`,
+        [rows[0].id, mentions.ids, req.session.userId, req.session.activeLocationId]
+      );
+    }
     const { rows: full } = await pool.query(`${COMMENT_SELECT} WHERE c.id = $1`, [rows[0].id]);
     res.status(201).json(full[0]);
   } catch (err) {

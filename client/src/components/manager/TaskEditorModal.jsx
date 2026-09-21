@@ -498,6 +498,9 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
 function TaskComments({ task, canComment, onCount }) {
   const [comments, setComments] = useState(null); // null is still loading
   const [text, setText] = useState('');
+  const [mentionables, setMentionables] = useState([]);
+  const [selectedMentions, setSelectedMentions] = useState([]);
+  const [mention, setMention] = useState(null); // { start, end, query }
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
 
@@ -512,6 +515,47 @@ function TaskComments({ task, canComment, onCount }) {
     return () => { alive = false; };
   }, [task.id]);
 
+  useEffect(() => {
+    if (!canComment) { setMentionables([]); return undefined; }
+    let alive = true;
+    api.get('/director-tasks/mentionables')
+      .then((rows) => { if (alive) setMentionables(rows || []); })
+      .catch(() => { if (alive) setMentionables([]); });
+    return () => { alive = false; };
+  }, [canComment, task.id]);
+
+  const suggestions = mention
+    ? mentionables
+      .filter((staff) => staff.display_name.toLowerCase().includes(mention.query.toLowerCase()))
+      .slice(0, 6)
+    : [];
+
+  const changeText = (e) => {
+    const next = e.target.value;
+    const cursor = e.target.selectionStart;
+    const beforeCursor = next.slice(0, cursor);
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(beforeCursor);
+    setText(next);
+    if (!match) { setMention(null); return; }
+    setMention({
+      start: beforeCursor.lastIndexOf('@'),
+      end: cursor,
+      query: match[1],
+    });
+  };
+
+  const chooseMention = (staff) => {
+    if (!mention) return;
+    setText((current) =>
+      `${current.slice(0, mention.start)}@${staff.display_name} ${current.slice(mention.end)}`
+    );
+    setSelectedMentions((current) => [
+      ...current.filter((entry) => entry.id !== staff.id),
+      staff,
+    ]);
+    setMention(null);
+  };
+
   const post = async (e) => {
     e.preventDefault();
     const body = text.trim();
@@ -519,13 +563,18 @@ function TaskComments({ task, canComment, onCount }) {
     setPosting(true);
     setError('');
     try {
-      const created = await api.post(`/director-tasks/${task.id}/comments`, { body });
+      const mention_ids = selectedMentions
+        .filter((staff) => body.includes(`@${staff.display_name}`))
+        .map((staff) => staff.id);
+      const created = await api.post(`/director-tasks/${task.id}/comments`, { body, mention_ids });
       setComments((cs) => {
         const next = [...(cs || []), created];
         onCount?.(task.id, next.length);
         return next;
       });
       setText('');
+      setSelectedMentions([]);
+      setMention(null);
     } catch (err) {
       setError(err.message || 'Could not add the comment.');
     } finally {
@@ -569,7 +618,7 @@ function TaskComments({ task, canComment, onCount }) {
           <div className="relative rounded-2xl bg-white border border-ninja-border focus-within:border-ninja-blue transition-colors">
             <textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={changeText}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
@@ -582,6 +631,22 @@ function TaskComments({ task, canComment, onCount }) {
               aria-label="Add a comment"
               className="block w-full min-h-[120px] resize-y rounded-2xl bg-transparent px-4 pt-3 pb-14 font-ninja text-[15px] leading-relaxed text-ninja-navy focus:outline-none"
             />
+            {mention && suggestions.length > 0 && (
+              <div role="listbox" aria-label="Mention a staff member" className="absolute left-3 bottom-12 z-10 w-64 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-ninja-border bg-white shadow-lg">
+                {suggestions.map((staff) => (
+                  <button
+                    key={staff.id}
+                    type="button"
+                    role="option"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => chooseMention(staff)}
+                    className="block w-full px-3 py-2 text-left font-ninja text-sm font-semibold text-ninja-navy hover:bg-ninja-bg"
+                  >
+                    @{staff.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2">
               <button
                 type="submit"
