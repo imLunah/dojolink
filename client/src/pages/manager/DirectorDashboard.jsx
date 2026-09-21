@@ -9,8 +9,6 @@ import {
   MegaphoneIcon,
   ClipboardCheckIcon,
   CalendarDaysIcon,
-  ClockIcon,
-  UsersIcon,
   ChevronRightIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
@@ -24,7 +22,7 @@ import { today, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
 import { CARD } from '../../lib/surfaces';
 import { Skeleton } from '../../components/ui/Skeleton';
-import useExpectedToday, { groupByClass, prettyTime } from '../../lib/useExpectedToday';
+import useExpectedToday from '../../lib/useExpectedToday';
 import useLiveRefresh from '../../lib/useLiveRefresh';
 
 // Strong ease-out (Emil's design-eng default). The built-in easeOut is too
@@ -706,157 +704,86 @@ function QuickLinksCard({ isManager }) {
 
 /* ------------------------------------------------------- daily schedule -- */
 
-// Today's booked classes from MyStudio, as a timetable of small class cards:
-// name, start time, and who has actually arrived against who is booked. The
-// card only exists for a connected center; a center that never opted in should
-// not see an empty shelf explaining a feature it does not have.
-function DailySchedule({ feed, onFullSchedule, canRenew }) {
-  const data = feed.data;
-  if (!feed.loading && (feed.error || !data?.connected || data?.disabled)) return null;
+// Today's classes from MyStudio with the booked ninjas listed under each, the
+// same list and one-tap check-in the board's booked panel carries. A center
+// that has not connected MyStudio sees the timetable blurred behind a prompt
+// saying where to turn it on.
 
-  const expired = data?.status === 'expired';
-  const groups = expired ? [] : groupByClass(data?.expected);
+// The stand-in behind the blur. Invented names on purpose: it is scenery, and
+// it renders blurred and aria-hidden.
+const PREVIEW_GROUPS = [
+  { time: '4:00 PM', name: 'CREATE', rows: ['Mason Rivera', 'Ava Chen', 'Liam Patel'] },
+  { time: '5:00 PM', name: 'JR', rows: ['Sofia Martinez', 'Noah Kim'] },
+];
+
+function SchedulePreview() {
+  return (
+    <div aria-hidden className="space-y-2.5 blur-[5px] opacity-60 select-none pointer-events-none">
+      {PREVIEW_GROUPS.map((group) => (
+        <div key={group.time} className="rounded-xl border border-ninja-border overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 bg-ninja-bg">
+            <span className="font-ninja text-sm font-bold text-ninja-navy tabular-nums">{group.time}</span>
+            <span className="font-ninja text-xs text-ninja-muted">{group.name}</span>
+            <span className="ml-auto font-ninja text-xs text-ninja-muted tabular-nums">{group.rows.length}</span>
+          </div>
+          <ul className="divide-y divide-ninja-border">
+            {group.rows.map((name) => (
+              <li key={name} className="px-3 py-2 font-ninja text-sm text-ninja-navy">{name}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DailySchedule({ feed, date, onAdded, existingStudentIds, readOnly, canConnect }) {
+  const data = feed.data;
+  const off = !feed.loading && !feed.error && (!data?.connected || data?.disabled);
 
   return (
     <section className={`${CARD} p-5`} aria-labelledby="schedule-heading">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <h2 id="schedule-heading" className="font-ninja font-bold text-ninja-navy text-lg flex items-center gap-2 min-w-0">
-          <CalendarDaysIcon className="w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />
-          <span className="truncate">Daily schedule</span>
-        </h2>
-        {groups.length > 0 && (
-          <button type="button" onClick={onFullSchedule} className={VIEW_ALL}>
-            Full schedule
-            <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
-          </button>
-        )}
-      </div>
+      <h2 id="schedule-heading" className="font-ninja font-bold text-ninja-navy text-lg flex items-center gap-2 min-w-0 mb-4">
+        <CalendarDaysIcon className="w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />
+        <span className="truncate">Daily schedule</span>
+      </h2>
 
-      {feed.loading ? (
-        <div aria-busy="true" aria-label="Loading today's schedule" className="space-y-3">
-          {[0, 1].map((i) => (
-            <div key={i} className="rounded-xl border border-ninja-border p-3.5">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-3 w-24 mt-2" />
-              <div className="flex justify-end mt-2.5">
-                <Skeleton className="h-5 w-12" />
-              </div>
-            </div>
-          ))}
+      {off ? (
+        <div className="relative">
+          <SchedulePreview />
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+            <p className="font-ninja text-sm font-bold text-ninja-navy">MyStudio isn't connected</p>
+            {canConnect ? (
+              <Link
+                to="/account?mystudio=1"
+                className="mt-1 font-ninja text-sm font-semibold text-ninja-blue hover:underline"
+              >
+                Connect it from Account settings
+              </Link>
+            ) : (
+              <p className="mt-1 font-ninja text-sm text-ninja-muted">
+                A center director can connect it from Account settings.
+              </p>
+            )}
+          </div>
         </div>
-      ) : expired ? (
-        <div>
-          <p className="font-ninja text-sm text-ninja-navy">
-            The MyStudio sign-in ran out, so today's classes are not being pulled.
-          </p>
-          {canRenew ? (
-            <Link
-              to="/account?mystudio=1"
-              className="inline-block mt-1.5 font-ninja text-sm font-semibold text-ninja-blue hover:underline"
-            >
-              Sign in again
-            </Link>
-          ) : (
-            <p className="mt-1.5 font-ninja text-sm text-ninja-muted">
-              A center director can sign in again to restore it.
-            </p>
-          )}
-        </div>
-      ) : groups.length === 0 ? (
-        <p className="font-ninja text-sm text-ninja-muted">Nobody is booked in today.</p>
       ) : (
-        <div className="space-y-3">
-          {groups.map((group) => {
-            const here = group.rows.filter((r) => r.alreadyOnBoard).length;
-            return (
-              <div key={group.key} className="rounded-xl border border-ninja-border p-3.5">
-                <div className="flex items-center gap-2">
-                  <p className="font-ninja text-sm font-bold text-ninja-navy truncate">{group.className}</p>
-                  {group.isClub && (
-                    <span className="font-ninja text-[10px] uppercase tracking-wide text-ninja-muted border border-ninja-border rounded-full px-1.5 py-0.5 flex-shrink-0">
-                      Club
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 flex items-center gap-1.5 font-ninja text-xs text-ninja-muted">
-                  <ClockIcon className="w-3.5 h-3.5" aria-hidden />
-                  {prettyTime(group.startTime)}
-                </p>
-                <div className="mt-2.5 flex justify-end">
-                  <span
-                    className="inline-flex items-center gap-1 rounded-md bg-ninja-blue/10 px-2 py-0.5 font-ninja text-xs font-bold text-ninja-blue-ink tabular-nums"
-                    aria-label={`${here} of ${group.rows.length} checked in`}
-                  >
-                    <UsersIcon className="w-3 h-3" aria-hidden />
-                    {here}/{group.rows.length}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        // Loading, errors, an expired sign-in and an empty day all speak for
+        // themselves inside the shared list.
+        <ExpectedToday
+          feed={feed}
+          date={date}
+          onAdded={onAdded}
+          existingStudentIds={existingStudentIds}
+          readOnly={readOnly}
+          bare
+        />
       )}
     </section>
   );
 }
 
 /* ----------------------------------------------------------- stat cards -- */
-
-// Same palette as the board's own stat cards, so a status means one colour
-// everywhere.
-const STATUS_ROWS = [
-  { key: 'logged',  label: 'Logged today', color: '#22c55e' },
-  { key: 'pending', label: 'Pending',      color: '#eab308' },
-  { key: 'overdue', label: 'Overdue',      color: '#ef4444' },
-];
-
-function TodayCard({ boardPath, loading, counts }) {
-  return (
-    <section className={`${CARD} p-5 h-full`} aria-labelledby="today-heading">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h2 id="today-heading" className="font-ninja font-bold text-ninja-navy text-lg">Today's ninjas</h2>
-        <Link to={boardPath} className={VIEW_ALL}>
-          View all
-          <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
-        </Link>
-      </div>
-
-      {loading ? (
-        <div aria-busy="true" aria-label="Loading today's ninjas">
-          <Skeleton className="h-8 w-24" />
-          <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
-            {[28, 22, 26].map((w, i) => (
-              <div key={i} className="flex items-baseline justify-between">
-                <Skeleton className="h-4" style={{ width: `${w}%` }} />
-                <Skeleton className="h-5 w-8" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <>
-          <div>
-            <CountUp value={counts.total} className="font-ninja text-3xl font-black text-ninja-navy leading-none" />
-            <span className="ml-2 font-ninja text-sm text-ninja-muted">total today</span>
-          </div>
-          <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
-            {STATUS_ROWS.map((row) => (
-              <div key={row.key} className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 font-ninja text-sm text-ninja-muted min-w-0">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} aria-hidden />
-                  <span className="truncate">{row.label}</span>
-                </span>
-                <span className="font-ninja text-lg font-black text-ninja-navy tabular-nums flex-shrink-0">
-                  {counts[row.key]}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
 
 // The sensei's second card. Check-ins history rides on Reports, which is
 // manager-only, so their slot carries today's board split by program instead:
@@ -931,7 +858,6 @@ export default function DirectorDashboard() {
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState(null);
   const [trendOpen, setTrendOpen] = useState(false);
-  const [bookedOpen, setBookedOpen] = useState(false);
   const [assignments, setAssignments] = useState(null);
 
   const bookedFeed = useExpectedToday(todayStr);
@@ -964,14 +890,6 @@ export default function DirectorDashboard() {
   useLiveRefresh(fetchToday);
 
   const dayRows = useMemo(() => buildDays(attendance?.attendance), [attendance]);
-
-  const isPast = (a) => a.session_date && String(a.session_date).split('T')[0] < todayStr;
-  const counts = {
-    logged:  (assignments || []).filter((a) => a.completed).length,
-    pending: (assignments || []).filter((a) => !a.completed && !isPast(a)).length,
-    overdue: (assignments || []).filter((a) => !a.completed && isPast(a)).length,
-    total:   (assignments || []).length,
-  };
 
   const handleAdded = (created) => {
     setAssignments((prev) => [...(prev || []).filter((a) => a.id !== created.id), created]);
@@ -1010,63 +928,56 @@ export default function DirectorDashboard() {
             <motion.div {...fadeUp(2)}>
               <DailySchedule
                 feed={bookedFeed}
-                onFullSchedule={() => setBookedOpen(true)}
-                canRenew={isManager}
+                date={todayStr}
+                onAdded={handleAdded}
+                existingStudentIds={new Set((assignments || []).map((a) => a.student_id))}
+                readOnly={!canWrite}
+                canConnect={isManager}
               />
             </motion.div>
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <motion.div {...fadeUp(1)} className="h-full">
-                <TodayCard
-                  boardPath={isManager ? '/manager/dashboard' : '/sensei/dashboard'}
-                  loading={assignments === null}
-                  counts={counts}
-                />
-              </motion.div>
-
-              <motion.div {...fadeUp(2)} className="h-full">
-                {isManager ? (
-                  <section className={`${CARD} p-5 h-full`} aria-labelledby="checkins-heading">
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <h2 id="checkins-heading" className="font-ninja font-bold text-ninja-navy text-lg">Check-ins</h2>
-                      {!loading && dayRows.length > 0 && (
-                        <button type="button" onClick={() => setTrendOpen(true)} className={VIEW_ALL}>
-                          View all
-                          <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
-                        </button>
-                      )}
-                    </div>
-                    {loading ? (
-                      // Same shape and height as the loaded card, so nothing
-                      // shifts when the data lands.
-                      <div aria-busy="true" aria-label="Loading check-ins">
-                        <Skeleton className="h-8 w-40 mb-2" />
-                        <Skeleton className="w-full rounded-lg" style={{ height: CARD_CHART_H }} />
-                        <div className="flex justify-between mt-2">
-                          <Skeleton className="h-2.5 w-10" />
-                          <Skeleton className="h-2.5 w-10" />
-                          <Skeleton className="h-2.5 w-14" />
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
-                          {[28, 24, 32].map((w, i) => (
-                            <div key={i} className="flex items-baseline justify-between">
-                              <Skeleton className="h-4" style={{ width: `${w}%` }} />
-                              <Skeleton className="h-5 w-10" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <CheckInTrend dayRows={dayRows} onExpand={() => setTrendOpen(true)} />
+            <motion.div {...fadeUp(1)}>
+              {isManager ? (
+                <section className={`${CARD} p-5`} aria-labelledby="checkins-heading">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <h2 id="checkins-heading" className="font-ninja font-bold text-ninja-navy text-lg">Check-ins</h2>
+                    {!loading && dayRows.length > 0 && (
+                      <button type="button" onClick={() => setTrendOpen(true)} className={VIEW_ALL}>
+                        View all
+                        <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
+                      </button>
                     )}
-                  </section>
-                ) : (
-                  <ProgramsCard loading={assignments === null} assignments={assignments} />
-                )}
-              </motion.div>
-            </div>
+                  </div>
+                  {loading ? (
+                    // Same shape and height as the loaded card, so nothing
+                    // shifts when the data lands.
+                    <div aria-busy="true" aria-label="Loading check-ins">
+                      <Skeleton className="h-8 w-40 mb-2" />
+                      <Skeleton className="w-full rounded-lg" style={{ height: CARD_CHART_H }} />
+                      <div className="flex justify-between mt-2">
+                        <Skeleton className="h-2.5 w-10" />
+                        <Skeleton className="h-2.5 w-10" />
+                        <Skeleton className="h-2.5 w-14" />
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
+                        {[28, 24, 32].map((w, i) => (
+                          <div key={i} className="flex items-baseline justify-between">
+                            <Skeleton className="h-4" style={{ width: `${w}%` }} />
+                            <Skeleton className="h-5 w-10" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <CheckInTrend dayRows={dayRows} onExpand={() => setTrendOpen(true)} />
+                  )}
+                </section>
+              ) : (
+                <ProgramsCard loading={assignments === null} assignments={assignments} />
+              )}
+            </motion.div>
 
             <motion.div {...fadeUp(3)}>
               {/* A director viewing a center they aren't assigned to gets it
@@ -1086,22 +997,6 @@ export default function DirectorDashboard() {
         width="max-w-2xl"
       >
         <CheckInDetail dayRows={dayRows} />
-      </Modal>
-
-      <Modal
-        isOpen={bookedOpen}
-        onClose={() => setBookedOpen(false)}
-        title="Booked in today"
-        width="max-w-md"
-      >
-        <ExpectedToday
-          feed={bookedFeed}
-          date={todayStr}
-          onAdded={handleAdded}
-          existingStudentIds={new Set((assignments || []).map((a) => a.student_id))}
-          readOnly={!canWrite}
-          bare
-        />
       </Modal>
     </Layout>
   );
