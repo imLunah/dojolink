@@ -16,11 +16,12 @@ import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
 import EventCalendar from '../../components/manager/EventCalendar';
 import TasksQuickLink from '../../components/manager/TasksQuickLink';
 import ExpectedToday from '../../components/manager/ExpectedToday';
+import MyStudioReconnect from '../../components/manager/MyStudioReconnect';
 import Modal from '../../components/ui/Modal';
 import { api } from '../../api/client';
 import { today, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
-import { CARD } from '../../lib/surfaces';
+import { CARD, PANEL } from '../../lib/surfaces';
 import { Skeleton } from '../../components/ui/Skeleton';
 import useExpectedToday from '../../lib/useExpectedToday';
 import useLiveRefresh from '../../lib/useLiveRefresh';
@@ -709,11 +710,20 @@ function QuickLinksCard({ isManager }) {
 // that has not connected MyStudio sees the timetable blurred behind a prompt
 // saying where to turn it on.
 
-// The stand-in behind the blur. Invented names on purpose: it is scenery, and
-// it renders blurred and aria-hidden.
+// The stand-in behind the blur. Invented names and belts on purpose: it is
+// scenery for a card with nothing real to show, and it renders blurred and
+// hidden from screen readers.
 const PREVIEW_GROUPS = [
-  { time: '4:00 PM', name: 'CREATE', rows: ['Mason Rivera', 'Ava Chen', 'Liam Patel'] },
-  { time: '5:00 PM', name: 'JR', rows: ['Sofia Martinez', 'Noah Kim'] },
+  {
+    time: '4:00 PM',
+    name: 'CREATE',
+    rows: [['Mason Rivera', 'Yellow Belt'], ['Ava Chen', 'Orange Belt'], ['Liam Patel', 'Orange Belt']],
+  },
+  {
+    time: '5:00 PM',
+    name: '3D Printing Club',
+    rows: [['Sofia Martinez', 'White Belt'], ['Noah Kim', 'White Belt'], ['Emma Johnson', 'Blue Belt']],
+  },
 ];
 
 function SchedulePreview() {
@@ -727,8 +737,11 @@ function SchedulePreview() {
             <span className="ml-auto font-ninja text-xs text-ninja-muted tabular-nums">{group.rows.length}</span>
           </div>
           <ul className="divide-y divide-ninja-border">
-            {group.rows.map((name) => (
-              <li key={name} className="px-3 py-2 font-ninja text-sm text-ninja-navy">{name}</li>
+            {group.rows.map(([name, belt]) => (
+              <li key={name} className="flex items-center gap-2.5 px-3 py-2 font-ninja text-sm text-ninja-navy">
+                <span>{name}</span>
+                <span className="ml-auto text-xs text-ninja-muted">{belt}</span>
+              </li>
             ))}
           </ul>
         </div>
@@ -737,9 +750,30 @@ function SchedulePreview() {
   );
 }
 
+// The timetable, behind frosted glass, with the way back in on top of it. Used
+// for both ways the feed can be off: never connected, and a credential that
+// ran out overnight. Showing the shape of what is missing says more than a
+// line of grey text, and the repair happens here rather than three screens
+// away in Account settings.
+function ScheduleBlocked({ title, children }) {
+  return (
+    <div className="relative">
+      <SchedulePreview />
+      <div className="absolute inset-0 flex flex-col justify-center px-1">
+        <div className={`${PANEL} p-3.5`}>
+          <p className="font-ninja text-sm font-bold text-ninja-navy">{title}</p>
+          <div className="mt-2">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DailySchedule({ feed, date, onAdded, existingStudentIds, readOnly, canConnect }) {
   const data = feed.data;
-  const off = !feed.loading && !feed.error && (!data?.connected || data?.disabled);
+  const settled = !feed.loading && !feed.error;
+  const off = settled && (!data?.connected || data?.disabled);
+  const expired = settled && data?.status === 'expired';
 
   return (
     <section className={`${CARD} p-5`} aria-labelledby="schedule-heading">
@@ -749,27 +783,35 @@ function DailySchedule({ feed, date, onAdded, existingStudentIds, readOnly, canC
       </h2>
 
       {off ? (
-        <div className="relative">
-          <SchedulePreview />
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-            <p className="font-ninja text-sm font-bold text-ninja-navy">MyStudio isn't connected</p>
-            {canConnect ? (
-              <Link
-                to="/account?mystudio=1"
-                className="mt-1 font-ninja text-sm font-semibold text-ninja-blue hover:underline"
-              >
-                Connect it from Account settings
-              </Link>
-            ) : (
-              <p className="mt-1 font-ninja text-sm text-ninja-muted">
-                A center director can connect it from Account settings.
-              </p>
-            )}
-          </div>
-        </div>
+        <ScheduleBlocked title="MyStudio isn't connected">
+          {canConnect ? (
+            <Link
+              to="/account?mystudio=1"
+              className="font-ninja text-sm font-semibold text-ninja-blue hover:underline"
+            >
+              Connect it from Account settings
+            </Link>
+          ) : (
+            <p className="font-ninja text-sm text-ninja-muted">
+              A center director can connect it from Account settings.
+            </p>
+          )}
+        </ScheduleBlocked>
+      ) : expired ? (
+        <ScheduleBlocked title="The MyStudio connection ran out">
+          {canConnect ? (
+            // Sign in right here. The credential lasts a day at a time, so
+            // this is a weekly errand rather than a one-off repair.
+            <MyStudioReconnect onConnected={() => feed.reload?.()} />
+          ) : (
+            <p className="font-ninja text-sm text-ninja-muted">
+              A center director can sign in again to restore it.
+            </p>
+          )}
+        </ScheduleBlocked>
       ) : (
-        // Loading, errors, an expired sign-in and an empty day all speak for
-        // themselves inside the shared list.
+        // Loading, errors and an empty day all speak for themselves inside the
+        // shared list.
         <ExpectedToday
           feed={feed}
           date={date}

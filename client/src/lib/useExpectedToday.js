@@ -52,7 +52,10 @@ export default function useExpectedToday(date, { enabled = true } = {}) {
   // vendor API with no agreement behind it.
   useLiveRefresh(() => load({ quiet: true }), { intervalMs: 5 * 60 * 1000, minGapMs: 60 * 1000, enabled });
 
-  return state;
+  // For the one case where waiting five minutes is wrong: somebody has just
+  // repaired the connection from the card this feeds, and the answer they are
+  // looking at is the reason they did it.
+  return { ...state, reload: load };
 }
 
 // Booked ninjas, gathered into the classes they are booked into.

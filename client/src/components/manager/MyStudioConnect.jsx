@@ -12,6 +12,7 @@ import Button from '../ui/Button';
 import { api } from '../../api/client';
 import useIsDesktop from '../../lib/useIsDesktop';
 import { formatExpiry, hoursUntil } from '../../lib/useExpectedToday';
+import useMyStudioSignIn, { CODE_LENGTH } from '../../lib/useMyStudioSignIn';
 
 // Connecting a center to the studio management system it already uses.
 //
@@ -35,9 +36,6 @@ import { formatExpiry, hoursUntil } from '../../lib/useExpectedToday';
 
 const FIELD =
   'w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-lg px-3 py-2 font-ninja text-sm focus:outline-none focus:border-ninja-blue';
-
-// MyStudio's passcode is six digits, and the field should not accept a seventh.
-const CODE_LENGTH = 6;
 
 // Copy as cURL, because the honest alternative is worse.
 //
@@ -83,26 +81,26 @@ function formatWhen(value) {
 export default function MyStudioConnect({ isOpen, onClose, status, onChanged, centerName }) {
   const isDesktop = useIsDesktop();
   const [cookie, setCookie] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [confirmingForget, setConfirmingForget] = useState(false);
-
-  // 'signin' collects an email and password, 'code' collects the six digits.
-  const [step, setStep] = useState('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [cookieOpen, setCookieOpen] = useState(false);
   // Opening the sign-in on a connection that is already working.
   const [showSignIn, setShowSignIn] = useState(false);
 
-  const savedEmail = status?.loginEmail || '';
-  const hasSavedPassword = Boolean(status?.hasSavedPassword);
-  // A sign-in already waiting on its code, remembered by the server.
-  const awaitingCode = Boolean(status?.awaitingCode);
-  const awaitingEmail = status?.awaitingCodeEmail || '';
+  // The two-step sign-in itself, shared with the dashboard's schedule card.
+  const signIn = useMyStudioSignIn({ status, onChanged, onDone: onClose, active: isOpen });
+  const {
+    step, email, setEmail, password, setPassword, code, setCode,
+    error, notice, setError, setNotice,
+    savedEmail, hasSavedPassword, awaitingEmail,
+    sendCode, cancelCode, verifyCode, canVerify,
+  } = signIn;
+
+  // The panel's own calls — pasting a cookie, forgetting a password, pulling
+  // the connection — are not part of signing in, so they carry their own flag
+  // and the controls read whichever is running.
+  const [panelBusy, setBusy] = useState(false);
+  const busy = signIn.busy || panelBusy;
 
   // A closed panel keeps no credential and leaves no confirm armed.
   //
@@ -113,35 +111,21 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
   useEffect(() => {
     if (isOpen) return;
     setCookie('');
-    setError('');
-    setNotice('');
     setBusy(false);
     setConfirmingDisconnect(false);
     setConfirmingForget(false);
-    setPassword('');
-    setCode('');
     setCookieOpen(false);
     setShowSignIn(false);
+    signIn.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // Reopen where the sign-in actually is, not where it started.
+  // When MyStudio's own sign-in is the broken thing rather than the
+  // credential, the cookie fallback has to be visible, not folded away behind
+  // a disclosure nobody opens.
   useEffect(() => {
-    if (!isOpen) return;
-    if (awaitingCode) {
-      setStep('code');
-      setEmail((prev) => prev || awaitingEmail || savedEmail || '');
-    } else {
-      setStep('signin');
-      setEmail((prev) => prev || savedEmail || '');
-    }
-  }, [isOpen, awaitingCode, awaitingEmail, savedEmail]);
-
-  // When the sign-in itself is broken rather than the credential, the fallback
-  // has to be visible, not folded away behind a disclosure nobody opens.
-  const handleAuthError = useCallback((err, fallback) => {
-    if (err?.data?.signInUnavailable) setCookieOpen(true);
-    setError(err?.message || fallback);
-  }, []);
+    if (signIn.signInUnavailable) setCookieOpen(true);
+  }, [signIn.signInUnavailable]);
 
   const connect = useCallback(async () => {
     if (!cookie.trim() || busy) return;
@@ -158,76 +142,6 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
       setBusy(false);
     }
   }, [cookie, busy, onChanged, onClose]);
-
-  // Asks MyStudio to email the code. With a password on file the body is empty
-  // and the server uses what it has.
-  const sendCode = useCallback(
-    async ({ resend = false } = {}) => {
-      if (busy) return;
-      setBusy(true);
-      setError('');
-      setNotice('');
-      try {
-        const body = hasSavedPassword && !password ? {} : { email: email.trim(), password };
-        const path = resend ? '/mystudio/login/resend' : '/mystudio/login/start';
-        const res = await api.post(path, body);
-        setStep('code');
-        // Tell the page a sign-in is in flight, so closing the panel to go and
-        // read the email and reopening it lands back on the code box.
-        onChanged?.({
-          ...(status || {}),
-          awaitingCode: true,
-          awaitingCodeEmail: res.email || email || savedEmail,
-        });
-        setNotice(`We asked MyStudio to email a code to ${res.email || email || savedEmail}.`);
-      } catch (err) {
-        handleAuthError(err, 'Could not start the sign-in.');
-      } finally {
-        setBusy(false);
-      }
-    },
-    [busy, email, password, hasSavedPassword, savedEmail, status, onChanged, handleAuthError]
-  );
-
-  // Backing out. Clears the half-finished sign-in on the server too, so the
-  // panel does not keep reopening on a code that is no longer wanted.
-  const cancelCode = useCallback(async () => {
-    setStep('signin');
-    setCode('');
-    setError('');
-    setNotice('');
-    try {
-      await api.delete('/mystudio/login/pending');
-    } catch {
-      // The entry expires on its own; failing to clear it early is not worth
-      // reporting to someone who just pressed Back.
-    }
-    onChanged?.({ ...(status || {}), awaitingCode: false, awaitingCodeEmail: null });
-  }, [status, onChanged]);
-
-  const verifyCode = useCallback(async () => {
-    if (busy || !code.trim()) return;
-    setBusy(true);
-    setError('');
-    try {
-      // Only what was actually typed. An empty password here is not a blank
-      // credential, it is "use the sign-in you already have in flight".
-      const body = { code: code.trim() };
-      if (password) {
-        body.email = email.trim();
-        body.password = password;
-      }
-      const next = await api.post('/mystudio/login/verify', body);
-      setPassword('');
-      setCode('');
-      onChanged?.(next);
-      onClose();
-    } catch (err) {
-      handleAuthError(err, 'That code did not work.');
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, code, email, password, hasSavedPassword, onChanged, onClose, handleAuthError]);
 
   // What this connection is allowed to power here. Server-enforced; this only
   // asks.
@@ -360,7 +274,7 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
           <input
             id="mystudio-code"
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+            onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') verifyCode();
             }}
@@ -378,7 +292,7 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
           <Button
             onClick={verifyCode}
             className="w-full mt-3"
-            disabled={busy || code.length !== CODE_LENGTH}
+            disabled={!canVerify}
           >
             {busy ? (
               <span className="flex items-center justify-center gap-2">
