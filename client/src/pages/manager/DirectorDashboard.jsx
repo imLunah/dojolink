@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Area, AreaChart as RechartsAreaChart, XAxis, YAxis } from 'recharts';
@@ -6,17 +6,26 @@ import {
   ChartNoAxesColumnIncreasingIcon as ReportsIcon,
   GiftIcon,
   BookOpenIcon as CurriculumIcon,
+  MegaphoneIcon,
+  ClipboardCheckIcon,
+  CalendarDaysIcon,
+  ClockIcon,
+  UsersIcon,
+  ChevronRightIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
 import EventCalendar from '../../components/manager/EventCalendar';
 import TasksQuickLink from '../../components/manager/TasksQuickLink';
+import ExpectedToday from '../../components/manager/ExpectedToday';
 import Modal from '../../components/ui/Modal';
 import { api } from '../../api/client';
 import { today, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
 import { CARD } from '../../lib/surfaces';
 import { Skeleton } from '../../components/ui/Skeleton';
+import useExpectedToday, { groupByClass, prettyTime } from '../../lib/useExpectedToday';
+import useLiveRefresh from '../../lib/useLiveRefresh';
 
 // Strong ease-out (Emil's design-eng default). The built-in easeOut is too
 // weak to read as intentional; this matches the CSS --ease-out token.
@@ -333,18 +342,18 @@ function CheckInTrend({ dayRows, onExpand }) {
   return (
     <>
       {/* Only the chart opens the expanded view. Wrapping the stats in the
-          button too would make the whole card one "Expand check-ins" target. */}
+          button too would make the whole card one "Expand check-ins" target.
+          The header's View all pill is the labelled way in; this is the same
+          door for anyone who reaches for the chart itself. */}
       <button
         onClick={onExpand}
         aria-label="Expand check-ins"
-        className="block w-full text-left group origin-center rounded-lg transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.99]"
+        className="block w-full text-left origin-center rounded-lg transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.99]"
       >
-        <div className="flex items-baseline justify-between mb-2">
-          <span className="font-ninja text-sm text-ninja-navy font-semibold">
-            <CountUp value={thisWeek} className="font-black" /> ninja{thisWeek === 1 ? '' : 's'} this week
-          </span>
-          <span className="font-ninja text-xs text-ninja-muted group-hover:text-ninja-blue transition-colors">
-            expand →
+        <div className="mb-2">
+          <CountUp value={thisWeek} className="font-ninja text-3xl font-black text-ninja-navy leading-none" />
+          <span className="ml-2 font-ninja text-sm text-ninja-muted">
+            ninja{thisWeek === 1 ? '' : 's'} this week
           </span>
         </div>
         <AreaChart points={weeks} height={CARD_CHART_H} gradientId="checkInCardFill" formatLabel={weekOf} />
@@ -634,66 +643,301 @@ function CheckInDetail({ dayRows }) {
   );
 }
 
-/* ---------------------------------------------------------- quick tiles -- */
+/* ---------------------------------------------------------- quick links -- */
 
-// Deliberately none of these duplicate a sidebar entry.
-// Restrained quick-links: neutral card, a plain monochrome icon that picks up
-// the accent on hover, chevron nudges. No tinted icon-chip squares — those
-// colored rounded tiles are the template/AI-dashboard tell.
-// Birthdays used to live here; they now show up on the calendar itself.
-const QUICK_TILES = [
-  { label: 'Reports',    to: '/manager/reports',    Icon: ReportsIcon },
-  { label: 'Curriculum', to: '/curriculum-roadmap', Icon: CurriculumIcon },
-  { label: "What's New", to: '/changelog',          Icon: GiftIcon },
+// The bordered pill every card header uses for its way out. One definition so
+// "View all" and "Full schedule" cannot drift apart.
+const VIEW_ALL =
+  'inline-flex items-center gap-1 rounded-lg border border-ninja-border px-2.5 py-1 ' +
+  'font-ninja text-xs font-bold text-ninja-navy hover:border-ninja-blue/50 hover:text-ninja-blue ' +
+  'transition-colors flex-shrink-0';
+
+// Outlined icon buttons in a two-up grid, the MyStudio home's quick-links
+// shape. Neutral surface, monochrome icon that picks up the accent on hover:
+// buttons rather than tinted icon-chip tiles, so they read as doors and not as
+// decoration. Tasks leads because it is the only one carrying something that
+// can be late.
+const QUICK_BTN =
+  'group flex items-center gap-2.5 rounded-xl border border-ninja-border px-3 py-2.5 min-w-0 ' +
+  'font-ninja text-sm font-bold text-ninja-navy hover:border-ninja-blue/50 hover:text-ninja-blue ' +
+  'transition-colors duration-150';
+
+const QUICK_ICON = 'w-4 h-4 flex-shrink-0 text-ninja-muted group-hover:text-ninja-blue transition-colors';
+
+// Role-shaped: a sensei cannot open Events or Reports (both manager-only), and
+// their board and task list live on their own routes.
+const MANAGER_QUICK = [
+  { label: "Today's Board", to: '/manager/dashboard',  Icon: ClipboardCheckIcon },
+  { label: 'Events',        to: '/manager/events',     Icon: MegaphoneIcon },
+  { label: 'Reports',       to: '/manager/reports',    Icon: ReportsIcon },
+  { label: 'Curriculum',    to: '/curriculum-roadmap', Icon: CurriculumIcon },
+  { label: "What's New",    to: '/changelog',          Icon: GiftIcon },
 ];
 
-// One definition of a quick link's appearance, shared with the Tasks chip so
-// the one link in this row that isn't a plain Link still sits in it flush.
-const QUICK_LINK_CLASS =
-  'group inline-flex items-center gap-2 font-ninja text-sm font-bold text-ninja-muted hover:text-ninja-navy underline-offset-[6px] hover:underline decoration-ninja-blue/40 transition-colors rounded';
+const SENSEI_QUICK = [
+  { label: "Today's Board", to: '/sensei/dashboard',   Icon: ClipboardCheckIcon },
+  { label: 'Curriculum',    to: '/curriculum-roadmap', Icon: CurriculumIcon },
+  { label: "What's New",    to: '/changelog',          Icon: GiftIcon },
+];
 
-// These were three equal icon-and-chevron cards in the rail, which is the most
-// recognisable generated-dashboard shape there is. They are links, so they read
-// as links now: one inline row under the masthead, no surface of their own.
-//
-// Tasks leads the row and previews the board on hover. It is first because it
-// is the only one of these that changes day to day and the only one carrying
-// something that can be late.
-function QuickLinks() {
-  const item = (i) => ({
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.35, ease: EASE, delay: 0.1 + 0.05 * i },
-  });
+function QuickLinksCard({ isManager }) {
+  const links = isManager ? MANAGER_QUICK : SENSEI_QUICK;
+  return (
+    <section className={`${CARD} p-5`} aria-labelledby="quicklinks-heading">
+      <h2 id="quicklinks-heading" className="font-ninja font-bold text-ninja-navy text-lg mb-4">
+        Quick links
+      </h2>
+      <nav aria-label="Quick links" className="grid grid-cols-2 gap-2.5">
+        <TasksQuickLink
+          className={QUICK_BTN}
+          to={isManager ? '/manager/tasks' : '/sensei/tasks'}
+          label={isManager ? 'Tasks' : 'My Tasks'}
+        />
+        {links.map((l) => (
+          <Link key={l.to} to={l.to} className={QUICK_BTN}>
+            <l.Icon className={QUICK_ICON} />
+            <span className="truncate">{l.label}</span>
+          </Link>
+        ))}
+      </nav>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------- daily schedule -- */
+
+// Today's booked classes from MyStudio, as a timetable of small class cards:
+// name, start time, and who has actually arrived against who is booked. The
+// card only exists for a connected center; a center that never opted in should
+// not see an empty shelf explaining a feature it does not have.
+function DailySchedule({ feed, onFullSchedule, canRenew }) {
+  const data = feed.data;
+  if (!feed.loading && (feed.error || !data?.connected || data?.disabled)) return null;
+
+  const expired = data?.status === 'expired';
+  const groups = expired ? [] : groupByClass(data?.expected);
 
   return (
-    <nav aria-label="Quick links" className="flex flex-wrap items-center gap-x-6 gap-y-3">
-      <motion.span {...item(0)}>
-        <TasksQuickLink className={QUICK_LINK_CLASS} />
-      </motion.span>
+    <section className={`${CARD} p-5`} aria-labelledby="schedule-heading">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 id="schedule-heading" className="font-ninja font-bold text-ninja-navy text-lg flex items-center gap-2 min-w-0">
+          <CalendarDaysIcon className="w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />
+          <span className="truncate">Daily schedule</span>
+        </h2>
+        {groups.length > 0 && (
+          <button type="button" onClick={onFullSchedule} className={VIEW_ALL}>
+            Full schedule
+            <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        )}
+      </div>
 
-      {QUICK_TILES.map((t, i) => (
-        <motion.span key={t.label} {...item(i + 1)}>
-          <Link to={t.to} className={QUICK_LINK_CLASS}>
-            <t.Icon className="w-4 h-4 flex-shrink-0 text-ninja-muted group-hover:text-ninja-blue transition-colors" />
-            {t.label}
-          </Link>
-        </motion.span>
-      ))}
-    </nav>
+      {feed.loading ? (
+        <div aria-busy="true" aria-label="Loading today's schedule" className="space-y-3">
+          {[0, 1].map((i) => (
+            <div key={i} className="rounded-xl border border-ninja-border p-3.5">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-24 mt-2" />
+              <div className="flex justify-end mt-2.5">
+                <Skeleton className="h-5 w-12" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : expired ? (
+        <div>
+          <p className="font-ninja text-sm text-ninja-navy">
+            The MyStudio sign-in ran out, so today's classes are not being pulled.
+          </p>
+          {canRenew ? (
+            <Link
+              to="/account?mystudio=1"
+              className="inline-block mt-1.5 font-ninja text-sm font-semibold text-ninja-blue hover:underline"
+            >
+              Sign in again
+            </Link>
+          ) : (
+            <p className="mt-1.5 font-ninja text-sm text-ninja-muted">
+              A center director can sign in again to restore it.
+            </p>
+          )}
+        </div>
+      ) : groups.length === 0 ? (
+        <p className="font-ninja text-sm text-ninja-muted">Nobody is booked in today.</p>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((group) => {
+            const here = group.rows.filter((r) => r.alreadyOnBoard).length;
+            return (
+              <div key={group.key} className="rounded-xl border border-ninja-border p-3.5">
+                <div className="flex items-center gap-2">
+                  <p className="font-ninja text-sm font-bold text-ninja-navy truncate">{group.className}</p>
+                  {group.isClub && (
+                    <span className="font-ninja text-[10px] uppercase tracking-wide text-ninja-muted border border-ninja-border rounded-full px-1.5 py-0.5 flex-shrink-0">
+                      Club
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 flex items-center gap-1.5 font-ninja text-xs text-ninja-muted">
+                  <ClockIcon className="w-3.5 h-3.5" aria-hidden />
+                  {prettyTime(group.startTime)}
+                </p>
+                <div className="mt-2.5 flex justify-end">
+                  <span
+                    className="inline-flex items-center gap-1 rounded-md bg-ninja-blue/10 px-2 py-0.5 font-ninja text-xs font-bold text-ninja-blue-ink tabular-nums"
+                    aria-label={`${here} of ${group.rows.length} checked in`}
+                  >
+                    <UsersIcon className="w-3 h-3" aria-hidden />
+                    {here}/{group.rows.length}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------- stat cards -- */
+
+// Same palette as the board's own stat cards, so a status means one colour
+// everywhere.
+const STATUS_ROWS = [
+  { key: 'logged',  label: 'Logged today', color: '#22c55e' },
+  { key: 'pending', label: 'Pending',      color: '#eab308' },
+  { key: 'overdue', label: 'Overdue',      color: '#ef4444' },
+];
+
+function TodayCard({ boardPath, loading, counts }) {
+  return (
+    <section className={`${CARD} p-5 h-full`} aria-labelledby="today-heading">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 id="today-heading" className="font-ninja font-bold text-ninja-navy text-lg">Today's ninjas</h2>
+        <Link to={boardPath} className={VIEW_ALL}>
+          View all
+          <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
+        </Link>
+      </div>
+
+      {loading ? (
+        <div aria-busy="true" aria-label="Loading today's ninjas">
+          <Skeleton className="h-8 w-24" />
+          <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
+            {[28, 22, 26].map((w, i) => (
+              <div key={i} className="flex items-baseline justify-between">
+                <Skeleton className="h-4" style={{ width: `${w}%` }} />
+                <Skeleton className="h-5 w-8" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div>
+            <CountUp value={counts.total} className="font-ninja text-3xl font-black text-ninja-navy leading-none" />
+            <span className="ml-2 font-ninja text-sm text-ninja-muted">total today</span>
+          </div>
+          <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
+            {STATUS_ROWS.map((row) => (
+              <div key={row.key} className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 font-ninja text-sm text-ninja-muted min-w-0">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} aria-hidden />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span className="font-ninja text-lg font-black text-ninja-navy tabular-nums flex-shrink-0">
+                  {counts[row.key]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+// The sensei's second card. Check-ins history rides on Reports, which is
+// manager-only, so their slot carries today's board split by program instead:
+// the MyStudio category table, drawn as tinted bars under the names.
+function ProgramsCard({ loading, assignments }) {
+  const rows = useMemo(() => {
+    const byProgram = new Map();
+    for (const a of assignments || []) {
+      const key = a.program || 'No program';
+      byProgram.set(key, (byProgram.get(key) || 0) + 1);
+    }
+    return [...byProgram.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [assignments]);
+
+  const max = Math.max(1, ...rows.map((r) => r.count));
+
+  return (
+    <section className={`${CARD} p-5 h-full`} aria-labelledby="programs-heading">
+      <h2 id="programs-heading" className="font-ninja font-bold text-ninja-navy text-lg mb-3">Programs today</h2>
+      {loading ? (
+        <div aria-busy="true" aria-label="Loading programs" className="space-y-3">
+          {[64, 42, 28].map((w, i) => (
+            <Skeleton key={i} className="h-7 rounded-lg" style={{ width: `${w}%` }} />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="font-ninja text-sm text-ninja-muted">No check-ins yet today.</p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((row, i) => (
+            <div key={row.name} className="relative rounded-lg overflow-hidden">
+              <motion.span
+                aria-hidden
+                className="absolute inset-y-0 left-0 rounded-lg bg-ninja-blue/10"
+                initial={{ width: 0 }}
+                animate={{ width: `${(row.count / max) * 100}%` }}
+                transition={{ duration: 0.5, ease: 'easeOut', delay: 0.05 * i }}
+              />
+              <div className="relative flex items-center justify-between gap-3 px-2.5 py-1.5">
+                <span className="font-ninja text-sm font-bold text-ninja-navy truncate">{row.name}</span>
+                <span className="font-ninja text-sm font-black text-ninja-navy tabular-nums flex-shrink-0">
+                  {row.count}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
 /* ----------------------------------------------------------------- page -- */
 
+const fadeUp = (i = 0) => ({
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.4, ease: EASE, delay: 0.06 * i },
+});
+
 export default function DirectorDashboard() {
-  const { user, isReadOnly } = useAuth();
+  const { user, isReadOnly, viewAs } = useAuth();
+  // Senseis get this page too. What differs is what each card links to and
+  // what the check-ins slot holds, since Reports stays manager-only. An admin
+  // in sensei view gets the sensei copy, same as the navs treat them.
+  const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
+  const isManager = ['manager', 'admin'].includes(user?.role) && !isSenseiView;
+  const canWrite = isManager && !isReadOnly;
   const todayStr = today();
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState(null);
   const [trendOpen, setTrendOpen] = useState(false);
+  const [bookedOpen, setBookedOpen] = useState(false);
+  const [assignments, setAssignments] = useState(null);
+
+  const bookedFeed = useExpectedToday(todayStr);
 
   useEffect(() => {
+    if (!isManager) { setLoading(false); return; }
     let alive = true;
     api.get('/reports/attendance?range=all')
       .catch(() => null)
@@ -703,80 +947,135 @@ export default function DirectorDashboard() {
         setLoading(false);
       });
     return () => { alive = false; };
-  }, [user?.activeLocation?.id]);
+  }, [user?.activeLocation?.id, isManager]);
+
+  const fetchToday = useCallback(() => {
+    let alive = true;
+    api.get(`/daily?date=${todayStr}`)
+      .catch(() => [])
+      .then((rows) => { if (alive) setAssignments(rows || []); });
+    return () => { alive = false; };
+  }, [todayStr, user?.activeLocation?.id]);
+
+  useEffect(fetchToday, [fetchToday]);
+
+  // The front desk keeps checking ninjas in while this page is open, so the
+  // today card follows the board rather than the moment the page loaded.
+  useLiveRefresh(fetchToday);
 
   const dayRows = useMemo(() => buildDays(attendance?.attendance), [attendance]);
 
-  const firstName = user?.displayName?.split(' ')[0] ?? '';
+  const isPast = (a) => a.session_date && String(a.session_date).split('T')[0] < todayStr;
+  const counts = {
+    logged:  (assignments || []).filter((a) => a.completed).length,
+    pending: (assignments || []).filter((a) => !a.completed && !isPast(a)).length,
+    overdue: (assignments || []).filter((a) => !a.completed && isPast(a)).length,
+    total:   (assignments || []).length,
+  };
+
+  const handleAdded = (created) => {
+    setAssignments((prev) => [...(prev || []).filter((a) => a.id !== created.id), created]);
+  };
+
+  // "Sensei Alex" is a title on the board, not a first name. Same strip the
+  // sensei board does, so the greeting says Alex rather than Sensei.
+  const bareName = user?.role === 'sensei' && user?.displayName?.toLowerCase().startsWith('sensei ')
+    ? user.displayName.slice(7)
+    : user?.displayName;
+  const firstName = bareName?.split(' ')[0] ?? '';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
     <Layout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Masthead. Deliberately NOT a card: it carries no data, and wrapping a
             page title in its own elevated surface was what turned this page into
             a stack of five identical boxes. A page title is allowed to sit on
             the page. */}
-        <motion.header
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: EASE }}
-        >
+        <motion.header {...fadeUp(0)}>
           <p className="font-ninja text-sm text-ninja-muted">{formatDate(todayStr)}</p>
           <h1 className="mt-1 text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight text-balance">
             {greeting}{firstName && ', '}<span className="text-ninja-blue">{firstName}</span>
           </h1>
-          <div className="mt-5">
-            <QuickLinks />
-          </div>
-          <div className="mt-6 border-t border-ninja-border" />
         </motion.header>
 
-        {/* Calendar earns its surface (it IS an object), check-ins rides the
-            rail beside it. Asymmetric on purpose. */}
+        {/* MyStudio-home shape: a narrow rail of doors and today's timetable on
+            the left, the numbers and the calendar carrying the width. */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          <div className="lg:col-span-2">
-            {/* A director viewing a center they aren't assigned to gets it
-                read-only, same as the sensei board. The server already refuses
-                these writes (requireOwnLocation); this stops us offering a
-                control whose only outcome is a 403. */}
-            <EventCalendar canManage={!isReadOnly} />
+          <div className="space-y-6">
+            <motion.div {...fadeUp(1)}>
+              <QuickLinksCard isManager={isManager} />
+            </motion.div>
+            <motion.div {...fadeUp(2)}>
+              <DailySchedule
+                feed={bookedFeed}
+                onFullSchedule={() => setBookedOpen(true)}
+                canRenew={isManager}
+              />
+            </motion.div>
           </div>
 
-          {/* Enrollment used to sit here; that breakdown lives on Reports, so
-              it isn't duplicated on the dashboard. */}
-          <section className={`${CARD} p-5`} aria-labelledby="checkins-heading">
-            {/* No Reports link here: there is already one in the row under the
-                greeting, and two on one screen is one too many. */}
-            <h2 id="checkins-heading" className="font-ninja font-bold text-ninja-navy text-lg mb-3">Check-ins</h2>
-            {loading ? (
-              // Same shape and height as the loaded card, so nothing shifts
-              // when the data lands.
-              <div aria-busy="true" aria-label="Loading check-ins">
-                <div className="flex items-baseline justify-between mb-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-12" />
-                </div>
-                <Skeleton className="w-full rounded-lg" style={{ height: CARD_CHART_H }} />
-                <div className="flex justify-between mt-2">
-                  <Skeleton className="h-2.5 w-10" />
-                  <Skeleton className="h-2.5 w-10" />
-                  <Skeleton className="h-2.5 w-14" />
-                </div>
-                <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
-                  {[28, 24, 32].map((w, i) => (
-                    <div key={i} className="flex items-baseline justify-between">
-                      <Skeleton className="h-4" style={{ width: `${w}%` }} />
-                      <Skeleton className="h-5 w-10" />
+          <div className="lg:col-span-2 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <motion.div {...fadeUp(1)} className="h-full">
+                <TodayCard
+                  boardPath={isManager ? '/manager/dashboard' : '/sensei/dashboard'}
+                  loading={assignments === null}
+                  counts={counts}
+                />
+              </motion.div>
+
+              <motion.div {...fadeUp(2)} className="h-full">
+                {isManager ? (
+                  <section className={`${CARD} p-5 h-full`} aria-labelledby="checkins-heading">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <h2 id="checkins-heading" className="font-ninja font-bold text-ninja-navy text-lg">Check-ins</h2>
+                      {!loading && dayRows.length > 0 && (
+                        <button type="button" onClick={() => setTrendOpen(true)} className={VIEW_ALL}>
+                          View all
+                          <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <CheckInTrend dayRows={dayRows} onExpand={() => setTrendOpen(true)} />
-            )}
-          </section>
+                    {loading ? (
+                      // Same shape and height as the loaded card, so nothing
+                      // shifts when the data lands.
+                      <div aria-busy="true" aria-label="Loading check-ins">
+                        <Skeleton className="h-8 w-40 mb-2" />
+                        <Skeleton className="w-full rounded-lg" style={{ height: CARD_CHART_H }} />
+                        <div className="flex justify-between mt-2">
+                          <Skeleton className="h-2.5 w-10" />
+                          <Skeleton className="h-2.5 w-10" />
+                          <Skeleton className="h-2.5 w-14" />
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
+                          {[28, 24, 32].map((w, i) => (
+                            <div key={i} className="flex items-baseline justify-between">
+                              <Skeleton className="h-4" style={{ width: `${w}%` }} />
+                              <Skeleton className="h-5 w-10" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <CheckInTrend dayRows={dayRows} onExpand={() => setTrendOpen(true)} />
+                    )}
+                  </section>
+                ) : (
+                  <ProgramsCard loading={assignments === null} assignments={assignments} />
+                )}
+              </motion.div>
+            </div>
+
+            <motion.div {...fadeUp(3)}>
+              {/* A director viewing a center they aren't assigned to gets it
+                  read-only, same as a sensei. The server already refuses these
+                  writes (requireOwnLocation); this stops us offering a control
+                  whose only outcome is a 403. */}
+              <EventCalendar canManage={canWrite} />
+            </motion.div>
+          </div>
         </div>
       </div>
 
@@ -789,6 +1088,21 @@ export default function DirectorDashboard() {
         <CheckInDetail dayRows={dayRows} />
       </Modal>
 
+      <Modal
+        isOpen={bookedOpen}
+        onClose={() => setBookedOpen(false)}
+        title="Booked in today"
+        width="max-w-md"
+      >
+        <ExpectedToday
+          feed={bookedFeed}
+          date={todayStr}
+          onAdded={handleAdded}
+          existingStudentIds={new Set((assignments || []).map((a) => a.student_id))}
+          readOnly={!canWrite}
+          bare
+        />
+      </Modal>
     </Layout>
   );
 }

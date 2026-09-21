@@ -82,7 +82,9 @@ export default function App() {
 
             {/* Manager routes */}
             <Route path="/manager/dashboard" element={<ProtectedRoute role="manager"><ManagerDashboard /></ProtectedRoute>} />
-            <Route path="/manager/overview" element={<ProtectedRoute role="manager"><DirectorDashboard /></ProtectedRoute>} />
+            {/* The dashboard is everyone's home now; the page itself decides
+                what a sensei's copy shows (no reports data, their own links). */}
+            <Route path="/manager/overview" element={<ProtectedRoute role="sensei"><DirectorDashboard /></ProtectedRoute>} />
             <Route path="/manager/students"  element={<ProtectedRoute role="sensei"><StudentRoster /></ProtectedRoute>} />
             <Route path="/manager/staff"     element={<ProtectedRoute role="sensei"><StaffPage /></ProtectedRoute>} />
             <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsPage /></ProtectedRoute>} />

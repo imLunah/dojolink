@@ -91,7 +91,9 @@ export function QuickFlyoutPanel({ link, pathname, search }) {
 }
 
 export const senseiLinks = [
-  { to: '/sensei/dashboard', label: 'Dashboard', Glyph: LayoutGridIcon },
+  // Same dashboard the directors get, shaped for the role by the page itself.
+  { to: '/manager/overview', label: 'Dashboard', Glyph: LayoutGridIcon },
+  { to: '/sensei/dashboard', label: "Today's Board", icon: 'today' },
   { to: '/sensei/tasks', label: 'My Tasks', Glyph: ListTodoIcon },
   { to: '/manager/students', label: 'Ninjas', icon: 'roster' },
   { to: '/clubs', label: 'Clubs', icon: 'clubs' },

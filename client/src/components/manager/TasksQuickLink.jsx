@@ -16,7 +16,10 @@ import { COLUMNS, OPEN_COLUMN_KEYS, groupByColumn, todayKey } from '../../lib/ta
 // What the preview was actually for still rides on the link itself: the counts
 // are in its accessible name, and overdue work carries a dot, because the one
 // thing a director must not have to go hunting for is what is already late.
-export default function TasksQuickLink({ className = '' }) {
+// `to`/`label` because the same chip serves both boards: a director's goes to
+// the task board, a sensei's to their own list. The counts behind the dot come
+// from the shared feed either way.
+export default function TasksQuickLink({ className = '', to = '/manager/tasks', label = 'Tasks' }) {
   const { user } = useAuth();
   const [tasks, setTasks] = useState(null);
 
@@ -35,14 +38,14 @@ export default function TasksQuickLink({ className = '' }) {
   const openTasks = grouped ? OPEN_COLUMN_KEYS.flatMap((k) => grouped[k] || []) : [];
   const overdue = openTasks.filter((t) => t.due_date && t.due_date < todayKey()).length;
 
-  const label = !tasks
-    ? 'Tasks'
-    : `Tasks: ${COLUMNS.filter((c) => c.key !== 'done')
+  const ariaLabel = !tasks
+    ? label
+    : `${label}: ${COLUMNS.filter((c) => c.key !== 'done')
         .map((c) => `${(grouped[c.key] || []).length} ${c.label.toLowerCase()}`)
         .join(', ')}` + (overdue ? `, ${overdue} overdue` : '');
 
   return (
-    <Link to="/manager/tasks" aria-label={label} className={className}>
+    <Link to={to} aria-label={ariaLabel} className={className}>
       <span className="relative flex-shrink-0">
         <ListTodoIcon className="w-4 h-4 text-ninja-muted group-hover:text-ninja-blue transition-colors" />
         {overdue > 0 && (
@@ -55,7 +58,7 @@ export default function TasksQuickLink({ className = '' }) {
           />
         )}
       </span>
-      Tasks
+      {label}
     </Link>
   );
 }

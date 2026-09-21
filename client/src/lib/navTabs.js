@@ -1,4 +1,4 @@
-import { LayoutGridIcon, ListTodoIcon } from 'lucide-react';
+import { LayoutGridIcon } from 'lucide-react';
 
 // Where a signed-in user lands, and what "back to my dashboard" means from the
 // pages that sit outside the app shell. Directors land on the overview; the
@@ -16,11 +16,12 @@ export function getMobileNavTabs(user, viewAs) {
   const isManager = ['manager', 'admin'].includes(user.role) && !isSenseiView;
   const dashPath = isManager ? '/manager/dashboard' : '/sensei/dashboard';
   return [
-    // Directors get a sixth tab. There is no flat art for it, so the nav draws
-    // the same glyph the desktop sidebar uses.
-    ...(isManager ? [{ to: '/manager/overview', label: 'Dashboard', iconId: null, Glyph: LayoutGridIcon }] : []),
-    { to: dashPath, label: isManager ? 'Today' : 'Dashboard', iconId: isManager ? 'today' : null, Glyph: isManager ? undefined : LayoutGridIcon },
-    ...(!isManager ? [{ to: '/sensei/tasks', label: 'Tasks', iconId: null, Glyph: ListTodoIcon }] : []),
+    // Everyone gets the dashboard tab now that senseis have the page too. It
+    // took the slot the sensei Tasks tab held; My Tasks still rides the top
+    // bar's left corner for them. There is no flat art for it, so the nav
+    // draws the same glyph the desktop sidebar uses.
+    { to: '/manager/overview', label: 'Dashboard', iconId: null, Glyph: LayoutGridIcon },
+    { to: dashPath, label: 'Today', iconId: 'today' },
     { to: '/manager/students', label: 'Ninjas', iconId: 'roster' },
     { to: '/clubs', label: 'Clubs', iconId: 'clubs' },
     { to: '/manager/staff', label: 'Staff', iconId: 'staff' },
