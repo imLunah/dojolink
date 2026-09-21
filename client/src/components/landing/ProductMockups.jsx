@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
-  BookOpenIcon, UsersIcon, CalendarIcon, ChevronDownIcon,
+  BookOpenIcon, BugIcon, UsersIcon, CalendarIcon, ChevronDownIcon,
   ChevronRightIcon, ChevronLeftIcon, LogOutIcon, SearchIcon, ClockIcon,
+  TrophyIcon, WrenchIcon,
 } from 'lucide-react';
 import Logo from '../ui/Logo';
 
@@ -95,23 +96,38 @@ const STAFF = [
 ];
 
 const PROGRAM_TABS = [
-  { name: 'CREATE',           logo: '/programs/create_logo.webp',   color: '#60a5fa' },
-  { name: 'JR',               logo: '/programs/jr_logo.webp',       color: '#a78bfa' },
-  { name: 'AI Academy',       logo: '/programs/ai_logo.png',        color: '#22d3ee' },
-  { name: 'Robotics Academy', logo: '/programs/robotics_logo.png',  color: '#38a1ff' },
-  { name: 'VR Coding',        logo: '/programs/vr_coding_logo.webp', color: '#2dd4bf' },
+  { name: 'CREATE',           logo: '/programs/create_logo.webp' },
+  { name: 'JR',               logo: '/programs/jr_logo.webp' },
+  { name: 'AI Academy',       logo: '/programs/ai_logo.png' },
+  { name: 'Robotics Academy', logo: '/programs/robotics_logo.png' },
+  { name: 'VR Coding',        logo: '/programs/vr_coding_logo.webp' },
 ];
 
-const BELT_TABS = ['white', 'yellow', 'orange', 'green', 'blue', 'purple'];
+// The full CREATE ladder for the hero's belt road, White to Black and the four
+// Degrees. The Degrees have no vector art and stay PNGs, as in the app.
+const BELT_ROAD = [
+  ['white', 'svg'], ['yellow', 'svg'], ['orange', 'svg'], ['green', 'svg'],
+  ['blue', 'svg'], ['purple', 'svg'], ['brown', 'svg'], ['red', 'svg'],
+  ['black', 'svg'], ['bronze', 'png'], ['silver', 'png'], ['platinum', 'png'],
+  ['gold', 'png'],
+];
 
-// Invented module titles. The franchise curriculum is not public, so the
-// mockup borrows the page's shape and none of its words.
-const MODULES = [
-  { name: 'Finding your way around the editor', count: 7 },
-  { name: 'Sprites, costumes and the stage',    count: 6 },
-  { name: 'Loops that keep the game running',   count: 7 },
-  { name: 'Keeping score',                      count: 5 },
-  { name: 'Publishing what you built',          count: 4 },
+// Invented project names. The franchise curriculum is not public, so the
+// mockup borrows the page's shape and none of its words. The kind icons are
+// the curriculum page's own vocabulary: Build a wrench, Solve a bug, the
+// Adventure a trophy.
+const PROJECT_KIND = {
+  Build:     { Icon: WrenchIcon, color: '#9138a3' },
+  Solve:     { Icon: BugIcon,    color: '#ef3e43' },
+  Adventure: { Icon: TrophyIcon, color: '#4fc390' },
+};
+
+const LEVEL_PROJECTS = [
+  { kind: 'Build',     name: 'A sprite of your own' },
+  { kind: 'Solve',     name: 'Debug the runaway cat' },
+  { kind: 'Build',     name: 'Costumes and the stage' },
+  { kind: 'Solve',     name: 'Debug the silent button' },
+  { kind: 'Adventure', name: 'Create with what you know' },
 ];
 
 function todayLabel() {
@@ -419,69 +435,157 @@ function StaffView() {
   );
 }
 
-// Curriculum is the one page with no cards on it: a reading column, underline
-// tabs and hairline rules on the page background.
+// The segmented control the curriculum page picks programs and sections with:
+// a sunken track and one raised white pill on the choice.
+function SegTrack({ label, children }) {
+  return (
+    <div aria-label={label} className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-ninja-navy/[0.05] border border-ninja-border">
+      {children}
+    </div>
+  );
+}
+
+function SegPill({ active, logo, label }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 h-8 rounded-[10px] text-[11px] whitespace-nowrap ${logo ? 'pl-1.5 pr-2.5' : 'px-3'} ${
+        active
+          ? 'font-extrabold text-ninja-navy bg-white ring-1 ring-ninja-border shadow-[0_1px_2px_rgb(6_13_26_/_0.08),0_4px_12px_-4px_rgb(6_13_26_/_0.18)]'
+          : 'font-bold text-ninja-muted'
+      }`}
+    >
+      {logo && <img src={logo} alt="" className={`w-5 h-5 object-contain ${active ? '' : 'opacity-60 saturate-50'}`} />}
+      {label}
+    </span>
+  );
+}
+
+// Curriculum reads the way a parent reads a course now: the CREATE hero with
+// the belt road across it, segmented switchers for program and section, and
+// the open level beside the ladder of all levels. With no ninja on the page
+// the whole road is lit and the rows say what a level holds.
 function CurriculumView() {
   return (
-    <div className="max-w-2xl">
-      <h3 className="text-2xl font-extrabold text-ninja-navy leading-none">Curriculum</h3>
-      <div className="text-xs text-ninja-muted mt-1.5">
-        Every program, module and lesson, plus the reference material for each.
-      </div>
+    <>
+      {/* Hero: the CREATE blue, the belt as scenery faded off the top right,
+          and the road along the bottom with White grown as the belt open. */}
+      <div
+        className="relative overflow-hidden rounded-2xl text-white px-5 pt-4 pb-4"
+        style={{ background: 'linear-gradient(145deg, #2f74e6 0%, #1355c9 50%, #0c3d99 100%)', isolation: 'isolate' }}
+      >
+        <span
+          aria-hidden="true"
+          className="absolute -top-1/4 right-[-2.5rem] h-[150%] aspect-square pointer-events-none"
+          style={{
+            zIndex: -1,
+            maskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
+            WebkitMaskImage: 'linear-gradient(to bottom left, #000 55%, transparent 96%)',
+          }}
+        >
+          <img src="/belts/belt-white-lg.svg" alt="" className="w-full h-full object-contain" />
+        </span>
 
-      <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-ninja-border mt-6">
-        {PROGRAM_TABS.map(({ name, logo, color }, i) => (
-          <span
-            key={name}
-            className={`flex items-center gap-2 px-1 pb-2 border-b-2 text-[11px] ${
-              i === 0 ? 'font-bold text-ninja-navy' : 'font-semibold text-ninja-muted border-transparent'
-            }`}
-            style={i === 0 ? { borderBottomColor: color } : undefined}
-          >
-            <img src={logo} alt="" className={`w-4 h-4 object-contain ${i === 0 ? '' : 'opacity-50'}`} />
-            {name}
-          </span>
-        ))}
-      </div>
+        <div className="text-[10px] font-extrabold opacity-85">CREATE · Curriculum</div>
+        <div className="text-[26px] font-extrabold leading-none mt-1 tracking-[-0.015em]">White belt</div>
+        <div className="text-[11px] font-semibold opacity-85 mt-1.5">4 levels · Blocks · earns Yellow</div>
 
-      <div className="flex items-baseline justify-between gap-4 pt-4 pb-3">
-        <div className="text-[11px] text-ninja-muted tabular-nums">
-          20 modules
-          <span className="px-2 text-ninja-border">/</span>
-          118 projects
+        <div className="flex items-start mt-4">
+          {BELT_ROAD.map(([b, ext], i) => (
+            <Fragment key={b}>
+              {i > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="block flex-1 min-w-[8px] -mx-[9px] mt-[16px] h-[2px] bg-white/85"
+                />
+              )}
+              <span className="flex flex-col items-center w-[44px] shrink-0">
+                <span className="flex items-center justify-center h-[34px]">
+                  <img
+                    src={`/belts/belt-${b}.${ext}`}
+                    alt=""
+                    className={`object-contain ${i === 0 ? 'w-[34px] h-[34px]' : 'w-5 h-5'}`}
+                  />
+                </span>
+                <span className={`mt-1 text-[9px] leading-none capitalize text-white ${i === 0 ? 'font-extrabold' : 'font-bold'}`}>
+                  {b}
+                </span>
+              </span>
+            </Fragment>
+          ))}
         </div>
-        <div className="flex gap-5">
-          <span className="text-[11px] font-bold text-ninja-navy border-b-2 border-ninja-navy pb-1.5">Modules</span>
-          <span className="text-[11px] font-semibold text-ninja-muted pb-1.5">Resources</span>
-        </div>
       </div>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-2 border-b border-ninja-border mb-1">
-        {BELT_TABS.map((b, i) => (
-          <span
-            key={b}
-            className={`flex items-center gap-1.5 px-1 pb-2 border-b-2 text-[11px] capitalize ${
-              i === 5 ? 'font-bold text-ninja-navy border-ninja-navy' : 'font-semibold text-ninja-muted border-transparent'
-            }`}
-          >
-            <img src={`/belts/belt-${b}.svg`} alt="" className={`w-4 h-4 object-contain ${i === 5 ? '' : 'opacity-50'}`} />
-            {b}
-          </span>
-        ))}
+      {/* Programs on the left, Course or Resources on the right */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+        <SegTrack label="Programs">
+          {PROGRAM_TABS.map(({ name, logo }, i) => (
+            <SegPill key={name} active={i === 0} logo={logo} label={name} />
+          ))}
+        </SegTrack>
+        <SegTrack label="Section">
+          <SegPill active label="Course" />
+          <SegPill label="Resources" />
+        </SegTrack>
       </div>
 
-      <div>
-        {MODULES.map((m) => (
-          <div key={m.name} className="border-b border-ninja-border last:border-b-0">
-            <div className="flex items-center gap-3 py-2.5">
-              <ChevronDownIcon className="w-3.5 h-3.5 text-ninja-muted -rotate-90 shrink-0" aria-hidden="true" />
-              <span className="flex-1 min-w-0 font-bold text-[12px] text-ninja-navy">{m.name}</span>
-              <span className="shrink-0 text-[10px] text-ninja-muted tabular-nums">{m.count} projects</span>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-3 items-start mt-3">
+        {/* The open level: its projects on a white inset, the game it builds
+            dropped on the corner like a photo. */}
+        <div className="tint-blue rounded-[22px] overflow-hidden">
+          <div className="flex items-start gap-3 pl-4 pr-4 pt-3.5 pb-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-extrabold uppercase tracking-[0.08em]" style={{ color: 'var(--tint-ink)' }}>
+                Level 1
+              </div>
+              <div className="text-[16px] font-extrabold text-ninja-navy leading-tight mt-0.5">Meet the editor</div>
+              <div className="text-[11px] text-ninja-muted mt-0.5">5 projects</div>
             </div>
+            {/* The belt's own poster sticker in the corner where the app drops
+                the level's art. The real page shows the game's screenshot
+                there, but the shots carry the projects' printed names, and the
+                mockup shows none of the curriculum's words. */}
+            <img
+              src="/belt-stickers/white-1.png"
+              alt=""
+              className="w-[92px] shrink-0 rotate-3 drop-shadow-[0_12px_16px_rgb(6_13_26_/_0.25)]"
+            />
           </div>
-        ))}
+          <div className="mx-3 mb-3 rounded-[14px] overflow-hidden border border-ninja-navy/[0.06] bg-white">
+            {LEVEL_PROJECTS.map(({ kind, name }, i) => {
+              const { Icon, color } = PROJECT_KIND[kind];
+              return (
+                <div key={name} className={`flex items-center gap-2.5 px-3.5 py-2 ${i === 0 ? '' : 'border-t border-ninja-navy/[0.08]'}`}>
+                  <span className="w-[26px] h-[26px] rounded-full flex items-center justify-center shrink-0" style={{ background: color }}>
+                    <Icon className="w-3.5 h-3.5 text-white" strokeWidth={2.7} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-extrabold text-ninja-navy truncate">{name}</span>
+                    <span className="block text-[10.5px] text-ninja-muted">{kind}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* The ladder of every level, each led by the medal it is awarded with */}
+        <div className="bg-white border border-ninja-border rounded-[22px] overflow-hidden">
+          <div className="px-4 pt-3 pb-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-ninja-muted">
+            White levels
+          </div>
+          {[1, 2, 3, 4].map((lv) => (
+            <div key={lv} className={`flex items-center gap-3 px-4 py-2.5 ${lv === 1 ? 'bg-ninja-blue/[0.06]' : 'border-t border-ninja-navy/[0.08]'}`}>
+              <img src={`/levels/white-${lv}.png`} alt="" className="w-8 object-contain shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12.5px] font-extrabold text-ninja-navy">Level {lv}</span>
+                <span className="block text-[10.5px] text-ninja-muted">5 projects</span>
+              </span>
+              <ChevronRightIcon className="w-3.5 h-3.5 text-ninja-muted/60 shrink-0" aria-hidden="true" />
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
