@@ -6,9 +6,8 @@ import TodayBoard from '../../components/manager/TodayBoard';
 import DashboardFilters from '../../components/shared/DashboardFilters';
 import BoardStats from '../../components/shared/BoardStats';
 import ClubSessionsPanel from '../../components/shared/ClubSessionsPanel';
-import EventCalendar from '../../components/manager/EventCalendar';
 import Modal from '../../components/ui/Modal';
-import { CalendarIcon, BookOpenIcon, UsersIcon } from 'lucide-react';
+import { ListTodoIcon, UsersIcon } from 'lucide-react';
 import { api } from '../../api/client';
 import { today, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
@@ -16,7 +15,61 @@ import ExpectedToday from '../../components/manager/ExpectedToday';
 import useExpectedToday, { countNinjas } from '../../lib/useExpectedToday';
 import useLiveRefresh from '../../lib/useLiveRefresh';
 import { CARD } from '../../lib/surfaces';
-import MyTasksPanel from '../../components/sensei/MyTasksPanel';
+import { OPEN_COLUMN_KEYS, todayKey } from '../../lib/taskBoard';
+
+// The board's header icons. One definition, so a second pasted class string
+// cannot drift from the first.
+const HEADER_ICON =
+  'relative w-11 h-11 flex items-center justify-center text-ninja-muted ' +
+  'hover:text-ninja-blue hover:border-ninja-blue/50 transition-colors';
+
+// My tasks, as an icon rather than the card that used to sit under the header.
+//
+// The card spent a full row of the board saying "nothing is assigned to you
+// right now", which is the answer most days. The count was the only part of it
+// that was ever news and it fits on a badge; the list itself is one press away
+// here, in the sidebar, and in the phone's top bar.
+function MyTasksIcon({ locationId }) {
+  const [tasks, setTasks] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setTasks(null);
+    api.get('/director-tasks?mine=true')
+      .catch(() => [])
+      .then((rows) => { if (alive) setTasks(rows || []); });
+    return () => { alive = false; };
+  }, [locationId]);
+
+  // Open, not assigned: a done task is not work, and a badge counting it is a
+  // badge nobody can clear.
+  const open = (tasks || []).filter((t) => OPEN_COLUMN_KEYS.includes(t.column_key));
+  const overdue = open.filter((t) => t.due_date && t.due_date < todayKey()).length;
+
+  const label = !tasks
+    ? 'My tasks'
+    : overdue
+      ? `My tasks, ${open.length} open, ${overdue} overdue`
+      : open.length
+        ? `My tasks, ${open.length} open`
+        : 'My tasks, all caught up';
+
+  return (
+    <Link to="/sensei/tasks" aria-label={label} className={`${CARD} ${HEADER_ICON}`}>
+      <ListTodoIcon className="w-5 h-5" />
+      {open.length > 0 && (
+        <span
+          aria-hidden
+          className={`absolute -top-1 -right-1 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full text-white font-ninja text-[11px] font-bold flex items-center justify-center tabular-nums ${
+            overdue ? 'bg-ninja-red' : 'bg-ninja-blue'
+          }`}
+        >
+          {open.length}
+        </span>
+      )}
+    </Link>
+  );
+}
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
@@ -35,7 +88,6 @@ export default function SenseiDashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [statusFilter, setStatusFilter] = useState('unlogged');
   const [programFilter, setProgramFilter] = useState(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const [bookedOpen, setBookedOpen] = useState(false);
   const { user } = useAuth();
   const todayStr = today();
@@ -123,7 +175,7 @@ export default function SenseiDashboard() {
                 }
                 aria-haspopup="dialog"
                 aria-expanded={bookedOpen}
-                className={`${CARD} relative w-11 h-11 flex items-center justify-center text-ninja-muted hover:text-ninja-blue hover:border-ninja-blue/50 transition-colors`}
+                className={`${CARD} ${HEADER_ICON}`}
               >
                 <UsersIcon className="w-5 h-5" />
                 {bookedCount > 0 && (
@@ -137,40 +189,14 @@ export default function SenseiDashboard() {
               </button>
             )}
 
-            {/* The sidebar carries this too, but a phone never renders the
-                sidebar, so without it here Curriculum is unreachable mid
-                session, which is when the passcodes are wanted. */}
-            <Link
-              to="/curriculum-roadmap"
-              aria-label="Open curriculum"
-              className={`${CARD} w-11 h-11 flex items-center justify-center text-ninja-muted hover:text-ninja-blue hover:border-ninja-blue/50 transition-colors`}
-            >
-              <BookOpenIcon className="w-5 h-5" />
-            </Link>
-
-            {/* Opens over the page rather than pushing the board down, since the
-                calendar is a reference, not part of the check-in flow. */}
-            <button
-              type="button"
-              onClick={() => setCalendarOpen(true)}
-              aria-label="Open calendar"
-              aria-haspopup="dialog"
-              aria-expanded={calendarOpen}
-              className={`${CARD} w-11 h-11 flex items-center justify-center text-ninja-muted hover:text-ninja-blue hover:border-ninja-blue/50 transition-colors`}
-            >
-              <CalendarIcon className="w-5 h-5" />
-            </button>
+            {/* Both the sidebar and the phone's top bar carry Curriculum and the
+                calendar now, and the dashboard's own page leads with the
+                calendar, so the board stopped needing its own copies of
+                either. What is left here is the work: who is booked, and what
+                is assigned to you. */}
+            <MyTasksIcon locationId={user?.activeLocation?.id} />
           </div>
         </motion.div>
-
-        <Modal
-          isOpen={calendarOpen}
-          onClose={() => setCalendarOpen(false)}
-          title="Calendar"
-          width="max-w-2xl"
-        >
-          <EventCalendar canManage={false} bare />
-        </Modal>
 
         <Modal
           isOpen={bookedOpen}
@@ -180,10 +206,6 @@ export default function SenseiDashboard() {
         >
           <ExpectedToday feed={bookedFeed} date={todayStr} readOnly bare />
         </Modal>
-
-        <motion.div variants={fadeUp}>
-          <MyTasksPanel locationId={user?.activeLocation?.id} />
-        </motion.div>
 
         <motion.div variants={fadeUp}>
           <h2 className="text-xl sm:text-2xl font-black font-ninja text-ninja-navy tracking-tight">
