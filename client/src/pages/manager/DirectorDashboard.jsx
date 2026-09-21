@@ -825,61 +825,6 @@ function DailySchedule({ feed, date, onAdded, existingStudentIds, readOnly, canC
   );
 }
 
-/* ----------------------------------------------------------- stat cards -- */
-
-// The sensei's second card. Check-ins history rides on Reports, which is
-// manager-only, so their slot carries today's board split by program instead:
-// the MyStudio category table, drawn as tinted bars under the names.
-function ProgramsCard({ loading, assignments }) {
-  const rows = useMemo(() => {
-    const byProgram = new Map();
-    for (const a of assignments || []) {
-      const key = a.program || 'No program';
-      byProgram.set(key, (byProgram.get(key) || 0) + 1);
-    }
-    return [...byProgram.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [assignments]);
-
-  const max = Math.max(1, ...rows.map((r) => r.count));
-
-  return (
-    <section className={`${CARD} p-5 h-full`} aria-labelledby="programs-heading">
-      <h2 id="programs-heading" className="font-ninja font-bold text-ninja-navy text-lg mb-3">Programs today</h2>
-      {loading ? (
-        <div aria-busy="true" aria-label="Loading programs" className="space-y-3">
-          {[64, 42, 28].map((w, i) => (
-            <Skeleton key={i} className="h-7 rounded-lg" style={{ width: `${w}%` }} />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="font-ninja text-sm text-ninja-muted">No check-ins yet today.</p>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((row, i) => (
-            <div key={row.name} className="relative rounded-lg overflow-hidden">
-              <motion.span
-                aria-hidden
-                className="absolute inset-y-0 left-0 rounded-lg bg-ninja-blue/10"
-                initial={{ width: 0 }}
-                animate={{ width: `${(row.count / max) * 100}%` }}
-                transition={{ duration: 0.5, ease: 'easeOut', delay: 0.05 * i }}
-              />
-              <div className="relative flex items-center justify-between gap-3 px-2.5 py-1.5">
-                <span className="font-ninja text-sm font-bold text-ninja-navy truncate">{row.name}</span>
-                <span className="font-ninja text-sm font-black text-ninja-navy tabular-nums flex-shrink-0">
-                  {row.count}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 /* ----------------------------------------------------------------- page -- */
 
 const fadeUp = (i = 0) => ({
@@ -890,8 +835,8 @@ const fadeUp = (i = 0) => ({
 
 export default function DirectorDashboard() {
   const { user, isReadOnly, viewAs } = useAuth();
-  // Senseis get this page too. What differs is what each card links to and
-  // what the check-ins slot holds, since Reports stays manager-only. An admin
+  // Senseis get this page too. What differs is what each card links to; the
+  // check-in trend is safe for every staff role at the active center. An admin
   // in sensei view gets the sensei copy, same as the navs treat them.
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
   const isManager = ['manager', 'admin'].includes(user?.role) && !isSenseiView;
@@ -905,7 +850,6 @@ export default function DirectorDashboard() {
   const bookedFeed = useExpectedToday(todayStr);
 
   useEffect(() => {
-    if (!isManager) { setLoading(false); return; }
     let alive = true;
     api.get('/reports/attendance?range=all')
       .catch(() => null)
@@ -915,7 +859,7 @@ export default function DirectorDashboard() {
         setLoading(false);
       });
     return () => { alive = false; };
-  }, [user?.activeLocation?.id, isManager]);
+  }, [user?.activeLocation?.id]);
 
   const fetchToday = useCallback(() => {
     let alive = true;
@@ -989,28 +933,27 @@ export default function DirectorDashboard() {
             </motion.div>
 
             <motion.div {...fadeUp(3)}>
-              {isManager ? (
-                <section className={`${CARD} p-5`} aria-labelledby="checkins-heading">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <h2 id="checkins-heading" className="font-ninja font-bold text-ninja-navy text-lg">Check-ins</h2>
-                    {!loading && dayRows.length > 0 && (
-                      <button type="button" onClick={() => setTrendOpen(true)} className={VIEW_ALL}>
-                        View all
-                        <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
-                      </button>
-                    )}
-                  </div>
-                  {loading ? (
-                    // Same shape and height as the loaded card, so nothing
-                    // shifts when the data lands.
-                    <div aria-busy="true" aria-label="Loading check-ins">
-                      <Skeleton className="h-8 w-40 mb-2" />
-                      <Skeleton className="w-full rounded-lg" style={{ height: CARD_CHART_H }} />
-                      <div className="flex justify-between mt-2">
-                        <Skeleton className="h-2.5 w-10" />
-                        <Skeleton className="h-2.5 w-10" />
-                        <Skeleton className="h-2.5 w-14" />
-                      </div>
+              <section className={`${CARD} p-5`} aria-labelledby="checkins-heading">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h2 id="checkins-heading" className="font-ninja font-bold text-ninja-navy text-lg">Check-ins</h2>
+                  {!loading && dayRows.length > 0 && (
+                    <button type="button" onClick={() => setTrendOpen(true)} className={VIEW_ALL}>
+                      View all
+                      <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
+                    </button>
+                  )}
+                </div>
+                {loading ? (
+                  // Same shape and height as the loaded card, so nothing
+                  // shifts when the data lands.
+                  <div aria-busy="true" aria-label="Loading check-ins">
+                    <Skeleton className="h-8 w-40 mb-2" />
+                    <Skeleton className="w-full rounded-lg" style={{ height: CARD_CHART_H }} />
+                    <div className="flex justify-between mt-2">
+                      <Skeleton className="h-2.5 w-10" />
+                      <Skeleton className="h-2.5 w-10" />
+                      <Skeleton className="h-2.5 w-14" />
+                    </div>
                       <div className="mt-4 pt-4 border-t border-ninja-border space-y-3">
                         {[28, 24, 32].map((w, i) => (
                           <div key={i} className="flex items-baseline justify-between">
@@ -1019,14 +962,11 @@ export default function DirectorDashboard() {
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ) : (
-                    <CheckInTrend dayRows={dayRows} onExpand={() => setTrendOpen(true)} />
-                  )}
-                </section>
-              ) : (
-                <ProgramsCard loading={assignments === null} assignments={assignments} />
-              )}
+                  </div>
+                ) : (
+                  <CheckInTrend dayRows={dayRows} onExpand={() => setTrendOpen(true)} />
+                )}
+              </section>
             </motion.div>
           </div>
         </div>

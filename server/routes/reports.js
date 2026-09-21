@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { requireManager } = require('../middleware/auth');
+const { requireManager, requireSensei } = require('../middleware/auth');
 
 // GET /api/reports/overview — enrollment counts, belt distribution, activity stats
 router.get('/overview', requireManager, async (req, res) => {
@@ -94,7 +94,7 @@ router.get('/overview', requireManager, async (req, res) => {
 // it into whatever range is on screen. `range=all` drops the lower bound so the
 // client can offer an all-time view off a single fetch. `to_char` keeps the DATE
 // a plain YYYY-MM-DD string instead of a UTC-midnight timestamp.
-router.get('/attendance', requireManager, async (req, res) => {
+router.get('/attendance', requireSensei, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.activeLocationId;
   const all = req.query.range === 'all';

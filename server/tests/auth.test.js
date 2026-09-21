@@ -54,4 +54,10 @@ describe('auth + access control', () => {
     const res = await csrf(agent.post('/api/daily')).send({ student_id: world.studentA, program: 'CREATE' });
     expect(res.status).toBe(201);
   });
+
+  it('allows a sensei to view attendance at their active center', async () => {
+    const { agent } = await login(app, 'sensei_a');
+    const res = await agent.get('/api/reports/attendance?range=all');
+    expect(res.status).toBe(200);
+  });
 });
