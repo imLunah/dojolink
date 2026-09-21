@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { ArchiveRestoreIcon, PlusIcon, SendIcon, Trash2Icon, XIcon } from 'lucide-react';
+import { ArchiveRestoreIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react';
 import Modal from '../ui/Modal';
 import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
@@ -9,6 +9,7 @@ import Linkify from '../shared/Linkify';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, DUE_TONE, carriesTask, dueMeta, ownsTask } from '../../lib/taskBoard';
+import TaskCommentComposer from './TaskCommentComposer';
 
 // The rendered note, for a card that is not yours to edit. Lazy for the same
 // reason the editor is: both ride the markdown chunk, and the dialog should
@@ -500,19 +501,39 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
 // on every board read — the board itself only needs the count. Comments are
 // plain text through Linkify, not markdown: they are one-line answers, and an
 // editor here would out-weigh the note above it.
+function TaskCommentBody({ comment }) {
+  const names = (comment.mentions || [])
+    .map((mention) => mention.display_name)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (names.length === 0) return <Linkify>{comment.body}</Linkify>;
+
+  const escaped = names.map((name) => `@${name}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'g');
+  const tagged = new Set(escaped.map((_, index) => `@${names[index]}`));
+  let offset = 0;
+
+  return comment.body.split(pattern).map((part) => {
+    const start = offset;
+    offset += part.length;
+    return tagged.has(part) ? (
+      <span key={`mention:${start}`} className="rounded-md bg-ninja-blue/15 px-1 py-0.5 font-bold text-ninja-blue-ink">
+        {part}
+      </span>
+    ) : (
+      <Linkify key={`text:${start}`}>{part}</Linkify>
+    );
+  });
+}
+
 function TaskComments({ task, canComment, onCount }) {
   const [comments, setComments] = useState(null); // null is still loading
-  const [text, setText] = useState('');
-  const [mentionables, setMentionables] = useState([]);
-  const [selectedMentions, setSelectedMentions] = useState([]);
-  const [mention, setMention] = useState(null); // { start, end, query }
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let alive = true;
     setComments(null);
-    setText('');
     setError('');
     api.get(`/director-tasks/${task.id}/comments`)
       .then((rows) => { if (alive) setComments(rows); })
@@ -520,68 +541,21 @@ function TaskComments({ task, canComment, onCount }) {
     return () => { alive = false; };
   }, [task.id]);
 
-  useEffect(() => {
-    if (!canComment) { setMentionables([]); return undefined; }
-    let alive = true;
-    api.get('/director-tasks/mentionables')
-      .then((rows) => { if (alive) setMentionables(rows || []); })
-      .catch(() => { if (alive) setMentionables([]); });
-    return () => { alive = false; };
-  }, [canComment, task.id]);
-
-  const suggestions = mention
-    ? mentionables
-      .filter((staff) => staff.display_name.toLowerCase().includes(mention.query.toLowerCase()))
-      .slice(0, 6)
-    : [];
-
-  const changeText = (e) => {
-    const next = e.target.value;
-    const cursor = e.target.selectionStart;
-    const beforeCursor = next.slice(0, cursor);
-    const match = /(?:^|\s)@([^\s@]*)$/.exec(beforeCursor);
-    setText(next);
-    if (!match) { setMention(null); return; }
-    setMention({
-      start: beforeCursor.lastIndexOf('@'),
-      end: cursor,
-      query: match[1],
-    });
-  };
-
-  const chooseMention = (staff) => {
-    if (!mention) return;
-    setText((current) =>
-      `${current.slice(0, mention.start)}@${staff.display_name} ${current.slice(mention.end)}`
-    );
-    setSelectedMentions((current) => [
-      ...current.filter((entry) => entry.id !== staff.id),
-      staff,
-    ]);
-    setMention(null);
-  };
-
-  const post = async (e) => {
-    e.preventDefault();
-    const body = text.trim();
-    if (!body || posting) return;
+  const post = async (body, mention_ids) => {
+    if (!body || posting) return false;
     setPosting(true);
     setError('');
     try {
-      const mention_ids = selectedMentions
-        .filter((staff) => body.includes(`@${staff.display_name}`))
-        .map((staff) => staff.id);
       const created = await api.post(`/director-tasks/${task.id}/comments`, { body, mention_ids });
       setComments((cs) => {
         const next = [...(cs || []), created];
         onCount?.(task.id, next.length);
         return next;
       });
-      setText('');
-      setSelectedMentions([]);
-      setMention(null);
+      return true;
     } catch (err) {
       setError(err.message || 'Could not add the comment.');
+      return false;
     } finally {
       setPosting(false);
     }
@@ -603,7 +577,7 @@ function TaskComments({ task, canComment, onCount }) {
           {comments.map((c) => (
             <div key={c.id}>
               <div className="min-w-0">
-                <p className="font-ninja text-sm text-ninja-navy break-words whitespace-pre-wrap"><Linkify>{c.body}</Linkify></p>
+                <p className="font-ninja text-sm text-ninja-navy break-words whitespace-pre-wrap"><TaskCommentBody comment={c} /></p>
                 <p className="font-ninja text-xs text-ninja-muted mt-0.5">
                   {c.author_name || 'No longer here'} · {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
@@ -616,55 +590,13 @@ function TaskComments({ task, canComment, onCount }) {
       ) : null}
 
       {canComment && (
-        <form onSubmit={post}>
-          {/* A box to write in, not a field to fill: room for a few lines of
-              how it is going, with the send button sitting in its corner.
-              Enter posts, the way a chat does; Shift+Enter starts a new line. */}
-          <div className="relative rounded-2xl bg-white border border-ninja-border focus-within:border-ninja-blue transition-colors">
-            <textarea
-              value={text}
-              onChange={changeText}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  if (text.trim() && !posting) e.currentTarget.form.requestSubmit();
-                }
-              }}
-              maxLength={2000}
-              rows={4}
-              placeholder={comments?.length ? 'Reply…' : 'Say how it is going…'}
-              aria-label="Add a comment"
-              className="block w-full min-h-[120px] resize-y rounded-2xl bg-transparent px-4 pt-3 pb-14 font-ninja text-[15px] leading-relaxed text-ninja-navy focus:outline-none"
-            />
-            {mention && suggestions.length > 0 && (
-              <div role="listbox" aria-label="Mention a staff member" className="absolute left-3 bottom-12 z-10 w-64 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-ninja-border bg-white shadow-lg">
-                {suggestions.map((staff) => (
-                  <button
-                    key={staff.id}
-                    type="button"
-                    role="option"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => chooseMention(staff)}
-                    className="block w-full px-3 py-2 text-left font-ninja text-sm font-semibold text-ninja-navy hover:bg-ninja-bg"
-                  >
-                    @{staff.display_name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={!text.trim() || posting}
-                aria-label="Post comment"
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-ninja-blue text-white font-ninja text-sm font-bold hover:bg-ninja-blue-hover transition-[background-color,opacity,transform] duration-150 active:scale-95 disabled:opacity-40 disabled:active:scale-100"
-              >
-                <SendIcon size={15} strokeWidth={2.25} aria-hidden="true" />
-                Post
-              </button>
-            </div>
-          </div>
-        </form>
+        <TaskCommentComposer
+          key={task.id}
+          taskId={task.id}
+          placeholder={comments?.length ? 'Reply…' : 'Say how it is going…'}
+          posting={posting}
+          onPost={post}
+        />
       )}
       {error && <p className="mt-1.5 font-ninja text-xs text-ninja-red">{error}</p>}
     </div>

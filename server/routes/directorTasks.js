@@ -673,7 +673,16 @@ router.delete('/:id', requireManager, requireOwnLocation, async (req, res) => {
 const COMMENT_MAX = 2000;
 const COMMENT_SELECT = `
   SELECT c.id, c.task_id, c.author_id, c.body, c.created_at,
-         u.display_name AS author_name
+         u.display_name AS author_name,
+         COALESCE((
+           SELECT json_agg(json_build_object(
+             'user_id', m.user_id,
+             'display_name', mentioned.display_name
+           ) ORDER BY mentioned.display_name)
+           FROM director_task_comment_mentions m
+           JOIN users mentioned ON mentioned.id = m.user_id
+           WHERE m.comment_id = c.id
+         ), '[]'::json) AS mentions
   FROM director_task_comments c
   LEFT JOIN users u ON u.id = c.author_id
 `;
