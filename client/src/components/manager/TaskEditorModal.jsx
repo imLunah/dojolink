@@ -204,7 +204,12 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
         {owns ? (
           <div>
             <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">Notes</span>
+            {/* Tiptap owns a document outside React. Rebuild it when—and only
+                when—the card changes, so a panel switching cards cannot paint
+                the first card's document underneath the next card's title.
+                The key is stable during one edit, so its undo history stays. */}
             <LazyMarkdownEditor
+              key={seedKey}
               value={body}
               onChange={setBody}
               placeholder="Anything the next director on shift needs to know…"
