@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ListTodoIcon } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, OPEN_COLUMN_KEYS, groupByColumn, todayKey } from '../../lib/taskBoard';
+import useLiveRefresh from '../../lib/useLiveRefresh';
 
 // Tasks as one of the quick links: a link, and nothing more.
 //
@@ -22,14 +23,23 @@ import { COLUMNS, OPEN_COLUMN_KEYS, groupByColumn, todayKey } from '../../lib/ta
 export default function TasksQuickLink({ className = '', to = '/manager/tasks', label = 'Tasks' }) {
   const { user } = useAuth();
   const [tasks, setTasks] = useState(null);
+  const [unread, setUnread] = useState(0);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let alive = true;
-    api.get('/director-tasks')
-      .catch(() => [])
-      .then((rows) => { if (alive) setTasks(rows || []); });
+    Promise.all([
+      api.get('/director-tasks').catch(() => []),
+      api.get('/director-tasks/mentions').catch(() => []),
+    ]).then(([rows, mentions]) => {
+      if (!alive) return;
+      setTasks(rows || []);
+      setUnread((mentions || []).length);
+    });
     return () => { alive = false; };
-  }, [user?.activeLocation?.id]);
+  }, []);
+
+  useEffect(load, [load, user?.activeLocation?.id]);
+  useLiveRefresh(load);
 
   const grouped = tasks ? groupByColumn(tasks) : null;
   // Derived from the columns, not listed by name. An allowlist is how a whole
@@ -42,7 +52,9 @@ export default function TasksQuickLink({ className = '', to = '/manager/tasks', 
     ? label
     : `${label}: ${COLUMNS.filter((c) => c.key !== 'done')
         .map((c) => `${(grouped[c.key] || []).length} ${c.label.toLowerCase()}`)
-        .join(', ')}` + (overdue ? `, ${overdue} overdue` : '');
+        .join(', ')}`
+      + (overdue ? `, ${overdue} overdue` : '')
+      + (unread ? `, ${unread} unread ${unread === 1 ? 'mention' : 'mentions'}` : '');
 
   return (
     <Link to={to} aria-label={ariaLabel} className={className}>
@@ -59,6 +71,15 @@ export default function TasksQuickLink({ className = '', to = '/manager/tasks', 
         )}
       </span>
       {label}
+      {unread > 0 && (
+        <span
+          aria-hidden="true"
+          className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-ninja text-[11px] font-black leading-none tabular-nums text-white"
+          style={{ backgroundColor: '#ef4444' }}
+        >
+          {unread > 99 ? '99+' : unread}
+        </span>
+      )}
     </Link>
   );
 }

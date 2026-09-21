@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, Trash2Icon } from 'lucide-react';
 import TaskActionsMenu from './TaskActionsMenu';
+import { MentionCountBadge } from './TaskCardFace';
 import { CARD } from '../../lib/surfaces';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, COLUMN_KEYS, DUE_TONE, carriesTask, dueMeta, ownsTask, plainPreview, taskHolder } from '../../lib/taskBoard';
@@ -315,8 +316,9 @@ export default function TaskList({ tasks, canManage, canCreate = canManage, assi
         return (
           <div
             key={task.id}
-            className={`border-b border-ninja-border/50 last:border-b-0 last:rounded-b-2xl hover:bg-ninja-bg/60 transition-colors ${task.archived_at ? 'opacity-60' : ''}`}
+            className={`relative border-b border-ninja-border/50 last:border-b-0 last:rounded-b-2xl hover:bg-ninja-bg/60 transition-colors ${task.archived_at ? 'opacity-60' : ''}`}
           >
+            <MentionCountBadge count={task.unread_mention_count} className="absolute -right-2 -top-2 z-20" />
             <div className={`hidden lg:grid ${COLS} gap-3 px-5 py-2.5 items-center`}>
               {canManage ? pickBox(task) : <span />}
               {title}

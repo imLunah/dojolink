@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeftIcon, LayoutGridIcon, ListIcon, PlusIcon } from 'lucide-react';
@@ -38,8 +38,9 @@ export default function TasksPage({ mode = 'manager' }) {
   const [editorDirty, setEditorDirty] = useState(false);
   const [refuseSignal, setRefuseSignal] = useState(0);
   const openEditor = useCallback((next) => {
-    if (editor && editorDirty) { setRefuseSignal((n) => n + 1); return; }
+    if (editor && editorDirty) { setRefuseSignal((n) => n + 1); return false; }
     setEditor(next);
+    return true;
   }, [editor, editorDirty]);
 
   // Writing a task, before it is a card.
@@ -259,12 +260,25 @@ export default function TasksPage({ mode = 'manager' }) {
     }
   }, [tasks, dropAfterExit]);
 
-  const openMention = useCallback((mention) => {
-    const task = tasks.find((entry) => entry.id === mention.task_id);
-    if (task) openEditor({ task });
-    setMentions((items) => items.filter((item) => item.id !== mention.id));
-    api.post(`/director-tasks/mentions/${mention.id}/read`, {}).catch(() => {});
-  }, [openEditor, tasks]);
+  const unreadByTask = useMemo(() => {
+    const counts = new Map();
+    for (const mention of mentions) {
+      counts.set(mention.task_id, (counts.get(mention.task_id) || 0) + 1);
+    }
+    return counts;
+  }, [mentions]);
+
+  const visibleTasks = useMemo(() => tasks.map((task) => ({
+    ...task,
+    unread_mention_count: unreadByTask.get(task.id) || 0,
+  })), [tasks, unreadByTask]);
+
+  const openTask = useCallback((task) => {
+    if (openEditor({ task }) === false) return;
+    if (!unreadByTask.has(task.id)) return;
+    setMentions((items) => items.filter((mention) => mention.task_id !== task.id));
+    api.post(`/director-tasks/mentions/task/${task.id}/read`, {}).catch(loadMentions);
+  }, [loadMentions, openEditor, unreadByTask]);
 
   return (
     <Layout>
@@ -368,22 +382,6 @@ export default function TasksPage({ mode = 'manager' }) {
 
         </motion.header>
 
-        {!showArchived && mentions.length > 0 && (
-          <section className="space-y-2" aria-label="Task mentions">
-            {mentions.map((mention) => (
-              <button
-                key={mention.id}
-                type="button"
-                onClick={() => openMention(mention)}
-                className="block w-full rounded-xl border border-ninja-blue/30 bg-ninja-blue/10 px-4 py-3 text-left font-ninja text-sm text-ninja-navy transition-colors hover:bg-ninja-blue/15"
-              >
-                <span className="font-bold">{mention.author_name || 'A teammate'} mentioned you</span>
-                {mention.title && <span> on {mention.title}</span>}
-              </button>
-            ))}
-          </section>
-        )}
-
         {error && (
           <p role="status" className="font-ninja text-sm text-ninja-red">{error}</p>
         )}
@@ -414,12 +412,12 @@ export default function TasksPage({ mode = 'manager' }) {
           />
         ) : view === 'list' ? (
           <TaskList
-            tasks={tasks}
+            tasks={visibleTasks}
             canManage={canInteract}
             canCreate={canCreate}
             assignees={assignees}
             centerName={user?.activeLocation?.name}
-            onEdit={(task) => openEditor({ task })}
+            onEdit={openTask}
             onDelete={softDelete}
             onPurge={purge}
             onRestore={restore}
@@ -428,13 +426,13 @@ export default function TasksPage({ mode = 'manager' }) {
           />
         ) : (
           <TaskBoard
-            tasks={tasks}
+            tasks={visibleTasks}
             leavingId={leavingId}
             canManage={canInteract}
             canCreate={canCreate}
             canClearDone={canCreate}
             onCompose={openComposer}
-            onEdit={(task) => openEditor({ task })}
+            onEdit={openTask}
             onDelete={softDelete}
             onRestore={restore}
             onReorder={reorder}

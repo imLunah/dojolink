@@ -1,6 +1,19 @@
 import { Building2Icon, MessageSquareIcon } from 'lucide-react';
 import { DUE_TONE, dueMeta, plainPreview, taskHolder } from '../../lib/taskBoard';
 
+export function MentionCountBadge({ count, className = '' }) {
+  if (!count) return null;
+  return (
+    <span
+      aria-label={`${count} unread ${count === 1 ? 'mention' : 'mentions'}`}
+      className={`pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-ninja text-[11px] font-black leading-none tabular-nums text-white ring-2 ring-ninja-bg ${className}`}
+      style={{ backgroundColor: '#ef4444' }}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 // What a task card looks like, in one place.
 //
 // The board, the dashboard chip and its hover panel all draw this. Surfaces
@@ -70,6 +83,7 @@ export default function TaskCardFace({ task, onOpen, actions }) {
 
   return (
     <>
+      <MentionCountBadge count={task.unread_mention_count} className="absolute -right-2 -top-2 z-20" />
       <div className="flex items-start gap-2">
         <div className={`flex-1 min-w-0 ${leadClass}`}>
           {onOpen ? (

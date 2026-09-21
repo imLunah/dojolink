@@ -720,6 +720,30 @@ router.get('/mentions', requireSensei, async (req, res) => {
   }
 });
 
+// POST /api/director-tasks/mentions/task/:id/read — opening a card reads the
+// whole thread, so every unread mention on that card clears together. A badge
+// saying "3" that turns into "2" after reading the task would be counting
+// rows in the database rather than things the person still needs to see.
+router.post('/mentions/task/:id/read', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(
+      `UPDATE director_task_comment_mentions m
+       SET read_at = COALESCE(m.read_at, now())
+       FROM director_task_comments c, director_tasks t
+       WHERE m.user_id = $1 AND m.read_at IS NULL
+         AND c.id = m.comment_id AND t.id = c.task_id
+         AND t.id = $2 AND t.location_id = $3
+       RETURNING m.id`,
+      [req.session.userId, req.params.id, req.session.activeLocationId]
+    );
+    res.json({ read: rows.length });
+  } catch (err) {
+    console.error('Error reading task mentions:', err);
+    res.status(500).json({ error: 'Failed to update task mentions' });
+  }
+});
+
 // POST /api/director-tasks/mentions/:id/read — only the notified staff member
 // can clear their own notification, and the task join scopes it to this center.
 router.post('/mentions/:id/read', requireSensei, requireOwnLocation, async (req, res) => {
