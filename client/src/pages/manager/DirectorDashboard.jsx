@@ -939,6 +939,14 @@ export default function DirectorDashboard() {
 
           <div className="lg:col-span-2 space-y-6">
             <motion.div {...fadeUp(1)}>
+              {/* A director viewing a center they aren't assigned to gets it
+                  read-only, same as a sensei. The server already refuses these
+                  writes (requireOwnLocation); this stops us offering a control
+                  whose only outcome is a 403. */}
+              <EventCalendar canManage={canWrite} />
+            </motion.div>
+
+            <motion.div {...fadeUp(3)}>
               {isManager ? (
                 <section className={`${CARD} p-5`} aria-labelledby="checkins-heading">
                   <div className="flex items-center justify-between gap-3 mb-3">
@@ -977,14 +985,6 @@ export default function DirectorDashboard() {
               ) : (
                 <ProgramsCard loading={assignments === null} assignments={assignments} />
               )}
-            </motion.div>
-
-            <motion.div {...fadeUp(3)}>
-              {/* A director viewing a center they aren't assigned to gets it
-                  read-only, same as a sensei. The server already refuses these
-                  writes (requireOwnLocation); this stops us offering a control
-                  whose only outcome is a 403. */}
-              <EventCalendar canManage={canWrite} />
             </motion.div>
           </div>
         </div>
