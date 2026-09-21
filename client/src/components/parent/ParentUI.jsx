@@ -469,10 +469,14 @@ export function ProgramMark({ program, size = 40 }) {
 // the full 1100px of the staff banner and the last of them sat under the
 // ninja's face.
 //
-// Below lg the connector DOES stretch, from an 8px floor to a 64px ceiling,
-// because there the banner is narrower than the road and the question flips:
-// bunched at 8px, thirteen belts sat in a third of a tablet's banner. The
-// ceiling keeps a mid-width road from thinning into a rule with beads on it.
+// Below lg the labelled connector stretches from a 28px floor to a 64px
+// ceiling. The ceiling is for tablets, where bunched-up belts once sat in a
+// third of the banner and the stretch spreads them across it. The floor is
+// for phones, and it is deliberately wider than the screen can hold: at 8px
+// the thirteen names ran together into one word, so the road keeps its
+// spacing and SCROLLS instead — that is what the drag and the centering
+// below are for. Only `tight` still squeezes (6px), because it drops the
+// names and is built to fit a 390px screen whole.
 //
 // The 19px pull is what makes the line reach the belts instead of stopping at
 // the column's edge, which had the road reading as thirteen separate dashes.
@@ -512,8 +516,15 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
   useEffect(() => {
     const el = scroller.current;
     if (!el || sel < 0 || el.scrollWidth <= el.clientWidth) return;
-    const col = compact ? 40 : 50;
-    const centre = sel * col + col / 2;
+    // Measured, not computed from the column width: the connectors between
+    // the columns are real widths too, so arithmetic on the columns alone
+    // lands short of every belt past the first few. Cells and connectors
+    // alternate as direct children of the row, so the cell is at 2 × sel.
+    const row = el.firstElementChild;
+    const cell = row?.children[sel * 2];
+    if (!cell) return;
+    const c = cell.getBoundingClientRect();
+    const centre = c.left - row.getBoundingClientRect().left + c.width / 2;
     el.scrollLeft = Math.max(0, centre - el.clientWidth / 2);
   }, [sel, compact]);
   const endDrag = () => { drag.current = null; };
@@ -582,7 +593,7 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
                   for the same reason — an inline `min-width: 8px` outranks any
                   class, and the fixed 34px at lg never reached the element. */}
               {i < BELTS.length - 1 && (
-                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-none lg:w-[34px] lg:min-w-[34px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${compact || tight ? 'w-[6px] min-w-[6px]' : 'w-[8px] min-w-[8px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
+                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-none lg:w-[34px] lg:min-w-[34px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${compact || tight ? 'w-[6px] min-w-[6px]' : 'w-[28px] min-w-[28px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
               )}
             </Fragment>
           );
