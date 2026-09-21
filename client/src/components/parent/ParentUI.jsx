@@ -460,17 +460,19 @@ export function ProgramMark({ program, size = 40 }) {
 // vertical, so without the drag only a trackpad could move it). At lg all
 // thirteen are on screen at once and there is nothing to scroll.
 //
-// What stretches at lg is the CONNECTOR, between a floor of 34px and a
-// ceiling of 64px, and that floor is the whole of what keeps the road
-// breathing. Work it out and the connector's own length IS the gap between
+// At lg the CONNECTOR is a fixed 34px, and that length IS the gap between
 // two resting belts: the column is 68px, the belt inside it is 30px, and the
 // connector pulls 19px into the column at each end, so the arithmetic cancels
-// to exactly the connector. Without a floor it collapsed to 8px on a narrow
-// banner, and the grown belt — 58px in a 46px column at the time — actually
-// overlapped its neighbour rather than merely crowding it.
+// to exactly the connector. 34px makes the whole road 836px — it starts at
+// the banner's words and ends well short of the art, the parent portal's
+// look. It does NOT stretch to fill a wide banner: stretched, the belts ran
+// the full 1100px of the staff banner and the last of them sat under the
+// ninja's face.
 //
-// The ceiling matters at the other end: uncapped, thirteen belts spread
-// across a wide banner into a long thin rule with beads on it.
+// Below lg the connector DOES stretch, from an 8px floor to a 64px ceiling,
+// because there the banner is narrower than the road and the question flips:
+// bunched at 8px, thirteen belts sat in a third of a tablet's banner. The
+// ceiling keeps a mid-width road from thinning into a rule with beads on it.
 //
 // The 19px pull is what makes the line reach the belts instead of stopping at
 // the column's edge, which had the road reading as thirteen separate dashes.
@@ -575,12 +577,12 @@ export function BeltRoad({ current, selected, onSelect, onHero = false, compact 
                   Cell and connector are siblings in the row itself, not a pair
                   boxed together: wrapped in their own little flex the connector
                   could only grow inside a box already shrunk to fit it, so
-                  every belt sat 8px from the next one however wide the banner
-                  was. The widths are classes rather than inline style for the
-                  same reason — an inline `min-width: 8px` outranks any class,
-                  and the 34px floor at lg never reached the element. */}
+                  below lg every belt sat 8px from the next one however narrow
+                  the banner. The widths are classes rather than inline style
+                  for the same reason — an inline `min-width: 8px` outranks any
+                  class, and the fixed 34px at lg never reached the element. */}
               {i < BELTS.length - 1 && (
-                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-1 lg:min-w-[34px] lg:max-w-[64px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${compact || tight ? 'w-[6px] min-w-[6px]' : 'w-[8px] min-w-[8px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
+                <span aria-hidden className={`block flex-shrink-0 lg:-mx-[19px] lg:flex-none lg:w-[34px] lg:min-w-[34px] ${compact ? '' : 'flex-1 max-w-[64px]'} ${compact || tight ? 'w-[6px] min-w-[6px]' : 'w-[8px] min-w-[8px]'} ${tight ? '-mx-[9px]' : '-mx-[11px]'}`} style={{ height: 2, background: i < idx ? trail : line, marginTop: cur / 2 - 1 }} />
               )}
             </Fragment>
           );
