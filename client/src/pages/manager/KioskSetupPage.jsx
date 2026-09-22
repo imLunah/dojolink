@@ -120,11 +120,21 @@ export default function KioskSetupPage() {
                 // offers; the two panels share one grid cell so the card grows
                 // with the reconnect form instead of clipping it.
                 <div className="grid">
-                  <div aria-hidden className="col-start-1 row-start-1 space-y-3 blur-[3px] opacity-50 select-none pointer-events-none">
-                    <p className="font-ninja text-sm text-ninja-navy">Signed in as a MyStudio account for this center.</p>
-                    <p className="font-ninja text-sm font-bold text-ninja-muted">Turn off</p>
+                  {/* Scenery for the blur: the card as it reads when the kiosk
+                      is on, spread to fill the whole cell so it shows above,
+                      below and beside the panel rather than peeking out of one
+                      corner. */}
+                  <div aria-hidden className="col-start-1 row-start-1 flex flex-col justify-between gap-4 py-1 blur-[4px] opacity-50 select-none pointer-events-none">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="space-y-2">
+                        <p className="font-ninja text-sm text-ninja-navy">
+                          Signed in as <span className="font-bold">director@codeninjas.com</span> for <span className="font-bold">Code Ninjas</span>.
+                        </p>
+                        <p className="font-ninja text-sm font-bold text-ninja-red">Turn off</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className={`col-start-1 row-start-1 ${PANEL} p-3.5`}>
+                  <div className={`col-start-1 row-start-1 self-center mx-3 my-8 sm:mx-6 ${PANEL} p-3.5`}>
                     <p className="font-ninja text-sm font-bold text-ninja-navy">
                       {setup.blocked === 'expired' ? 'The MyStudio connection ran out' : "MyStudio isn't connected"}
                     </p>
