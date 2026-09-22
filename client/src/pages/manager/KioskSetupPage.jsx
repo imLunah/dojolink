@@ -6,8 +6,10 @@ import { CARD } from '../../lib/surfaces';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import { api } from '../../api/client';
 
-// Setting up the check-in kiosk: sign this center into MyStudio's check-in
-// portal once, then turn a tablet into the kiosk. Starting the kiosk signs
+// Setting up the check-in kiosk. A center that connected MyStudio with its
+// password needs nothing here: the kiosk signs itself in with that saved login.
+// Otherwise sign in to MyStudio's check-in portal once, then turn a tablet
+// into the kiosk. Starting the kiosk signs
 // this device out of DojoLink, so a family at the tablet cannot reach the app
 // behind it. See server/routes/kiosk.js.
 
@@ -113,6 +115,18 @@ export default function KioskSetupPage() {
     }
   };
 
+  const turnOn = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      setSetup(await api.post('/kiosk/setup', {}));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const disconnect = async () => {
     setBusy(true);
     setError('');
@@ -160,19 +174,34 @@ export default function KioskSetupPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <button type="button" onClick={disconnect} disabled={busy}
                         className="font-ninja text-sm font-bold px-3.5 py-2 rounded-lg bg-ninja-red text-white disabled:opacity-50">
-                        Disconnect
+                        Turn off
                       </button>
-                      <button type="button" onClick={() => setConfirmDisconnect(false)} className={secondary}>Keep</button>
+                      <button type="button" onClick={() => setConfirmDisconnect(false)} className={secondary}>Keep on</button>
                     </div>
                   ) : (
                     <button type="button" onClick={() => setConfirmDisconnect(true)}
                       className="font-ninja text-sm font-bold text-ninja-muted hover:text-ninja-red transition-colors">
-                      Disconnect
+                      Turn off
                     </button>
                   )}
                 </div>
               ) : (
-                <SignInForm expired={setup.connected && setup.status === 'expired'} onDone={setSetup} />
+                <div className="space-y-4">
+                  {setup.off && (
+                    <p className="font-ninja text-sm text-ninja-navy">The kiosk is turned off.</p>
+                  )}
+                  {setup.canUseSavedLogin && (
+                    <button type="button" onClick={turnOn} disabled={busy} className={primary}>
+                      {busy ? 'Turning on…' : 'Turn on with your MyStudio connection'}
+                    </button>
+                  )}
+                  {setup.canUseSavedLogin && !setup.off && (
+                    <p className="font-ninja text-sm text-ninja-muted">
+                      Signing in with your saved MyStudio login didn't work. Try again, or sign in below.
+                    </p>
+                  )}
+                  <SignInForm expired={setup.connected && setup.status === 'expired'} onDone={setSetup} />
+                </div>
               )}
             </section>
 

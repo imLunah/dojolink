@@ -59,7 +59,7 @@ async function loadKiosk(pool, locationId) {
 
 // Built field by field so the token cannot leave by being forgotten here.
 function publicShape(kiosk) {
-  if (!kiosk) return { connected: false };
+  if (!kiosk || kiosk.status === 'off') return { connected: false, off: Boolean(kiosk) };
   return {
     connected: true,
     status: kiosk.status,
@@ -73,6 +73,77 @@ function publicShape(kiosk) {
 
 async function markExpired(pool, id) {
   await pool.query(`UPDATE mystudio_kiosks SET status = 'expired' WHERE id = $1`, [id]);
+}
+
+async function saveKiosk(pool, { locationId, userId, branch, email }) {
+  await pool.query(
+    `INSERT INTO mystudio_kiosks
+       (location_id, connected_by, company_id, company_name, login_email, portal_token, status, connected_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'connected', now())
+     ON CONFLICT (location_id) DO UPDATE SET
+       connected_by = EXCLUDED.connected_by,
+       company_id = EXCLUDED.company_id,
+       company_name = EXCLUDED.company_name,
+       login_email = EXCLUDED.login_email,
+       portal_token = EXCLUDED.portal_token,
+       status = 'connected',
+       connected_at = now()`,
+    [locationId, userId, branch.companyId, branch.companyName, email, ms.encryptCookie(branch.token)]
+  );
+  forgetMembers(locationId);
+}
+
+// The center's MyStudio connection, when it holds a saved login the kiosk can
+// sign in with. The check-in portal has no emailed code, so a director who
+// connected MyStudio with their password never has to sign the kiosk in too.
+async function savedLogin(pool, locationId) {
+  const { rows } = await pool.query(
+    `SELECT company_id, login_email, login_secret, connected_by
+       FROM mystudio_connections WHERE location_id = $1`,
+    [locationId]
+  );
+  const conn = rows[0];
+  return conn && conn.login_email && conn.login_secret ? conn : null;
+}
+
+// A failed automatic sign-in is not retried for a while, or a wrong saved
+// password would be sent to MyStudio on every keystroke at the kiosk.
+const AUTO_RETRY_MS = 10 * 60 * 1000;
+const autoFailedAt = new Map();
+
+// The kiosk for a center, signing it in from the saved MyStudio login when it
+// has never been set up or its token has stopped working. A kiosk a director
+// switched off stays off. Returns whatever is there otherwise, and never
+// throws: a kiosk that cannot sign in reads as unavailable, not as an error.
+async function ensureKiosk(pool, locationId, { force = false } = {}) {
+  const kiosk = await loadKiosk(pool, locationId);
+  if (kiosk && kiosk.status === 'connected') return kiosk;
+  if (kiosk && kiosk.status === 'off' && !force) return kiosk;
+  if (!ms.isConfigured()) return kiosk;
+  if (!force && Date.now() - (autoFailedAt.get(locationId) || 0) < AUTO_RETRY_MS) return kiosk;
+
+  const conn = await savedLogin(pool, locationId);
+  if (!conn) return kiosk;
+
+  try {
+    const branches = await ms.portalLogin({
+      email: conn.login_email,
+      password: ms.decryptCookie(conn.login_secret),
+    });
+    const branch =
+      branches.find((b) => b.companyId === String(conn.company_id)) ||
+      (branches.length === 1 ? branches[0] : null);
+    if (!branch) throw new Error('No matching center on the saved login');
+    await ms.portalClassList(branch.token, todayDate());
+    await saveKiosk(pool, { locationId, userId: conn.connected_by, branch, email: conn.login_email });
+    autoFailedAt.delete(locationId);
+    return loadKiosk(pool, locationId);
+  } catch (err) {
+    // Never the upstream body: the request carried a password.
+    console.error('Kiosk automatic sign-in failed:', err.message);
+    autoFailedAt.set(locationId, Date.now());
+    return kiosk;
+  }
 }
 
 // Today's members, briefly remembered per center. A family typing a name asks
@@ -225,8 +296,13 @@ function save(req) {
 router.get('/setup', requireManager, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const kiosk = await loadKiosk(pool, req.session.activeLocationId);
-    res.json({ configured: ms.isConfigured(), ...publicShape(kiosk) });
+    const locationId = req.session.activeLocationId;
+    const kiosk = await ensureKiosk(pool, locationId);
+    res.json({
+      configured: ms.isConfigured(),
+      canUseSavedLogin: Boolean(await savedLogin(pool, locationId)),
+      ...publicShape(kiosk),
+    });
   } catch (err) {
     console.error('Kiosk setup read failed:', err.message);
     res.status(500).json({ error: 'Failed to load the kiosk' });
@@ -246,6 +322,22 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
 
   if (!ms.isConfigured()) {
     return res.status(503).json({ error: 'MyStudio is not set up on this server.' });
+  }
+  // No credentials: turn the kiosk on from the center's saved MyStudio login.
+  if (!email && !password) {
+    try {
+      if (!(await savedLogin(pool, locationId))) {
+        return res.status(400).json({ error: 'Enter the MyStudio email and password.' });
+      }
+      const kiosk = await ensureKiosk(pool, locationId, { force: true });
+      if (!kiosk || kiosk.status !== 'connected') {
+        return res.status(502).json({ error: 'Signing in with your saved MyStudio login did not work. Enter the email and password instead.' });
+      }
+      return res.json({ configured: true, canUseSavedLogin: true, ...publicShape(kiosk) });
+    } catch (err) {
+      console.error('Kiosk saved sign-in failed:', err.message);
+      return res.status(500).json({ error: 'Failed to turn the kiosk on' });
+    }
   }
   if (!email || !password) {
     return res.status(400).json({ error: 'Enter the MyStudio email and password.' });
@@ -294,31 +386,10 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
       return res.status(502).json({ error: 'Signed in, but MyStudio would not show the schedule. Try again shortly.' });
     }
 
-    await pool.query(
-      `INSERT INTO mystudio_kiosks
-         (location_id, connected_by, company_id, company_name, login_email, portal_token, status, connected_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'connected', now())
-       ON CONFLICT (location_id) DO UPDATE SET
-         connected_by = EXCLUDED.connected_by,
-         company_id = EXCLUDED.company_id,
-         company_name = EXCLUDED.company_name,
-         login_email = EXCLUDED.login_email,
-         portal_token = EXCLUDED.portal_token,
-         status = 'connected',
-         connected_at = now()`,
-      [
-        locationId,
-        req.session.userId,
-        branch.companyId,
-        branch.companyName,
-        email,
-        ms.encryptCookie(branch.token),
-      ]
-    );
-    forgetMembers(locationId);
+    await saveKiosk(pool, { locationId, userId: req.session.userId, branch, email });
 
-    const kiosk = await loadKiosk(pool, locationId);
-    res.json({ configured: true, ...publicShape(kiosk) });
+    const kiosk = await ensureKiosk(pool, locationId);
+    res.json({ configured: true, canUseSavedLogin: Boolean(await savedLogin(pool, locationId)), ...publicShape(kiosk) });
   } catch (err) {
     console.error('Kiosk setup save failed:', err.message);
     res.status(500).json({ error: 'Failed to save the kiosk' });
@@ -329,9 +400,15 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
 router.delete('/setup', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    await pool.query('DELETE FROM mystudio_kiosks WHERE location_id = $1', [req.session.activeLocationId]);
-    forgetMembers(req.session.activeLocationId);
-    res.json({ connected: false });
+    // Switched off, not deleted: a deleted row would be signed straight back in
+    // from the saved MyStudio login on the next page load.
+    const locationId = req.session.activeLocationId;
+    await pool.query(
+      `UPDATE mystudio_kiosks SET status = 'off', portal_token = NULL WHERE location_id = $1`,
+      [locationId]
+    );
+    forgetMembers(locationId);
+    res.json({ connected: false, off: true, canUseSavedLogin: Boolean(await savedLogin(pool, locationId)) });
   } catch (err) {
     console.error('Kiosk disconnect failed:', err.message);
     res.status(500).json({ error: 'Failed to disconnect the kiosk' });
@@ -346,8 +423,8 @@ router.post('/start', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.activeLocationId;
   try {
-    const kiosk = await loadKiosk(pool, locationId);
-    if (!kiosk) return res.status(400).json({ error: 'Sign in to the MyStudio check-in portal first.' });
+    const kiosk = await ensureKiosk(pool, locationId);
+    if (!kiosk || kiosk.status === 'off') return res.status(400).json({ error: 'Turn the kiosk on first.' });
     if (kiosk.status === 'expired') {
       return res.status(400).json({ error: 'The check-in portal sign-in has expired. Sign in again first.' });
     }
@@ -381,7 +458,7 @@ router.get('/me', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT name FROM locations WHERE id = $1 AND active = true', [locationId]);
     if (!rows[0]) return res.json(null);
-    const kiosk = await loadKiosk(pool, locationId);
+    const kiosk = await ensureKiosk(pool, locationId);
     res.json({
       centerName: rows[0].name,
       ready: Boolean(kiosk && kiosk.status === 'connected'),
@@ -407,7 +484,7 @@ router.get('/search', requireKiosk, async (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
 
   try {
-    const kiosk = await loadKiosk(pool, locationId);
+    const kiosk = await ensureKiosk(pool, locationId);
     if (!kiosk || kiosk.status !== 'connected') return res.json({ unavailable: true, results: [] });
 
     let members;
@@ -456,7 +533,7 @@ router.get('/classes', requireKiosk, async (req, res) => {
   if (!/^\d{1,20}$/.test(participantId)) return res.status(400).json({ error: 'Something went wrong. Please try again.' });
 
   try {
-    const kiosk = await loadKiosk(pool, locationId);
+    const kiosk = await ensureKiosk(pool, locationId);
     if (!kiosk || kiosk.status !== 'connected') {
       return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
     }
@@ -502,7 +579,7 @@ router.post('/checkin', requireKiosk, async (req, res) => {
 
   let kiosk;
   try {
-    kiosk = await loadKiosk(pool, locationId);
+    kiosk = await ensureKiosk(pool, locationId);
   } catch (err) {
     console.error('Kiosk check-in load failed:', err.message);
     return res.status(500).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
@@ -588,7 +665,7 @@ router.post('/undo', requireKiosk, async (req, res) => {
   }
 
   try {
-    const kiosk = await loadKiosk(pool, locationId);
+    const kiosk = await ensureKiosk(pool, locationId);
     if (!kiosk || kiosk.status !== 'connected') {
       return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
     }
