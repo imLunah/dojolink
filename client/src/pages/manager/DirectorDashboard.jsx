@@ -10,6 +10,7 @@ import {
   ClipboardCheckIcon,
   CalendarDaysIcon,
   ChevronRightIcon,
+  TabletSmartphoneIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
@@ -21,6 +22,7 @@ import Modal from '../../components/ui/Modal';
 import { api } from '../../api/client';
 import { today, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { CARD, PANEL } from '../../lib/surfaces';
 import { Skeleton } from '../../components/ui/Skeleton';
 import useExpectedToday from '../../lib/useExpectedToday';
@@ -741,6 +743,20 @@ function QuickLinksCard({ isManager }) {
   );
 }
 
+// The check-in kiosk, one tap from the dashboard. It rides on MyStudio, so it
+// shows where that does: to directors, with experimental features on.
+function KioskCard() {
+  return (
+    <Link to="/manager/kiosk" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
+      <span className="w-10 h-10 rounded-xl flex items-center justify-center bg-ninja-blue/10 text-ninja-blue-ink flex-shrink-0">
+        <TabletSmartphoneIcon className="w-5 h-5" strokeWidth={1.9} aria-hidden />
+      </span>
+      <span className="font-ninja font-bold text-ninja-navy text-lg group-hover:text-ninja-blue transition-colors">Check-in kiosk</span>
+      <ChevronRightIcon className="ml-auto w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />
+    </Link>
+  );
+}
+
 /* ------------------------------------------------------- daily schedule -- */
 
 // Today's classes from MyStudio with the booked ninjas listed under each, the
@@ -878,6 +894,7 @@ export default function DirectorDashboard() {
   // in sensei view gets the sensei copy, same as the navs treat them.
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
   const isManager = ['manager', 'admin'].includes(user?.role) && !isSenseiView;
+  const { experimental } = useTheme();
   const canWrite = isManager && !isReadOnly;
   const todayStr = today();
   const [loading, setLoading] = useState(true);
@@ -949,6 +966,11 @@ export default function DirectorDashboard() {
             <motion.div {...fadeUp(1)}>
               <QuickLinksCard isManager={isManager} />
             </motion.div>
+            {isManager && experimental && (
+              <motion.div {...fadeUp(2)}>
+                <KioskCard />
+              </motion.div>
+            )}
             <motion.div {...fadeUp(2)}>
               <DailySchedule
                 feed={bookedFeed}
