@@ -60,6 +60,7 @@ export default function ClubSessionPage() {
       if (!data) return;
       setSession(data);
       setNotesDraft(data.notes || '');
+      if (!data.notes && !isReadOnly) setEditingNotes(true);
       setSelectedIds(new Set((data.attendees || []).map((a) => a.id)));
     }).catch((err) => {
       if (err?.status === 404) setNotFound(true);
@@ -239,18 +240,22 @@ export default function ClubSessionPage() {
           )}
         </motion.div>
 
-        {/* Session Notes */}
+        {/* Session Notes.
+            An empty session opens straight into the editor. Writing the notes
+            is the whole reason anyone comes back to this page, and putting a
+            button in front of the box only asks them to confirm they meant it.
+            With nothing written yet there is nothing to cancel back to either,
+            so the editor stands alone until there is something to keep. */}
         <motion.div variants={fadeUp} className={`${CARD} p-5`}>
           <div className="flex items-center justify-between gap-3 mb-3">
             <h2 className="text-ninja-navy font-ninja font-bold text-lg">Session Notes</h2>
-            {!isReadOnly && !editingNotes && (
+            {!isReadOnly && !editingNotes && session.notes && (
               <button
                 onClick={() => setEditingNotes(true)}
                 className="flex items-center gap-1.5 font-ninja text-sm font-bold text-ninja-blue rounded-lg px-2 py-1 -mr-2 hover:bg-ninja-blue/[0.08] transition duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none"
               >
-                {session.notes
-                  ? <><PencilIcon size={14} strokeWidth={2.5} aria-hidden="true" />Edit</>
-                  : <><PlusIcon size={15} strokeWidth={2.5} aria-hidden="true" />Add notes</>}
+                <PencilIcon size={14} strokeWidth={2.5} aria-hidden="true" />
+                Edit
               </button>
             )}
           </div>
@@ -266,9 +271,11 @@ export default function ClubSessionPage() {
                 <Button size="sm" onClick={handleSaveNotes} disabled={savingNotes}>
                   {savingNotes ? 'Saving...' : 'Save'}
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => { setEditingNotes(false); setNotesDraft(session.notes || ''); }}>
-                  Cancel
-                </Button>
+                {session.notes && (
+                  <Button size="sm" variant="secondary" onClick={() => { setEditingNotes(false); setNotesDraft(session.notes || ''); }}>
+                    Cancel
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
