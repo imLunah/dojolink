@@ -120,11 +120,11 @@ export default function KioskPage() {
     setStep('search');
   }, []);
 
-  // Search as the name is typed, a beat after the last keystroke.
+  // The whole list shows before anyone types, and the box narrows it a beat
+  // after the last keystroke.
   useEffect(() => {
-    if (step !== 'search') return undefined;
+    if (step !== 'search' || !me?.ready) return undefined;
     const q = query.trim();
-    if (q.length < 2) { setResults([]); setSearching(false); return undefined; }
     setSearching(true);
     const seq = ++searchSeq.current;
     const id = setTimeout(async () => {
@@ -140,9 +140,9 @@ export default function KioskPage() {
       } finally {
         if (seq === searchSeq.current) setSearching(false);
       }
-    }, 250);
+    }, q ? 250 : 0);
     return () => clearTimeout(id);
-  }, [query, step]);
+  }, [query, step, me]);
 
   // The count shown on the button is the timer, so the two cannot disagree.
   useEffect(() => {
@@ -236,7 +236,7 @@ export default function KioskPage() {
       </header>
 
       <main className="flex-1 flex flex-col items-center px-6 sm:px-10 pt-10 sm:pt-16 pb-10">
-        <div className="w-full max-w-xl">
+        <div className={`w-full ${step === 'search' ? 'max-w-3xl' : 'max-w-xl'}`}>
           <AnimatePresence mode="wait" initial={false}>
             {step === 'search' && (
               <Screen k="search">
@@ -250,7 +250,7 @@ export default function KioskPage() {
                 ) : (
                   <>
                     <label htmlFor="kiosk-search" className="block mt-8 mb-2 font-ninja font-bold text-base text-ninja-navy text-center">
-                      Type your ninja's name to check in
+                      Find your ninja to check in
                     </label>
                     <div className="relative">
                       <SearchIcon size={22} className="absolute left-4 top-1/2 -translate-y-1/2 text-ninja-muted" aria-hidden />
@@ -261,19 +261,21 @@ export default function KioskPage() {
                         placeholder="First or last name"
                       />
                     </div>
-                    <div className="mt-4 space-y-2" aria-live="polite">
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2" aria-live="polite">
                       {results.map((r) => (
                         <button
                           key={r.participantId} type="button" onClick={() => pickMember(r)}
-                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                          className="flex items-center justify-between gap-2 rounded-2xl border border-ninja-border bg-white px-4 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
-                          <span className="font-ninja font-extrabold text-xl text-ninja-navy truncate">
+                          <span className="font-ninja font-extrabold text-lg text-ninja-navy truncate">
                             {r.firstName} {r.lastInitial}
                           </span>
-                          <ChevronRightIcon size={22} className="flex-shrink-0 text-ninja-muted" aria-hidden />
+                          <ChevronRightIcon size={20} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                         </button>
                       ))}
-                      {q.length >= 2 && !searching && results.length === 0 && (
+                    </div>
+                    <div>
+                      {q && !searching && results.length === 0 && (
                         <p className="pt-2 font-ninja text-base text-ninja-muted text-center">
                           No ninja found for "{q}". Please see the front desk.
                         </p>
@@ -299,21 +301,39 @@ export default function KioskPage() {
                     </p>
                   )}
                   {classes?.map((c) => (
-                    <button
-                      key={c.classKey} type="button" disabled={c.checkedIn && !c.undoable}
-                      onClick={() => (c.checkedIn ? askUndo(c) : (setPicked(c), setMode('checkin'), setStep('confirm')))}
-                      className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98] disabled:active:scale-100"
-                    >
-                      <span className="min-w-0">
-                        <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">
-                          {fmtTime(c.startTime)}
+                    c.checkedIn ? (
+                      <div key={c.classKey}
+                        className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4">
+                        <span className="min-w-0">
+                          <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">
+                            {fmtTime(c.startTime)}
+                          </span>
+                          <span className="block font-ninja text-sm text-ninja-muted">{c.className} · Checked in</span>
                         </span>
-                        <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
-                      </span>
-                      <span className={`flex-shrink-0 font-ninja text-sm font-bold ${c.undoable ? 'text-ninja-red' : c.checkedIn || !c.booked ? 'text-ninja-muted' : 'text-ninja-blue-ink'}`}>
-                        {c.undoable ? 'Checked in · Undo' : c.checkedIn ? 'Checked in' : c.booked ? 'Booked' : ''}
-                      </span>
-                    </button>
+                        {c.undoable && (
+                          <button type="button" onClick={() => askUndo(c)}
+                            className="flex-shrink-0 font-ninja text-base font-bold px-6 py-3 rounded-xl bg-ninja-red text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]">
+                            Undo
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        key={c.classKey} type="button"
+                        onClick={() => { setPicked(c); setMode('checkin'); setStep('confirm'); }}
+                        className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">
+                            {fmtTime(c.startTime)}
+                          </span>
+                          <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
+                        </span>
+                        {c.booked && (
+                          <span className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>
+                        )}
+                      </button>
+                    )
                   ))}
                 </div>
                 <div className="mt-6 text-center">

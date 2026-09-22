@@ -388,14 +388,13 @@ router.get('/me', async (req, res) => {
 // GET /api/kiosk/search?q=
 //
 // Every active member at the center, not only today's bookings, because a
-// family may not have booked. Only after two letters, and only a first name and
-// last initial, so the tablet never lists the center's children to whoever
-// walks up to it.
+// family may not have booked. With no query it is the whole list, which the
+// kiosk shows before anyone types (the owner's call, like MyStudio's own
+// kiosk); names are first name and last initial either way.
 router.get('/search', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.kiosk.locationId;
-  const q = String(req.query.q || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  if (q.length < 2) return res.json({ results: [] });
+  const q = String(req.query.q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
 
   try {
     const kiosk = await loadKiosk(pool, locationId);
@@ -416,13 +415,13 @@ router.get('/search', requireKiosk, async (req, res) => {
     const words = q.split(' ');
     const results = members
       .filter((m) => {
+        if (!q) return true;
         const first = m.firstName.toLowerCase();
         const last = m.lastName.toLowerCase();
         if (words.length > 1) return `${first} ${last}`.startsWith(q);
         return first.startsWith(q) || last.startsWith(q);
       })
       .sort((a, b) => a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName))
-      .slice(0, 8)
       .map((m) => ({
         participantId: m.participantId,
         firstName: m.firstName,
