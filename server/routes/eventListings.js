@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { requireManager, requireOwnLocation } = require('../middleware/auth');
+const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const storage = require('../lib/storage');
 
 // Event listings: what a center is promoting to families, authored for
@@ -83,6 +83,28 @@ router.get('/', requireManager, async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('Error fetching event listings:', err);
+    res.status(500).json({ error: 'Failed to fetch event listings' });
+  }
+});
+
+// GET /api/event-listings/calendar — the staff calendar's view of what
+// families can see: published listings that have a date, and nothing else.
+// Drafts never leave the Events page, and an undated listing runs all the
+// time so it belongs to no single day. Every staff role reads it, since a
+// published listing is already public to the center's parents.
+router.get('/calendar', requireSensei, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, event_time, to_char(event_date, 'YYYY-MM-DD') AS event_date
+       FROM event_listings
+       WHERE location_id = $1 AND published AND event_date IS NOT NULL
+       ORDER BY event_date ASC, created_at ASC`,
+      [req.session.activeLocationId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching calendar listings:', err);
     res.status(500).json({ error: 'Failed to fetch event listings' });
   }
 });

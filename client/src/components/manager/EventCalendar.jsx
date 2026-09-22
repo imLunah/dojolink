@@ -7,7 +7,7 @@ import Modal from '../ui/Modal';
 import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import { CARD } from '../../lib/surfaces';
-import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon, PlusIcon, CheckIcon } from 'lucide-react';
+import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon, PlusIcon, CheckIcon, MegaphoneIcon } from 'lucide-react';
 import useRefuseNudge from '../../lib/useRefuseNudge';
 
 
@@ -286,6 +286,29 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy, dirty
   );
 }
 
+/* ------------------------------------------------------------ listings --- */
+
+// A published listing from the Events page, on its day. It must not read as a
+// staff event: a tint and a megaphone rather than a solid type color, the same
+// way birthdays get their own chip. A director opens it in its own editor, so
+// a listing is only ever edited in one place; for everyone else it is a label.
+function ListingChip({ listing, canManage, onOpen }) {
+  const cls = 'flex w-full items-center gap-1 rounded px-1 py-0.5 font-ninja text-[10px] font-semibold leading-tight bg-ninja-blue/10 text-ninja-blue';
+  const body = (
+    <>
+      <MegaphoneIcon className="w-2.5 h-2.5 flex-shrink-0" />
+      <span className="truncate">{listing.title}</span>
+    </>
+  );
+  return canManage ? (
+    <button type="button" onClick={onOpen} title={listing.title} className={`pointer-events-auto text-left ${cls}`}>
+      {body}
+    </button>
+  ) : (
+    <span title={listing.title} className={cls}>{body}</span>
+  );
+}
+
 /* --------------------------------------------------------------- sheet --- */
 
 // The event form opens inside the calendar card, over the month, rather than
@@ -417,6 +440,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
   const [events, setEvents] = useState([]);
   const [birthdays, setBirthdays] = useState([]);
   const [types, setTypes] = useState([]);
+  const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cursor, setCursor] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
   const [modal, setModal] = useState(null); // { event } — add uses a bare {event_date}
@@ -431,8 +455,10 @@ export default function EventCalendar({ canManage = true, bare = false }) {
       api.get('/events').catch(() => []),
       api.get('/students/birthdays').catch(() => []),
       api.get('/events/types').catch(() => []),
-    ]).then(([evs, bdays, tys]) => {
+      api.get('/event-listings/calendar').catch(() => []),
+    ]).then(([evs, bdays, tys, lsts]) => {
       if (!alive) return;
+      setListings(lsts || []);
       setEvents(evs || []);
       setBirthdays(bdays || []);
       setTypes(tys || []);
@@ -450,6 +476,17 @@ export default function EventCalendar({ canManage = true, bare = false }) {
     }
     return map;
   }, [events]);
+
+  // Published, dated listings from the Events page: what families can see.
+  const listingsByDay = useMemo(() => {
+    const map = new Map();
+    for (const l of listings) {
+      const arr = map.get(l.event_date) || [];
+      arr.push(l);
+      map.set(l.event_date, arr);
+    }
+    return map;
+  }, [listings]);
 
   // Keyed month-day (not a full date) so a birthday repeats every year.
   const birthdaysByDay = useMemo(() => {
@@ -594,12 +631,17 @@ export default function EventCalendar({ canManage = true, bare = false }) {
           const dIso = iso(y, m, day);
           const dayEvents = byDay.get(dIso) || [];
           const dayBirthdays = birthdaysByDay.get(`${pad(m + 1)}-${pad(day)}`) || [];
+          const dayListings = listingsByDay.get(dIso) || [];
           const isToday = dIso === tIso;
-          // Events come first; both kinds share one 3-slot budget so a busy day
-          // never blows the row height out.
+          // Staff events first, then what parents can see, then birthdays. All
+          // three share one 3-slot budget so a busy day never blows the row
+          // height out.
           const shownEvents = dayEvents.slice(0, MAX_CHIPS);
-          const shownBirthdays = dayBirthdays.slice(0, Math.max(0, MAX_CHIPS - shownEvents.length));
-          const hidden = (dayEvents.length - shownEvents.length) + (dayBirthdays.length - shownBirthdays.length);
+          const shownListings = dayListings.slice(0, Math.max(0, MAX_CHIPS - shownEvents.length));
+          const shownBirthdays = dayBirthdays.slice(0, Math.max(0, MAX_CHIPS - shownEvents.length - shownListings.length));
+          const hidden = (dayEvents.length - shownEvents.length)
+            + (dayListings.length - shownListings.length)
+            + (dayBirthdays.length - shownBirthdays.length);
           return (
             // The cell used to be the <button>, with the chips as role="button"
             // spans inside it — interactive inside interactive, which is invalid
@@ -644,6 +686,9 @@ export default function EventCalendar({ canManage = true, bare = false }) {
                       {ev.title}
                     </span>
                   )
+                ))}
+                {shownListings.map((l) => (
+                  <ListingChip key={`l${l.id}`} listing={l} canManage={canManage} onOpen={() => navigate(`/manager/events/${l.id}/edit`)} />
                 ))}
                 {shownBirthdays.map((b) => (
                   <button
@@ -690,6 +735,19 @@ export default function EventCalendar({ canManage = true, bare = false }) {
               <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorFor(types, ev.type) }} />
               <span className="font-ninja text-sm text-ninja-navy truncate flex-1">{ev.title}</span>
               {ev.event_time && <span className="font-ninja text-xs font-bold text-ninja-muted flex-shrink-0">{ev.event_time}</span>}
+            </button>
+          ))}
+          {(listingsByDay.get(dayView) || []).map((l) => (
+            <button
+              key={`l${l.id}`}
+              type="button"
+              disabled={!canManage}
+              onClick={() => { setDayView(null); navigate(`/manager/events/${l.id}/edit`); }}
+              className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors ${canManage ? 'hover:bg-ninja-bg' : 'cursor-default'}`}
+            >
+              <MegaphoneIcon className="w-3.5 h-3.5 flex-shrink-0 text-ninja-blue" />
+              <span className="font-ninja text-sm text-ninja-navy truncate flex-1">{l.title}</span>
+              {l.event_time && <span className="font-ninja text-xs font-bold text-ninja-muted flex-shrink-0">{l.event_time}</span>}
             </button>
           ))}
           {(dayView ? birthdaysByDay.get(dayView.slice(5)) || [] : []).map((b) => (
