@@ -3,7 +3,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import {
   BookOpenIcon, BugIcon, UsersIcon, CalendarIcon, ChevronDownIcon,
   ChevronRightIcon, ChevronLeftIcon, LogOutIcon, SearchIcon, ClockIcon,
-  TrophyIcon, WrenchIcon,
+  TrophyIcon, WrenchIcon, LayoutGridIcon, ListTodoIcon, ClipboardCheckIcon,
+  GiftIcon, CalendarDaysIcon, CakeIcon,
 } from 'lucide-react';
 import Logo from '../ui/Logo';
 
@@ -20,6 +21,7 @@ const BELT_HEX = {
 };
 
 const NAV = [
+  { id: 'dashboard',  label: 'Dashboard',     Glyph: LayoutGridIcon },
   { id: 'today',      label: "Today's Board", icon: '/icons/today.png' },
   { id: 'ninjas',     label: 'Ninjas',        icon: '/icons/roster.png' },
   { id: 'clubs',      label: 'Clubs',         icon: '/icons/clubs.png' },
@@ -129,6 +131,213 @@ const LEVEL_PROJECTS = [
   { kind: 'Solve',     name: 'Debug the silent button' },
   { kind: 'Adventure', name: 'Create with what you know' },
 ];
+
+// The dashboard every staff member now lands on. Quick links are the sensei's
+// set; the schedule, calendar and check-ins are invented like everything else.
+const QUICK = [
+  { label: 'My Tasks',      Icon: ListTodoIcon },
+  { label: "Today's Board", Icon: ClipboardCheckIcon },
+  { label: 'Curriculum',    Icon: BookOpenIcon },
+  { label: "What's New",    Icon: GiftIcon },
+];
+
+const SCHEDULE = [
+  { time: '4:00 PM', name: 'CREATE',           rows: [['Mason Rivera', 'Purple Belt'], ['Sofia Martinez', 'Green Belt'], ['Emma Johnson', 'Yellow Belt']] },
+  { time: '5:00 PM', name: 'Robotics Academy', rows: [['Liam Patel', 'Robotics'], ['Noah Kim', 'AI Academy']] },
+];
+
+// Day of the month and the event type colours the calendar uses. Days past the
+// end of a short month simply don't draw.
+const CAL_EVENTS = [
+  { day: 4,  title: 'Game Night',     color: '#2563eb' },
+  { day: 11, title: 'Parents Night',  color: '#ec4899' },
+  { day: 19, title: 'Tournament',     color: '#f59e0b' },
+  { day: 26, title: 'Field Trip',     color: '#10b981' },
+];
+const CAL_BIRTHDAYS = [{ day: 8, name: 'Ava' }, { day: 23, name: 'Noah' }];
+
+// Ninjas a week for the last eight weeks.
+const WEEKLY = [38, 42, 40, 47, 45, 52, 49, 56];
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+
+const MINI_CARD = 'bg-white border border-ninja-border rounded-2xl shadow-sm p-4';
+
+function MiniCalendar() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const lead = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const month = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  return (
+    <div className={MINI_CARD}>
+      <div className="flex items-center justify-between mb-2.5">
+        <div>
+          <div className="text-sm font-bold text-ninja-navy">Calendar</div>
+          <div className="text-[10px] text-ninja-muted">Events and ninja birthdays at this center</div>
+        </div>
+        <span className="text-[11px] font-bold text-ninja-blue">+ New event</span>
+      </div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[12px] font-bold text-ninja-navy">{month}</span>
+        <span className="flex items-center gap-1 text-ninja-muted">
+          <span className="text-[10px] font-bold px-1.5">Today</span>
+          <ChevronLeftIcon className="w-3.5 h-3.5" aria-hidden="true" />
+          <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="grid grid-cols-7 mb-0.5">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+          <span key={d} className="text-center text-[8px] font-bold uppercase tracking-wide text-ninja-muted py-0.5">{d}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((day, i) => {
+          if (day === null) return <span key={`b${i}`} />;
+          const isToday = day === now.getDate();
+          const ev = CAL_EVENTS.find((e) => e.day === day);
+          const bd = CAL_BIRTHDAYS.find((b) => b.day === day);
+          return (
+            <div
+              key={day}
+              className={`min-h-[38px] rounded-md border p-1 ${isToday ? 'border-ninja-blue bg-ninja-blue/5' : 'border-transparent'}`}
+            >
+              <span className={`block text-[9px] font-bold tabular-nums leading-none ${isToday ? 'text-ninja-blue' : 'text-ninja-navy'}`}>{day}</span>
+              {ev && (
+                <span className="mt-1 block truncate rounded px-1 py-px text-[7.5px] font-semibold text-white leading-tight" style={{ background: ev.color }}>
+                  {ev.title}
+                </span>
+              )}
+              {bd && (
+                <span
+                  className="mt-1 flex items-center gap-0.5 rounded px-1 py-px text-[7.5px] font-semibold leading-tight"
+                  style={{ background: 'rgba(219, 39, 119, 0.14)', color: 'var(--birthday-ink)' }}
+                >
+                  <CakeIcon className="w-2 h-2 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{bd.name}</span>
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CheckInCard() {
+  const w = 300;
+  const h = 70;
+  const max = Math.max(...WEEKLY) * 1.1;
+  const pts = WEEKLY.map((v, i) => [(i / (WEEKLY.length - 1)) * (w - 8) + 4, h - (v / max) * (h - 6)]);
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [ex, ey] = pts[pts.length - 1];
+
+  return (
+    <div className={MINI_CARD}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-bold text-ninja-navy">Check-ins</span>
+        <span className="inline-flex items-center gap-0.5 rounded-lg border border-ninja-border px-2 py-0.5 text-[10px] font-bold text-ninja-navy">
+          View all <ChevronRightIcon className="w-3 h-3" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-2xl font-black text-ninja-navy leading-none tabular-nums">{WEEKLY[WEEKLY.length - 1]}</span>
+        <span className="text-[11px] text-ninja-muted">ninjas this week</span>
+      </div>
+      {/* Stretched to the card, so the stroke opts out of the scaling and the
+          end dot sits outside the SVG where it can stay round. */}
+      <div className="relative h-[70px] mt-2" aria-hidden="true">
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-full overflow-visible">
+          <defs>
+            <linearGradient id="mockCheckInFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(var(--ninja-blue))" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="rgb(var(--ninja-blue))" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={`${line} L${ex.toFixed(1)},${h} L${pts[0][0].toFixed(1)},${h} Z`} fill="url(#mockCheckInFill)" />
+          <path d={line} fill="none" stroke="rgb(var(--ninja-blue))" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span
+          className="absolute w-2.5 h-2.5 -ml-[5px] -mt-[5px] rounded-full bg-ninja-blue ring-2 ring-white"
+          style={{ left: `${(ex / w) * 100}%`, top: `${(ey / h) * 100}%` }}
+        />
+      </div>
+      <div className="mt-3 pt-3 border-t border-ninja-border grid grid-cols-3 gap-3">
+        {[['Busiest day', 14], ['Ninjas a week', 46], ['vs previous 8 weeks', '+12%']].map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <div className={`text-base font-black leading-none tabular-nums ${String(value).startsWith('+') ? 'text-emerald-500' : 'text-ninja-navy'}`}>{value}</div>
+            <div className="text-[10px] text-ninja-muted mt-1 truncate">{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DashboardView() {
+  return (
+    <>
+      <div className="mb-5">
+        <div className="text-xs text-ninja-muted">{todayLabel()}</div>
+        <h3 className="text-3xl font-black tracking-tight leading-none text-ninja-navy mt-1">
+          {greeting()}, <span className="text-ninja-blue">Kai</span>
+        </h3>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+        <div className="space-y-3">
+          <div className={MINI_CARD}>
+            <div className="text-sm font-bold text-ninja-navy mb-3">Quick links</div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {QUICK.map(({ label, Icon }) => (
+                <span key={label} className="flex items-center gap-1.5 rounded-lg border border-ninja-border px-2 py-2 min-w-0">
+                  <Icon className="w-3.5 h-3.5 shrink-0 text-ninja-muted" aria-hidden="true" />
+                  <span className="text-[11px] font-bold text-ninja-navy truncate">{label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className={MINI_CARD}>
+            <div className="flex items-center gap-1.5 text-sm font-bold text-ninja-navy mb-3">
+              <CalendarDaysIcon className="w-4 h-4 text-ninja-muted" aria-hidden="true" />
+              Daily schedule
+            </div>
+            <div className="space-y-2">
+              {SCHEDULE.map((g) => (
+                <div key={g.time} className="rounded-lg border border-ninja-border overflow-hidden">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-ninja-bg">
+                    <span className="text-[11px] font-bold text-ninja-navy tabular-nums">{g.time}</span>
+                    <span className="text-[10px] text-ninja-muted truncate">{g.name}</span>
+                    <span className="ml-auto text-[10px] text-ninja-muted tabular-nums">{g.rows.length}</span>
+                  </div>
+                  {g.rows.map(([name, belt]) => (
+                    <div key={name} className="flex items-center gap-2 px-2.5 py-1.5 border-t border-ninja-border text-[11px] text-ninja-navy">
+                      <span className="truncate">{name}</span>
+                      <span className="ml-auto text-[10px] text-ninja-muted whitespace-nowrap">{belt}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 space-y-3">
+          <MiniCalendar />
+          <CheckInCard />
+        </div>
+      </div>
+    </>
+  );
+}
 
 function todayLabel() {
   return new Date().toLocaleDateString('en-US', {
@@ -590,7 +799,7 @@ function CurriculumView() {
 }
 
 const VIEWS = {
-  today: TodayView, ninjas: RosterView, clubs: ClubsView,
+  dashboard: DashboardView, today: TodayView, ninjas: RosterView, clubs: ClubsView,
   staff: StaffView, curriculum: CurriculumView,
 };
 
@@ -598,7 +807,7 @@ const VIEWS = {
 // The desktop shot is the app, not a picture of it: the sidebar really
 // navigates, so a visitor can look around before they ever sign in.
 export function DeskMockup() {
-  const [tab, setTab] = useState('today');
+  const [tab, setTab] = useState('dashboard');
   const still = useReducedMotion();
   const View = VIEWS[tab];
 
