@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { TabletSmartphoneIcon } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import { Link } from 'react-router-dom';
-import { CARD, PANEL } from '../../lib/surfaces';
+import { CARD } from '../../lib/surfaces';
 import MyStudioReconnect from '../../components/manager/MyStudioReconnect';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import Segmented from '../../components/ui/Segmented';
@@ -116,37 +116,20 @@ export default function KioskSetupPage() {
                 <p className="font-ninja text-sm text-ninja-muted">MyStudio is not set up on this server.</p>
               ) : setup.blocked ? (
                 // The kiosk runs only while the center's MyStudio connection
-                // does. Greyed behind the same repair the Daily schedule card
-                // offers; the two panels share one grid cell so the card grows
-                // with the reconnect form instead of clipping it.
-                <div className="grid">
-                  {/* Scenery for the blur: the card as it reads when the kiosk
-                      is on, spread to fill the whole cell so it shows above,
-                      below and beside the panel rather than peeking out of one
-                      corner. */}
-                  <div aria-hidden className="col-start-1 row-start-1 flex flex-col justify-between gap-4 py-1 blur-[4px] opacity-50 select-none pointer-events-none">
-                    {[0, 1, 2].map((i) => (
-                      <div key={i} className="space-y-2">
-                        <p className="font-ninja text-sm text-ninja-navy">
-                          Signed in as <span className="font-bold">director@codeninjas.com</span> for <span className="font-bold">Code Ninjas</span>.
-                        </p>
-                        <p className="font-ninja text-sm font-bold text-ninja-red">Turn off</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className={`col-start-1 row-start-1 self-center mx-3 my-8 sm:mx-6 ${PANEL} p-3.5`}>
-                    <p className="font-ninja text-sm font-bold text-ninja-navy">
-                      {setup.blocked === 'expired' ? 'The MyStudio connection ran out' : "MyStudio isn't connected"}
-                    </p>
-                    <div className="mt-2">
-                      {setup.blocked === 'expired' ? (
-                        <MyStudioReconnect onConnected={reload} />
-                      ) : (
-                        <Link to="/account?mystudio=1" className="font-ninja text-sm font-semibold text-ninja-blue hover:underline">
-                          Connect it from Account settings
-                        </Link>
-                      )}
-                    </div>
+                // does, so this offers the same repair as the Daily schedule
+                // card, on its own.
+                <div>
+                  <p className="font-ninja text-sm font-bold text-ninja-navy">
+                    {setup.blocked === 'expired' ? 'The MyStudio connection ran out' : "MyStudio isn't connected"}
+                  </p>
+                  <div className="mt-2 max-w-md">
+                    {setup.blocked === 'expired' ? (
+                      <MyStudioReconnect onConnected={reload} />
+                    ) : (
+                      <Link to="/account?mystudio=1" className="font-ninja text-sm font-semibold text-ninja-blue hover:underline">
+                        Connect it from Account settings
+                      </Link>
+                    )}
                   </div>
                 </div>
               ) : ready ? (
@@ -184,11 +167,11 @@ export default function KioskSetupPage() {
                     // the fix is always to sign MyStudio in again, never a
                     // second password form. Once the code is in, turn the
                     // kiosk on with the login that was just saved.
-                    <div className={`${PANEL} p-3.5`}>
+                    <div>
                       <p className="font-ninja text-sm font-bold text-ninja-navy">
                         {setup.off ? 'The kiosk is turned off' : "The kiosk couldn't sign in to MyStudio"}
                       </p>
-                      <div className="mt-2">
+                      <div className="mt-2 max-w-md">
                         <MyStudioReconnect onConnected={turnOn} />
                       </div>
                     </div>
