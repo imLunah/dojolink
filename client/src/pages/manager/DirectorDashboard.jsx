@@ -742,10 +742,11 @@ function QuickLinksCard({ isManager }) {
   );
 }
 
-// The check-in kiosk, one tap from the dashboard, for every director. Not
-// behind the experimental toggle: that setting is per browser, and an iPad
-// home-screen app keeps its own, so the card went missing on the one device
-// the kiosk is for.
+// The check-in kiosk, one tap from the dashboard, for directors at a center
+// that has MyStudio set up (connected, or connected and in need of a new code,
+// which the Kiosk page repairs). Tied to the integration rather than the
+// experimental toggle: that setting is per browser, and an iPad home-screen app
+// keeps its own, so the card went missing on the device the kiosk is for.
 function KioskCard() {
   return (
     <Link to="/manager/kiosk" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
@@ -964,7 +965,7 @@ export default function DirectorDashboard() {
             <motion.div {...fadeUp(1)}>
               <QuickLinksCard isManager={isManager} />
             </motion.div>
-            {isManager && (
+            {isManager && bookedFeed.data?.connected && (
               <motion.div {...fadeUp(2)}>
                 <KioskCard />
               </motion.div>
