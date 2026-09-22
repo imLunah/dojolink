@@ -49,13 +49,14 @@ function kioskTheme(hex) {
   };
 }
 
-// One class on one line: the time in a fixed column so the names line up,
-// and both at the same size and weight, since at a busy hour the name is what
-// tells three 3:00 PM rows apart.
+// One class on one line: the time in a fixed column so the names line up, a
+// dashed rule between them, and both at the same size and weight, since at a
+// busy hour the name is what tells three 3:00 PM rows apart.
 function ClassLabel({ startTime, className }) {
   return (
-    <span className="min-w-0 flex items-baseline gap-4 font-ninja font-extrabold text-xl text-ninja-navy">
+    <span className="min-w-0 flex items-center gap-4 font-ninja font-extrabold text-xl text-ninja-navy">
       <span className="w-24 flex-shrink-0 tabular-nums">{fmtTime(startTime)}</span>
+      <span aria-hidden className="self-stretch border-l-2 border-dashed border-ninja-border" />
       <span className="truncate">{className}</span>
     </span>
   );
@@ -358,7 +359,7 @@ export default function KioskPage() {
                           <span className="font-ninja font-bold text-lg text-ninja-navy truncate">
                             {r.firstName} {r.lastName}
                           </span>
-                          <ChevronRightIcon size={18} className="flex-shrink-0 text-ninja-muted" aria-hidden />
+                          <ChevronRightIcon size={22} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                         </button>
                       ))}
                       </div>
@@ -467,9 +468,10 @@ export default function KioskPage() {
                           className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
                           <span className="font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastName}</span>
-                          {k.booked
-                            ? <span className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>
-                            : <ChevronRightIcon size={20} className="flex-shrink-0 text-ninja-muted" aria-hidden />}
+                          <span className="ml-auto flex-shrink-0 flex items-center gap-3">
+                            {k.booked && <span className="font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>}
+                            <ChevronRightIcon size={22} className="text-ninja-muted" aria-hidden />
+                          </span>
                         </button>
                       )
                     ));
@@ -518,9 +520,10 @@ export default function KioskPage() {
                         className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                       >
                         <ClassLabel startTime={c.startTime} className={c.className} />
-                        {c.booked && (
-                          <span className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>
-                        )}
+                        <span className="ml-auto flex-shrink-0 flex items-center gap-3">
+                          {c.booked && <span className="font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>}
+                          <ChevronRightIcon size={22} className="text-ninja-muted" aria-hidden />
+                        </span>
                       </button>
                     )
                   ))}
