@@ -43,17 +43,33 @@ function initials(name) {
 // A card carried by the center wears the same chip with a building in place of
 // the initials, so "everyone here" and "this person" read as answers to the
 // same question rather than two different kinds of thing.
-export function Assignee({ name, center }) {
+export function Assignee({ task }) {
+  const people = task.assignees || [];
+  const center = Boolean(task.assignee_center);
+  const name = center
+    ? task.location_name || 'The whole center'
+    : people.map((person) => person.display_name).join(', ');
+  const label = center
+    ? name
+    : people.length > 1
+      ? `${people[0].display_name.split(/\s+/)[0]} +${people.length - 1}`
+      : people[0]?.display_name.split(/\s+/)[0];
+
   return (
     <span className="flex items-center gap-1.5 flex-shrink-0 min-w-0" aria-label={`Assigned to ${name}`}>
-      <span
-        aria-hidden="true"
-        className="w-5 h-5 rounded-full border border-ninja-border flex items-center justify-center font-ninja text-[9px] font-black text-ninja-muted leading-none"
-      >
-        {center ? <Building2Icon size={11} strokeWidth={2.25} /> : initials(name)}
+      <span className="flex flex-shrink-0 -space-x-1" aria-hidden="true">
+        {center ? (
+          <span className="w-5 h-5 rounded-full border border-ninja-border bg-white flex items-center justify-center text-ninja-muted">
+            <Building2Icon size={11} strokeWidth={2.25} />
+          </span>
+        ) : people.slice(0, 2).map((person) => (
+          <span key={person.id} className="w-5 h-5 rounded-full border border-ninja-border bg-white flex items-center justify-center font-ninja text-[9px] font-black text-ninja-muted leading-none">
+            {initials(person.display_name)}
+          </span>
+        ))}
       </span>
       <span className="font-ninja text-xs text-ninja-muted truncate">
-        {center ? name : name.split(/\s+/)[0]}
+        {label}
       </span>
     </span>
   );
@@ -127,7 +143,7 @@ export default function TaskCardFace({ task, onOpen, actions }) {
               </span>
             )}
           </span>
-          {holder && <Assignee name={holder} center={task.assignee_center} />}
+          {holder && <Assignee task={task} />}
         </div>
       )}
     </>

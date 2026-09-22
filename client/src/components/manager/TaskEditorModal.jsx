@@ -10,6 +10,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, DUE_TONE, carriesTask, dueMeta, ownsTask } from '../../lib/taskBoard';
 import TaskCommentComposer from './TaskCommentComposer';
+import TaskAssigneePicker from './TaskAssigneePicker';
 
 // The rendered note, for a card that is not yours to edit. Lazy for the same
 // reason the editor is: both ride the markdown chunk, and the dialog should
@@ -26,7 +27,8 @@ const snapshot = (f) => JSON.stringify({
   body: f.body,
   color: f.color,
   due: f.due,
-  assignee: f.assignee,
+  assigneeIds: [...f.assigneeIds].sort((a, b) => a - b),
+  assigneeCenter: f.assigneeCenter,
   columnKey: f.columnKey,
   checklist: f.checklist.map((i) => ({ text: i.text, done: Boolean(i.done) })),
 });
@@ -59,7 +61,8 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
   // saving a card doesn't quietly wipe what is in the column.
   const [color, setColor] = useState('none');
   const [due, setDue] = useState('');
-  const [assignee, setAssignee] = useState('');
+  const [assigneeIds, setAssigneeIds] = useState([]);
+  const [assigneeCenter, setAssigneeCenter] = useState(true);
   const [columnKey, setColumnKey] = useState(column);
   const [checklist, setChecklist] = useState([]);
   const [item, setItem] = useState('');
@@ -95,7 +98,8 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
       // this field: with no empty option to fall back to, a select showing the
       // center while the card is stored as unassigned would save one thing and
       // display another.
-      setAssignee(task?.assignee_id ? String(task.assignee_id) : 'center');
+      setAssigneeIds((task?.assignees || []).map((assignee) => assignee.id));
+      setAssigneeCenter(task ? Boolean(task.assignee_center) : true);
       setColumnKey(task?.column_key ?? column);
       const checklistSeed = task?.checklist ? task.checklist.map((i) => ({ ...i })) : [];
       setChecklist(checklistSeed);
@@ -104,7 +108,8 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
         body: task?.body ?? '',
         color: task?.color ?? 'none',
         due: task?.due_date ?? '',
-        assignee: task?.assignee_id ? String(task.assignee_id) : 'center',
+        assigneeIds: (task?.assignees || []).map((assignee) => assignee.id),
+        assigneeCenter: task ? Boolean(task.assignee_center) : true,
         columnKey: task?.column_key ?? column,
         checklist: checklistSeed,
       }));
@@ -128,7 +133,7 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
   // the panel's own note on refusing a dismissal.
   const dirty = isOpen
     && baseline !== null
-    && snapshot({ title, body, color, due, assignee, columnKey, checklist }) !== baseline;
+    && snapshot({ title, body, color, due, assigneeIds, assigneeCenter, columnKey, checklist }) !== baseline;
   useEffect(() => { if (onDirtyChange) onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
   const submit = async () => {
@@ -141,8 +146,8 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
         body: body.trim() || null,
         color,
         due_date: due || null,
-        assignee_id: assignee && assignee !== 'center' ? Number(assignee) : null,
-        assignee_center: assignee === 'center',
+        assignee_ids: assigneeIds,
+        assignee_center: assigneeCenter,
         checklist,
         column_key: columnKey,
       });
@@ -261,37 +266,22 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
           </div>
 
           <div>
-            <label htmlFor="task-assignee" className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
+            <span className="block font-ninja text-sm font-bold text-ninja-navy mb-1.5">
               Assigned to
-            </label>
-            <select
-              id="task-assignee"
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="w-full rounded-xl bg-white border border-ninja-border focus:border-ninja-blue transition-colors px-3 py-2.5 font-ninja text-sm text-ninja-navy"
-            >
-              {/* The center first and no empty option: every card belongs to
-                  the center unless somebody there has taken it, which is truer
-                  than an unassigned card and does not need reading between the
-                  lines. */}
-              <option value="center">{user?.activeLocation?.name || 'The whole center'}</option>
-              <optgroup label="Center Directors">
-                {assignees.filter((d) => d.role !== 'sensei').map((d) => (
-                  <option key={d.id} value={d.id}>{d.display_name}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Senseis">
-                {assignees.filter((d) => d.role === 'sensei').map((d) => (
-                  <option key={d.id} value={d.id}>{d.display_name}</option>
-                ))}
-              </optgroup>
-              {/* A card handed to someone who has since left the center would
-                  otherwise show as unassigned the moment it is opened, and
-                  saving would quietly drop them. */}
-              {task?.assignee_id && !assignees.some((d) => d.id === task.assignee_id) && (
-                <option value={task.assignee_id}>{task.assignee_name || 'No longer at this center'}</option>
-              )}
-            </select>
+            </span>
+            <TaskAssigneePicker
+              people={[
+                ...assignees,
+                ...(task?.assignees || []).filter((person) => !assignees.some((active) => active.id === person.id)),
+              ]}
+              selectedIds={assigneeIds}
+              center={assigneeCenter}
+              centerName={user?.activeLocation?.name || 'The whole center'}
+              onChange={({ assigneeIds: ids, assigneeCenter: center }) => {
+                setAssigneeIds(ids);
+                setAssigneeCenter(center);
+              }}
+            />
           </div>
           </>
           )}

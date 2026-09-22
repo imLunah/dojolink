@@ -27,9 +27,19 @@ const SELECT = `
          t.assignee_id, t.assignee_center, t.checklist, t.archived_at,
          t.created_at, t.updated_at, t.created_by,
          (SELECT COUNT(*)::int FROM director_task_comments c
-          WHERE c.task_id = t.id) AS comment_count,
+         WHERE c.task_id = t.id) AS comment_count,
          u.display_name AS created_by_name,
          a.display_name AS assignee_name,
+         COALESCE((
+           SELECT json_agg(json_build_object(
+             'id', ta.user_id,
+             'display_name', assigned.display_name,
+             'role', assigned.role
+           ) ORDER BY assigned.display_name)
+           FROM director_task_assignees ta
+           JOIN users assigned ON assigned.id = ta.user_id
+           WHERE ta.task_id = t.id
+         ), '[]'::json) AS assignees,
          l.name AS location_name
   FROM director_tasks t
   LEFT JOIN users u ON u.id = t.created_by
@@ -49,30 +59,47 @@ const ASSIGNEE_SELECT = `
   ORDER BY u.display_name ASC
 `;
 
-// Who is carrying a card: nobody, the center, or one director. The three are
-// exclusive, and the server decides which it is rather than trusting two fields
-// to agree — the DB carries the same rule as a CHECK.
+// Who is carrying a card: nobody, the center, or one or more staff members.
+// Center remains exclusive with named people; the server decides rather than
+// trusting two payload fields to agree.
 //
 // Absent means "leave it alone". A named director has to be one who is actually
 // at this center: without that check the board would be a way to write a row
 // naming any user in the system and read their display name back out of it.
-async function readAssignee(pool, body, locationId) {
+async function readAssignees(pool, body, locationId) {
+  const rawIds = body?.assignee_ids;
   const rawId = body?.assignee_id;
   const center = body?.assignee_center;
-  if (rawId === undefined && center === undefined) return { skip: true };
-  if (center === true) return { id: null, center: true };
-  if (rawId === null || rawId === undefined || rawId === '') return { id: null, center: false };
+  if (rawIds === undefined && rawId === undefined && center === undefined) return { skip: true };
+  if (center === true) return { ids: [], legacyId: null, center: true };
 
-  const id = Number(rawId);
-  if (!Number.isInteger(id) || id < 1) return { error: 'Unknown staff member' };
+  const values = rawIds === undefined
+    ? (rawId === null || rawId === undefined || rawId === '' ? [] : [rawId])
+    : rawIds;
+  if (!Array.isArray(values) || values.length > 50) return { error: 'Invalid staff assignment' };
+  const ids = [...new Set(values.map(Number))];
+  if (ids.some((id) => !Number.isInteger(id) || id < 1)) return { error: 'Unknown staff member' };
+  if (ids.length === 0) return { ids: [], legacyId: null, center: false };
+
   const { rows } = await pool.query(
-    `SELECT 1 FROM users u
-     WHERE u.id = $1 AND u.active = true AND u.role IN ('manager', 'sensei', 'admin')
+    `SELECT u.id FROM users u
+     WHERE u.id = ANY($1::int[]) AND u.active = true
+       AND u.role IN ('manager', 'sensei', 'admin')
        AND u.id IN (SELECT user_id FROM user_locations WHERE location_id = $2)`,
-    [id, locationId]
+    [ids, locationId]
   );
-  if (!rows[0]) return { error: 'That staff member is not at this center' };
-  return { id, center: false };
+  if (rows.length !== ids.length) return { error: 'A selected staff member is not at this center' };
+  return { ids, legacyId: ids[0], center: false };
+}
+
+async function replaceAssignees(client, taskId, ids) {
+  await client.query('DELETE FROM director_task_assignees WHERE task_id = $1', [taskId]);
+  if (ids.length === 0) return;
+  await client.query(
+    `INSERT INTO director_task_assignees (task_id, user_id)
+     SELECT $1, unnest($2::int[])`,
+    [taskId, ids]
+  );
 }
 
 /* ------------------------------------------------------------- who may -- */
@@ -92,11 +119,11 @@ const ownsTask = (t, session) =>
   || (t.created_by == null && session.role === 'manager');
 const carriesTask = (t, session) =>
   ownsTask(t, session)
-  || t.assignee_id === session.userId
+  || t.assigned === true
   || (t.assignee_center === true && ['manager', 'admin'].includes(session.role));
 const mayReadTask = (t, session) =>
   ['manager', 'admin'].includes(session.role)
-  || t.assignee_id === session.userId
+  || t.assigned === true
   || t.assignee_center === true
   || t.mentioned === true;
 
@@ -104,7 +131,11 @@ const mayReadTask = (t, session) =>
 // copy of a card is whatever it last saw, not what is true.
 async function taskRow(pool, id, locationId, userId) {
   const { rows } = await pool.query(
-    `SELECT t.id, t.created_by, t.assignee_id, t.assignee_center, t.column_key, t.archived_at,
+    `SELECT t.id, t.created_by, t.assignee_center, t.column_key, t.archived_at,
+       EXISTS (
+         SELECT 1 FROM director_task_assignees ta
+         WHERE ta.task_id = t.id AND ta.user_id = $3
+       ) AS assigned,
        EXISTS (
          SELECT 1
          FROM director_task_comment_mentions m
@@ -251,7 +282,10 @@ router.get('/', requireSensei, async (req, res) => {
       `${SELECT} WHERE t.location_id = $1
        AND (
          $2::boolean
-         OR t.assignee_id = $3
+         OR EXISTS (
+           SELECT 1 FROM director_task_assignees ta
+           WHERE ta.task_id = t.id AND ta.user_id = $3
+         )
          OR ($4::boolean AND (
            t.assignee_center = true
            OR EXISTS (
@@ -284,11 +318,14 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
   const fields = validate(req.body);
   if (fields.error) return res.status(400).json({ error: fields.error });
 
+  let client;
   try {
-    const assignee = await readAssignee(pool, req.body, req.session.activeLocationId);
+    const assignee = await readAssignees(pool, req.body, req.session.activeLocationId);
     if (assignee.error) return res.status(400).json({ error: assignee.error });
 
-    const { rows } = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const { rows } = await client.query(
       `INSERT INTO director_tasks
          (location_id, title, body, column_key, color, due_date, assignee_id, assignee_center, checklist, position, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb,
@@ -303,19 +340,24 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
         fields.column_key,
         fields.color,
         fields.due_date,
-        assignee.skip ? null : assignee.id,
+        assignee.skip ? null : assignee.legacyId,
         assignee.skip ? false : assignee.center,
         JSON.stringify(fields.checklist ?? []),
         req.session.userId,
       ]
     );
+    if (!assignee.skip) await replaceAssignees(client, rows[0].id, assignee.ids);
     // Re-read through SELECT so the response carries created_by_name and the
     // to_char'd date, exactly like the list endpoint.
-    const { rows: full } = await pool.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
+    const { rows: full } = await client.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
+    await client.query('COMMIT');
     res.status(201).json(full[0]);
   } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('Error creating task:', err);
     res.status(500).json({ error: 'Failed to create task' });
+  } finally {
+    client?.release();
   }
 });
 
@@ -463,9 +505,13 @@ router.patch('/reorder', requireSensei, requireOwnLocation, async (req, res) => 
   // stored row rather than the payload's claim of one.
   try {
     const { rows: current } = await pool.query(
-      `SELECT id, created_by, assignee_id, assignee_center, column_key
-       FROM director_tasks WHERE id = ANY($1::int[]) AND location_id = $2`,
-      [items.map((it) => it.id), req.session.activeLocationId]
+      `SELECT t.id, t.created_by, t.assignee_center, t.column_key,
+              EXISTS (
+                SELECT 1 FROM director_task_assignees ta
+                WHERE ta.task_id = t.id AND ta.user_id = $3
+              ) AS assigned
+       FROM director_tasks t WHERE t.id = ANY($1::int[]) AND t.location_id = $2`,
+      [items.map((it) => it.id), req.session.activeLocationId, req.session.userId]
     );
     const byId = new Map(current.map((r) => [r.id, r]));
     for (const it of items) {
@@ -577,7 +623,7 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
     const fields = validate(req.body);
     if (fields.error) return res.status(400).json({ error: fields.error });
 
-    const assignee = await readAssignee(pool, req.body, req.session.activeLocationId);
+    const assignee = await readAssignees(pool, req.body, req.session.activeLocationId);
     if (assignee.error) return res.status(400).json({ error: assignee.error });
 
     // The editor can move a card between columns, and a card carrying its old
@@ -586,38 +632,52 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
     // put keeps the rank a drag gave it. In an UPDATE, the column references on
     // the right of SET still read the OLD row, so this is one atomic statement
     // rather than a read-then-write that another director could interleave.
-    const { rows } = await pool.query(
-      `UPDATE director_tasks t
-       SET title = $1, body = $2, column_key = $3, color = $4, due_date = $5,
-           assignee_id = CASE WHEN $6::boolean THEN t.assignee_id ELSE $7 END,
-           assignee_center = CASE WHEN $6::boolean THEN t.assignee_center ELSE $10 END,
-           checklist = COALESCE($11::jsonb, t.checklist),
-           position = CASE
-             WHEN t.column_key = $3 THEN t.position
-             ELSE COALESCE((SELECT MAX(d.position) + 1 FROM director_tasks d
-                            WHERE d.location_id = t.location_id AND d.column_key = $3
-                              AND d.archived_at IS NULL), 0)
-           END,
-           updated_at = now()
-       WHERE t.id = $8 AND t.location_id = $9
-       RETURNING id`,
-      [
-        fields.title,
-        fields.body,
-        fields.column_key,
-        fields.color,
-        fields.due_date,
-        !!assignee.skip,
-        assignee.skip ? null : assignee.id,
-        req.params.id,
-        req.session.activeLocationId,
-        assignee.skip ? false : assignee.center,
-        fields.checklist === undefined ? null : JSON.stringify(fields.checklist),
-      ]
-    );
-    if (!rows[0]) return res.status(404).json({ error: 'Task not found' });
-    const { rows: full } = await pool.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
-    res.json(full[0]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `UPDATE director_tasks t
+         SET title = $1, body = $2, column_key = $3, color = $4, due_date = $5,
+             assignee_id = CASE WHEN $6::boolean THEN t.assignee_id ELSE $7 END,
+             assignee_center = CASE WHEN $6::boolean THEN t.assignee_center ELSE $10 END,
+             checklist = COALESCE($11::jsonb, t.checklist),
+             position = CASE
+               WHEN t.column_key = $3 THEN t.position
+               ELSE COALESCE((SELECT MAX(d.position) + 1 FROM director_tasks d
+                              WHERE d.location_id = t.location_id AND d.column_key = $3
+                                AND d.archived_at IS NULL), 0)
+             END,
+             updated_at = now()
+         WHERE t.id = $8 AND t.location_id = $9
+         RETURNING id`,
+        [
+          fields.title,
+          fields.body,
+          fields.column_key,
+          fields.color,
+          fields.due_date,
+          !!assignee.skip,
+          assignee.skip ? null : assignee.legacyId,
+          req.params.id,
+          req.session.activeLocationId,
+          assignee.skip ? false : assignee.center,
+          fields.checklist === undefined ? null : JSON.stringify(fields.checklist),
+        ]
+      );
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Task not found' });
+      }
+      if (!assignee.skip) await replaceAssignees(client, rows[0].id, assignee.ids);
+      const { rows: full } = await client.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
+      await client.query('COMMIT');
+      res.json(full[0]);
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     console.error('Error updating task:', err);
     res.status(500).json({ error: 'Failed to update task' });
@@ -838,7 +898,10 @@ router.delete('/:id/comments/:commentId', requireSensei, requireOwnLocation, asy
        USING director_tasks t
        WHERE c.id = $1 AND c.task_id = t.id AND t.id = $2 AND t.location_id = $3
          AND ($4 OR c.author_id = $5)
-         AND ($6 OR t.assignee_id = $5)
+         AND ($6 OR EXISTS (
+           SELECT 1 FROM director_task_assignees ta
+           WHERE ta.task_id = t.id AND ta.user_id = $5
+         ))
        RETURNING c.id`,
       [req.params.commentId, req.params.id, req.session.activeLocationId,
        req.session.role === 'admin', req.session.userId,

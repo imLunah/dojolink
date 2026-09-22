@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, Trash2Icon } from 'lucide-react';
 import TaskActionsMenu from './TaskActionsMenu';
 import { MentionCountBadge } from './TaskCardFace';
+import TaskAssigneePicker from './TaskAssigneePicker';
 import { CARD } from '../../lib/surfaces';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, COLUMN_KEYS, DUE_TONE, carriesTask, dueMeta, ownsTask, plainPreview, taskHolder } from '../../lib/taskBoard';
@@ -215,7 +216,6 @@ export default function TaskList({ tasks, canManage, canCreate = canManage, assi
         const own = canManage && ownsTask(task, user);
         const carry = canManage && !task.archived_at && carriesTask(task, user);
         const editable = own && !task.archived_at;
-        const who = task.assignee_center ? 'center' : task.assignee_id ? String(task.assignee_id) : 'center';
 
         const title = (
           <div className="min-w-0">
@@ -251,32 +251,21 @@ export default function TaskList({ tasks, canManage, canCreate = canManage, assi
         );
 
         const owner = editable ? (
-          <select
-            value={who}
-            onChange={(e) => {
-              const v = e.target.value;
-              onPatch(task, v === 'center'
-                ? { assignee_center: true, assignee_id: null, assignee_name: null }
-                : { assignee_center: false, assignee_id: Number(v), assignee_name: assignees.find((d) => String(d.id) === v)?.display_name || null });
-            }}
-            aria-label={`Who has ${lead}`}
-            className={GHOST}
-          >
-            <option value="center">{centerName || 'The whole center'}</option>
-            <optgroup label="Center Directors">
-              {assignees.filter((d) => d.role !== 'sensei').map((d) => (
-                <option key={d.id} value={String(d.id)}>{d.display_name}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Senseis">
-              {assignees.filter((d) => d.role === 'sensei').map((d) => (
-                <option key={d.id} value={String(d.id)}>{d.display_name}</option>
-              ))}
-            </optgroup>
-            {task.assignee_id && !assignees.some((d) => d.id === task.assignee_id) && (
-              <option value={String(task.assignee_id)}>{task.assignee_name || 'No longer here'}</option>
-            )}
-          </select>
+          <TaskAssigneePicker
+            compact
+            people={[
+              ...assignees,
+              ...(task.assignees || []).filter((person) => !assignees.some((active) => active.id === person.id)),
+            ]}
+            selectedIds={(task.assignees || []).map((person) => person.id)}
+            center={Boolean(task.assignee_center)}
+            centerName={centerName || 'The whole center'}
+            label={`Who has ${lead}`}
+            onChange={({ assigneeIds, assigneeCenter }) => onPatch(task, {
+              assignee_ids: assigneeIds,
+              assignee_center: assigneeCenter,
+            })}
+          />
         ) : (
           <span className="font-ninja text-xs text-ninja-muted truncate">{taskHolder(task) || 'Nobody yet'}</span>
         );

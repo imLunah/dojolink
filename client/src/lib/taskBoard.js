@@ -122,7 +122,7 @@ export const ownsTask = (task, user) =>
 export const carriesTask = (task, user) =>
   ownsTask(task, user)
   || (task?.assignee_center === true && ['manager', 'admin'].includes(user?.role))
-  || (task?.assignee_id != null && task.assignee_id === user?.id);
+  || (task?.assignees || []).some((assignee) => assignee.id === user?.id);
 
 /* ------------------------------------------------------------- preview -- */
 
@@ -167,7 +167,7 @@ export const cardFields = (t) => ({
   body: t.body ?? null,
   color: t.color ?? 'none',
   due_date: t.due_date ?? null,
-  assignee_id: t.assignee_id ?? null,
+  assignee_ids: (t.assignees || []).map((assignee) => assignee.id),
   assignee_center: Boolean(t.assignee_center),
   checklist: t.checklist ?? [],
   column_key: t.column_key,
@@ -177,5 +177,5 @@ export const cardFields = (t) => ({
 // card so a board viewed from another center still names the right one.
 export function taskHolder(task) {
   if (task.assignee_center) return task.location_name || 'The whole center';
-  return task.assignee_name || null;
+  return (task.assignees || []).map((assignee) => assignee.display_name).join(', ') || null;
 }
