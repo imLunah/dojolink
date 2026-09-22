@@ -11,9 +11,8 @@ import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR }
 
 
 
-// Type suggestions + colors live in lib/eventTypes.js: the parent portal's
-// featured-event banner shares them without pulling this whole calendar in.
-import { TYPE_SUGGESTIONS, colorFor } from '../../lib/eventTypes';
+// The type list and its colors live in lib/eventTypes.js, mirrored by the server.
+import { EVENT_TYPES, eventType, colorFor } from '../../lib/eventTypes';
 
 // Birthdays sit on the same grid as events but must not read as one, so they get
 // a tinted chip + cake glyph instead of a solid bar. The ink comes from a custom
@@ -49,11 +48,13 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy }) {
   const [title, setTitle] = useState(initial.title || '');
   const [date, setDate] = useState(initial.event_date || todayIso());
   const [time, setTime] = useState(initial.event_time || '');
-  const [type, setType] = useState(initial.type || '');
+  // A new event starts unpicked so nothing lands in Other by default. An old
+  // event opens on the type its stored text folds to.
+  const [type, setType] = useState(initial.id ? eventType(initial.type).label : '');
   const [description, setDescription] = useState(initial.description || '');
   const [confirmDel, setConfirmDel] = useState(false);
 
-  const canSave = title.trim() && date;
+  const canSave = title.trim() && date && type;
   const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue transition-colors';
 
   return (
@@ -77,12 +78,15 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy }) {
       </div>
 
       <div>
-        <label className="block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted mb-1.5">Type <span className="opacity-60 normal-case font-semibold">(optional)</span></label>
-        <input value={type} onChange={(e) => setType(e.target.value)} maxLength={40}
-          list="event-type-suggestions" placeholder="e.g. Game Building" className={field} />
-        <datalist id="event-type-suggestions">
-          {TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
-        </datalist>
+        <label className="block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted mb-1.5">Type</label>
+        <div className="relative">
+          <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: type ? colorFor(type) : 'transparent' }} />
+          <select value={type} onChange={(e) => setType(e.target.value)} className={`${field} pl-8`}>
+            <option value="" disabled>Choose a type</option>
+            {EVENT_TYPES.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
+          </select>
+        </div>
       </div>
 
       <div>

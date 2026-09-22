@@ -204,7 +204,11 @@ function summarize(inRange, prior = []) {
 // render, so it follows a live accent change like any other CSS variable would.
 const ACCENT = 'rgb(var(--ninja-blue))';
 
-const CHART_CONFIG = { count: { label: 'Ninjas', color: ACCENT } };
+// Every number on these charts is a sum of each day's ninjas, so a ninja who
+// comes twice in a week counts twice. That is check-ins, not ninjas, and the
+// labels say so: "Ninjas a week: 59" under "10 ninjas this week" read as
+// attendance falling by four fifths.
+const CHART_CONFIG = { count: { label: 'Check-ins', color: ACCENT } };
 
 // Recharts hands the dot renderer every point; only the last one gets drawn, so
 // the curve keeps its end marker without a dot on every reading.
@@ -230,10 +234,10 @@ function TrendTooltip({ active, payload, formatLabel }) {
   return (
     <div className="rounded-lg border border-ninja-border bg-white px-2.5 py-1.5 shadow-lg">
       <span className="block font-ninja text-[11px] text-ninja-muted leading-tight">
-        {formatLabel(point.date)}
+        {formatLabel(point.date)}{point.partial ? ', so far' : ''}
       </span>
       <span className="block font-ninja text-sm font-bold text-ninja-navy leading-tight tabular-nums">
-        {point.count} ninja{point.count === 1 ? '' : 's'}
+        {point.count} check-in{point.count === 1 ? '' : 's'}
       </span>
     </div>
   );
@@ -243,7 +247,24 @@ function TrendTooltip({ active, payload, formatLabel }) {
 // hover dot from clipping at the edges of the plot area.
 const CHART_MARGIN = { top: 10, right: 8, bottom: 4, left: 8 };
 
-function AreaChart({ points, height = 120, gradientId, className = '', formatLabel = shortDate }) {
+// `partial` says the last point is a period still running: this week on a
+// Tuesday, today at noon. Drawn solid it was a cliff, the line falling from a
+// full week's level to two days' worth, and a director reads that as attendance
+// collapsing. The run up to the last finished point stays solid and the step
+// into the running one is dashed and lighter, so it reads as unfinished.
+function AreaChart({ points, height = 120, gradientId, className = '', formatLabel = shortDate, partial = false }) {
+  const data = useMemo(() => {
+    const n = points.length;
+    const split = partial && n > 1;
+    return points.map((p, i) => ({
+      ...p,
+      solid: split && i === n - 1 ? null : p.count,
+      tail: split && i >= n - 2 ? p.count : null,
+      partial: partial && i === n - 1,
+    }));
+  }, [points, partial]);
+  const split = partial && points.length > 1;
+
   if (points.length === 0) return <div className={className} style={{ height }} />;
 
   return (
@@ -252,7 +273,7 @@ function AreaChart({ points, height = 120, gradientId, className = '', formatLab
       className={`w-full ${className}`}
       style={{ height }}
     >
-      <RechartsAreaChart data={points} margin={CHART_MARGIN}>
+      <RechartsAreaChart data={data} margin={CHART_MARGIN}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-count)" stopOpacity="0.32" />
@@ -269,16 +290,32 @@ function AreaChart({ points, height = 120, gradientId, className = '', formatLab
         />
         <Area
           type="monotone"
-          dataKey="count"
+          dataKey="solid"
           stroke="var(--color-count)"
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
           fill={`url(#${gradientId})`}
-          dot={<EndDot dataLength={points.length} />}
+          dot={split ? false : <EndDot dataLength={points.length} />}
           activeDot={{ r: 5, strokeWidth: 2.5, className: 'stroke-white dark:stroke-[#252c3e]' }}
           animationDuration={900}
         />
+        {split && (
+          <Area
+            type="monotone"
+            dataKey="tail"
+            stroke="var(--color-count)"
+            strokeOpacity={0.6}
+            strokeWidth={2.5}
+            strokeDasharray="4 5"
+            strokeLinecap="round"
+            fill={`url(#${gradientId})`}
+            fillOpacity={0.4}
+            dot={<EndDot dataLength={points.length} />}
+            activeDot={{ r: 5, strokeWidth: 2.5, className: 'stroke-white dark:stroke-[#252c3e]' }}
+            animationDuration={900}
+          />
+        )}
       </RechartsAreaChart>
     </ChartContainer>
   );
@@ -292,7 +329,7 @@ const monthShort = (d) => d.toLocaleDateString('en-US', { month: 'short', year: 
 
 const TOOLTIP_LABEL = { day: fullDate, week: weekOf, month: monthOf };
 
-// Collapsed card: ninjas per week for the last 8 weeks. Whole card opens the
+// Collapsed card: check-ins per week for the last 8 weeks. Whole card opens the
 // expanded view.
 const CARD_WEEKS = 8;
 
@@ -352,14 +389,14 @@ function CheckInTrend({ dayRows, onExpand }) {
         <div className="mb-2">
           <CountUp value={thisWeek} className="font-ninja text-3xl font-black text-ninja-navy leading-none" />
           <span className="ml-2 font-ninja text-sm text-ninja-muted">
-            ninja{thisWeek === 1 ? '' : 's'} this week
+            check-in{thisWeek === 1 ? '' : 's'} so far this week
           </span>
         </div>
-        <AreaChart points={weeks} height={CARD_CHART_H} gradientId="checkInCardFill" formatLabel={weekOf} />
+        <AreaChart points={weeks} height={CARD_CHART_H} gradientId="checkInCardFill" formatLabel={weekOf} partial />
         <div className="flex justify-between font-ninja text-[10px] text-ninja-muted mt-1">
           <span>{shortDate(weeks[0].date)}</span>
           <span>{shortDate(weeks[Math.floor(weeks.length / 2)].date)}</span>
-          <span>This week</span>
+          <span>This week so far</span>
         </div>
       </button>
 
@@ -370,7 +407,7 @@ function CheckInTrend({ dayRows, onExpand }) {
           sub={peak?.count ? shortDate(peak.date) : null}
           value={peak?.count ?? 0}
         />
-        <StatRow label="Ninjas a week" value={Math.round(perWeek)} />
+        <StatRow label="Check-ins a week" value={Math.round(perWeek)} />
         {/* A centre needs 16 weeks on record before the comparison means
             anything, and none of them do yet. Until then this row carries the
             period total instead of sitting blank. The comparison is never
@@ -399,7 +436,7 @@ function CheckInTrend({ dayRows, onExpand }) {
 // is measured against: shifted a whole week for the week periods (so a partial
 // week meets the same partial week before it) and the previous calendar month
 // for the month one, clipped to the same number of days.
-// pace: the middle stat reads as ninjas a week rather than a period total,
+// pace: the middle stat reads as check-ins a week rather than a period total,
 // which only says anything over a span longer than a few weeks.
 const RANGES = [
   {
@@ -452,7 +489,7 @@ const RANGES = [
   },
 ];
 
-const TAIL_LABEL = { day: 'Today', week: 'This week', month: 'This month' };
+const TAIL_LABEL = { day: 'Today so far', week: 'This week so far', month: 'This month so far' };
 
 function CheckInDetail({ dayRows }) {
   // Opens on the week the director is standing in, unless it hasn't started
@@ -543,6 +580,7 @@ function CheckInDetail({ dayRows }) {
               height={170}
               gradientId="checkInDetailFill"
               formatLabel={TOOLTIP_LABEL[range.bucket]}
+              partial={sameDay(span.end, startOfDay(new Date()))}
             />
             <div className="flex justify-between font-ninja text-[11px] text-ninja-muted mt-1">
               <span>{axisLabel(series[0].date)}</span>
@@ -569,7 +607,7 @@ function CheckInDetail({ dayRows }) {
                 {range.pace ? Math.round(perWeek) : total}
               </span>
               <span className="font-ninja text-xs text-ninja-muted">
-                {range.pace ? 'ninjas a week' : 'check-ins'}
+                {range.pace ? 'check-ins a week' : 'check-ins'}
               </span>
             </div>
             <div className="rounded-xl bg-ninja-bg p-3">

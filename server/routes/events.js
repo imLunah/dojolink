@@ -9,7 +9,21 @@ const { requireSensei, requireManager, requireOwnLocation } = require('../middle
 const MAX_TITLE = 200;
 const MAX_DESC = 2000;
 const MAX_TIME = 40;
-const MAX_TYPE = 40;
+
+// Mirrors EVENT_TYPES in client/src/lib/eventTypes.js. Free text produced
+// "gb", "Game Building" and "JR Game Building" for two kinds of event, which
+// nothing can report on. Matched case-insensitively, stored in this spelling.
+const EVENT_TYPES = [
+  'Game Building',
+  'JR Game Building',
+  'Walk-in Game Building',
+  "Parents' Night Out",
+  'Tournament',
+  'Field Trip',
+  'Holiday',
+  'Other',
+];
+const TYPE_BY_KEY = new Map(EVENT_TYPES.map((t) => [t.toLowerCase(), t]));
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const isValidDate = (s) => DATE_RE.test(s) && !Number.isNaN(new Date(`${s}T00:00:00`).getTime());
@@ -37,16 +51,15 @@ function parseBody(body) {
   if (event_time != null && (typeof event_time !== 'string' || event_time.length > MAX_TIME)) {
     return { error: `Time max ${MAX_TIME} characters` };
   }
-  if (type != null && (typeof type !== 'string' || type.length > MAX_TYPE)) {
-    return { error: `Type max ${MAX_TYPE} characters` };
-  }
+  const canonicalType = typeof type === 'string' ? TYPE_BY_KEY.get(type.trim().toLowerCase()) : null;
+  if (!canonicalType) return { error: 'Pick an event type' };
   return {
     data: {
       title: title.trim(),
       description: description && description.trim() ? description.trim() : null,
       event_date,
       event_time: event_time && event_time.trim() ? event_time.trim() : null,
-      type: type && type.trim() ? type.trim() : 'Other',
+      type: canonicalType,
     },
   };
 }
