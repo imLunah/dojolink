@@ -1547,6 +1547,13 @@ function membershipProgram(member) {
   return programForMembership(member.categoryTitle, member.membershipTitle);
 }
 
+// A JR ninja never checks into CREATE at the kiosk, booked or not (the
+// owner's rule, 22 Sep 2026). Stricter than classFitsMembership, which only
+// governs booking someone in: this one also stops a booked check-in.
+function classClosedToMembership(className, program) {
+  return program === 'JR' && /\bcreate\b/i.test(className);
+}
+
 function classFitsMembership(className, program) {
   // "IN SCHOOL ONLY" (Fullerton) is a school's own session, not a center
   // class anyone can join: booked kids check in, nobody books in here.
@@ -1632,6 +1639,7 @@ async function getKioskClassesFor(token, member, date, nowMinutes) {
 
   return list
     .filter((cls) => classOpen(cls, nowMinutes))
+    .filter((cls) => !classClosedToMembership(String(cls.class_appointment_title || ''), program))
     .map((cls) => {
       const className = String(cls.class_appointment_title || '').trim();
       const booked = Boolean(cls.class_reg_id);
@@ -1680,8 +1688,10 @@ async function getKioskRosterFor(token, { date, classKey, nowMinutes }) {
     const member = normalizeKioskMember(row);
     if (!member.participantId || seen.has(member.participantId)) continue;
     seen.add(member.participantId);
+    const program = membershipProgram(member);
+    if (classClosedToMembership(className, program)) continue;
     const booked = Boolean(row.class_reg_id);
-    const canRegister = !booked && !member.moreReg && classFitsMembership(className, membershipProgram(member));
+    const canRegister = !booked && !member.moreReg && classFitsMembership(className, program);
     if (!booked && !canRegister) continue;
     out.push({
       participantId: member.participantId,
@@ -1731,6 +1741,10 @@ async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
     program: programForClass(className),
     isClub: isClubClass(className),
   };
+
+  if (classClosedToMembership(className, membershipProgram(normalizeKioskMember(row)))) {
+    throw new MyStudioCheckInRefused("JR ninjas can't check in to CREATE classes. Please see the front desk.");
+  }
 
   if (booked && isCheckedInRow(row)) return { ...outcome, already: true, registered: false };
 
@@ -1869,6 +1883,7 @@ module.exports = {
   encodeActionArgs,
   classOpen,
   classFitsMembership,
+  classClosedToMembership,
   normalizeKioskMember,
   cleanPortalToken,
   MyStudioError,

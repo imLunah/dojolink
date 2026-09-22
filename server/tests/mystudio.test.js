@@ -694,6 +694,14 @@ describe('check-in kiosk', () => {
     expect(ms.classFitsMembership('Coding - CREATE', 'JR')).toBe(false);
   });
 
+  it('keeps JR ninjas out of CREATE classes even when booked', () => {
+    expect(ms.classClosedToMembership('CREATE', 'JR')).toBe(true);
+    expect(ms.classClosedToMembership('Coding - CREATE', 'JR')).toBe(true);
+    expect(ms.classClosedToMembership('CREATE - Coding', 'JR')).toBe(true);
+    expect(ms.classClosedToMembership('Robotics Academy', 'JR')).toBe(false);
+    expect(ms.classClosedToMembership('CREATE', 'CREATE')).toBe(false);
+  });
+
   it('escapes strings React would read as references', () => {
     const body = ms.encodeActionArgs([{ a: '$K1', b: 'plain', c: { d: '$$x' } }]);
     expect(JSON.parse(body)).toEqual([{ a: '$$K1', b: 'plain', c: { d: '$$$x' } }]);
