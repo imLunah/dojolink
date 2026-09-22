@@ -49,6 +49,18 @@ function kioskTheme(hex) {
   };
 }
 
+// One class on one line: the time in a fixed column so the names line up,
+// and both at the same size and weight, since at a busy hour the name is what
+// tells three 3:00 PM rows apart.
+function ClassLabel({ startTime, className }) {
+  return (
+    <span className="min-w-0 flex items-baseline gap-4 font-ninja font-extrabold text-xl text-ninja-navy">
+      <span className="w-24 flex-shrink-0 tabular-nums">{fmtTime(startTime)}</span>
+      <span className="truncate">{className}</span>
+    </span>
+  );
+}
+
 // MyStudio sends "04:00 PM".
 const fmtTime = (t) => String(t || '').replace(/^0(\d)/, '$1');
 
@@ -388,10 +400,7 @@ export default function KioskPage() {
                           key={c.classKey} type="button" onClick={() => pickClass(c)}
                           className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
-                          <span className="min-w-0">
-                            <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">{fmtTime(c.startTime)}</span>
-                            <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
-                          </span>
+                          <ClassLabel startTime={c.startTime} className={c.className} />
                           <ChevronRightIcon size={22} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                         </button>
                       ))}
@@ -493,12 +502,8 @@ export default function KioskPage() {
                     c.checkedIn ? (
                       <div key={c.classKey}
                         className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4">
-                        <span className="min-w-0">
-                          <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">
-                            {fmtTime(c.startTime)}
-                          </span>
-                          <span className="block font-ninja text-sm text-ninja-muted">{c.className} · Checked in</span>
-                        </span>
+                        <ClassLabel startTime={c.startTime} className={c.className} />
+                        <span className="ml-auto flex-shrink-0 font-ninja text-sm font-bold text-ninja-muted">Checked in</span>
                         {c.undoable && (
                           <button type="button" onClick={() => askUndo(c)}
                             className="flex-shrink-0 font-ninja text-base font-bold px-6 py-3 rounded-xl bg-ninja-red text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]">
@@ -512,12 +517,7 @@ export default function KioskPage() {
                         onClick={() => { setPicked(c); setMode('checkin'); setConfirmFrom('classes'); setStep('confirm'); }}
                         className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                       >
-                        <span className="min-w-0">
-                          <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">
-                            {fmtTime(c.startTime)}
-                          </span>
-                          <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
-                        </span>
+                        <ClassLabel startTime={c.startTime} className={c.className} />
                         {c.booked && (
                           <span className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>
                         )}
