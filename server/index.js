@@ -171,8 +171,6 @@ const kioskLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === 'test',
   message: { error: 'Too many requests. Please wait a moment and try again.' },
 });
-// Leaving kiosk mode checks a staff password, so it gets the login cap.
-app.use('/api/kiosk/exit', loginLimiter);
 app.use('/api/kiosk', kioskLimiter, require('./routes/kiosk'));
 app.use('/api/mystudio/login', mystudioLoginLimiter);
 app.use('/api/mystudio', mystudioLimiter, require('./routes/mystudio'));

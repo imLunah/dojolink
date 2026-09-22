@@ -1,5 +1,4 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
 const router = express.Router();
 const { requireManager, requireOwnLocation, requireKiosk, kioskLocationId } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
@@ -7,18 +6,13 @@ const { addToBoard } = require('../lib/boardCheckIn');
 
 // The check-in kiosk.
 //
-// A director signs this center into MyStudio's check-in portal once, then runs
-// the kiosk one of two ways:
-//
-//   - Locked: starting the kiosk REPLACES the staff session on that device
-//     with a kiosk session. It carries a center and nothing else, so every
-//     staff route answers 401 and a family at the tablet cannot reach the app
-//     behind it. Leaving takes any staff member's DojoLink username and
-//     password.
-//   - In a tab, beside the director's own signed-in session (the owner's call,
-//     for a screen staff are watching or an iPad held to one tab by Guided
-//     Access). Nothing stops a family from reaching the app behind it in that
-//     mode except whoever set the screen up; the setup page says so.
+// The kiosk runs in a browser tab beside a signed-in director's own session,
+// on a screen staff can see or a tablet held to that one tab (Guided Access).
+// A locked mode that swapped the device's session for a kiosk-only one was
+// built and then removed at the owner's request (22 Sep 2026), so nothing here
+// stops a family reaching DojoLink behind the kiosk except how the screen is
+// set up; the setup page says so. The kiosk signs itself in to MyStudio's
+// check-in portal from the center's saved MyStudio login (ensureKiosk).
 //
 // A family searches for their ninja by name, picks one of today's classes and
 // taps to check in. A child with no place in that class is booked into it
@@ -276,18 +270,6 @@ async function addKioskCheckInToBoard(pool, locationId, booking) {
   return { studentId, assignmentId };
 }
 
-function regenerate(req) {
-  return new Promise((resolve, reject) => {
-    req.session.regenerate((err) => (err ? reject(err) : resolve()));
-  });
-}
-
-function save(req) {
-  return new Promise((resolve, reject) => {
-    req.session.save((err) => (err ? reject(err) : resolve()));
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Setting a kiosk up (directors)
 // ---------------------------------------------------------------------------
@@ -415,34 +397,6 @@ router.delete('/setup', requireManager, requireOwnLocation, async (req, res) => 
   }
 });
 
-// POST /api/kiosk/start
-//
-// Turns THIS device into the kiosk. The staff session is replaced, not kept
-// alongside, so there is nothing signed in behind the kiosk to reach.
-router.post('/start', requireManager, requireOwnLocation, async (req, res) => {
-  const pool = req.app.get('db');
-  const locationId = req.session.activeLocationId;
-  try {
-    const kiosk = await ensureKiosk(pool, locationId);
-    if (!kiosk || kiosk.status === 'off') return res.status(400).json({ error: 'Turn the kiosk on first.' });
-    if (kiosk.status === 'expired') {
-      return res.status(400).json({ error: 'The check-in portal sign-in has expired. Sign in again first.' });
-    }
-
-    const startedBy = req.session.userId;
-    await regenerate(req);
-    req.session.kiosk = { locationId, startedBy, startedAt: Date.now() };
-    // A kiosk is a tablet on a counter for months. It stays a kiosk until staff
-    // take it out of kiosk mode.
-    req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
-    await save(req);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('Kiosk start failed:', err.message);
-    res.status(500).json({ error: 'Failed to start the kiosk' });
-  }
-});
-
 // ---------------------------------------------------------------------------
 // The kiosk itself
 // ---------------------------------------------------------------------------
@@ -462,9 +416,6 @@ router.get('/me', async (req, res) => {
     res.json({
       centerName: rows[0].name,
       ready: Boolean(kiosk && kiosk.status === 'connected'),
-      // Running in a tab beside a signed-in director: there is no kiosk
-      // session to leave, closing the tab is the way out.
-      staffTab: !(req.session.kiosk && req.session.kiosk.locationId),
     });
   } catch (err) {
     console.error('Kiosk me failed:', err.message);
@@ -720,41 +671,6 @@ router.post('/undo', requireKiosk, async (req, res) => {
   } catch (err) {
     console.error('Kiosk undo failed:', err.message);
     res.status(500).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
-  }
-});
-
-// POST /api/kiosk/exit  { username, password }
-//
-// Any staff member at this center, or an admin. Ends the kiosk session so the
-// device is back at the sign-in page.
-router.post('/exit', requireKiosk, async (req, res) => {
-  if (!req.session.kiosk) return res.status(400).json({ error: 'This kiosk is running in a tab. Close the tab to leave.' });
-  const pool = req.app.get('db');
-  const locationId = req.kioskLocationId;
-  const username = String((req.body && req.body.username) || '').trim();
-  const password = String((req.body && req.body.password) || '');
-  if (!username || !password) return res.status(400).json({ error: 'Enter a staff username and password.' });
-
-  try {
-    const { rows } = await pool.query(
-      `SELECT u.id, u.role, u.password_hash
-         FROM users u
-        WHERE LOWER(u.username) = LOWER($1) AND u.active = true
-          AND (u.role = 'admin' OR u.location_id = $2
-               OR EXISTS (SELECT 1 FROM user_locations ul WHERE ul.user_id = u.id AND ul.location_id = $2))`,
-      [username, locationId]
-    );
-    const user = rows[0];
-    const match = user ? await bcrypt.compare(password, user.password_hash) : false;
-    // 400, not 401: a 401 reads to the client as the kiosk session ending.
-    if (!match) return res.status(400).json({ error: 'That staff login did not work.' });
-
-    await new Promise((resolve) => req.session.destroy(() => resolve()));
-    res.clearCookie('connect.sid');
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('Kiosk exit failed:', err.message);
-    res.status(500).json({ error: 'Failed to leave kiosk mode' });
   }
 });
 

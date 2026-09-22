@@ -9,21 +9,14 @@ import { api } from '../../api/client';
 // Setting up the check-in kiosk. A center that connected MyStudio with its
 // password needs nothing here: the kiosk signs itself in with that saved login.
 // Otherwise sign in to MyStudio's check-in portal once, then turn a tablet
-// into the kiosk. Starting the kiosk signs
-// this device out of DojoLink, so a family at the tablet cannot reach the app
-// behind it. See server/routes/kiosk.js.
+// into the kiosk. The kiosk opens in a tab beside this session. See
+// server/routes/kiosk.js.
 
 const EASE = [0.23, 1, 0.32, 1];
 const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue transition-colors';
 const label = 'block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted mb-1.5';
 const primary = 'inline-flex items-center justify-center gap-1.5 font-ninja text-sm font-bold px-3.5 py-2 rounded-lg bg-ninja-blue text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:opacity-50';
 const secondary = 'inline-flex items-center justify-center font-ninja text-sm font-bold px-3.5 py-2 rounded-lg border border-ninja-border text-ninja-navy hover:bg-ninja-bg transition-colors';
-
-function fmtWhen(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function SignInForm({ onDone, expired }) {
   const [email, setEmail] = useState('');
@@ -92,7 +85,6 @@ function SignInForm({ onDone, expired }) {
 export default function KioskSetupPage() {
   const [setup, setSetup] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [confirmStart, setConfirmStart] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -100,20 +92,6 @@ export default function KioskSetupPage() {
   useEffect(() => {
     api.get('/kiosk/setup').then(setSetup).catch((err) => setLoadError(err.message));
   }, []);
-
-  const start = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      await api.post('/kiosk/start', {});
-      // A full load, not a route change: the staff session is gone and every
-      // context holding it has to start over.
-      window.location.assign('/kiosk');
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-    }
-  };
 
   const turnOn = async () => {
     setBusy(true);
@@ -167,9 +145,6 @@ export default function KioskSetupPage() {
                     Signed in as <span className="font-bold">{setup.loginEmail}</span>
                     {setup.companyName && <> for <span className="font-bold">{setup.companyName}</span></>}.
                   </p>
-                  <p className="font-ninja text-xs text-ninja-muted">
-                    {[setup.connectedByName && `Set up by ${setup.connectedByName}`, fmtWhen(setup.connectedAt)].filter(Boolean).join(' · ')}
-                  </p>
                   {confirmDisconnect ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <button type="button" onClick={disconnect} disabled={busy}
@@ -211,33 +186,15 @@ export default function KioskSetupPage() {
                   <TabletSmartphoneIcon size={20} strokeWidth={1.9} aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Start the kiosk</h2>
+                  <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Open the kiosk</h2>
                   <p className="font-ninja text-sm text-ninja-muted mt-0.5">
-                    <span className="font-bold text-ninja-navy">Lock this device</span> signs it out of DojoLink and turns it into the check-in screen. A staff username and password takes it back out.
-                  </p>
-                  <p className="font-ninja text-sm text-ninja-muted mt-1.5">
-                    <span className="font-bold text-ninja-navy">Open in a new tab</span> keeps you signed in, so anyone at the screen can reach DojoLink as you. Use it where staff can see the screen, or with the tablet locked to that tab.
+                    It opens in a new tab and you stay signed in, so anyone at the screen can reach DojoLink as you. Use it where staff can see the screen, or with the tablet locked to that tab.
                   </p>
                 </div>
               </div>
-              {confirmStart ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={start} disabled={busy} className={primary}>
-                    {busy ? 'Starting…' : 'Sign out and start'}
-                  </button>
-                  <button type="button" onClick={() => setConfirmStart(false)} className={secondary}>Cancel</button>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" disabled={!ready} onClick={() => setConfirmStart(true)} className={primary}>
-                    Lock this device
-                  </button>
-                  <button type="button" disabled={!ready} onClick={() => window.open('/kiosk', '_blank', 'noopener')}
-                    className={`${secondary} disabled:opacity-50`}>
-                    Open in a new tab
-                  </button>
-                </div>
-              )}
+              <button type="button" disabled={!ready} onClick={() => window.open('/kiosk', '_blank', 'noopener')} className={primary}>
+                Open in a new tab
+              </button>
             </section>
 
             {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}

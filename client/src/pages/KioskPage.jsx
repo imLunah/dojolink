@@ -2,16 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import Logo from '../components/ui/Logo';
-import Modal from '../components/ui/Modal';
 import { api } from '../api/client';
 import { useLightOnly } from '../context/ThemeContext';
 
-// The check-in kiosk: a tablet on the front counter where a family finds their
-// ninja, picks one of today's classes and checks in. A child with no place in
+// The check-in kiosk: a screen at the front counter, opened in a tab by a
+// signed-in director, where a family finds their ninja, picks one of today's
+// classes and checks in. A child with no place in
 // the class is booked into it first, the way MyStudio's own kiosk does; the
-// server decides which classes a membership may join. Runs on a kiosk session,
-// which is a center and nothing else, so nothing behind this page is reachable
-// from it.
+// server decides which classes a membership may join. Closing the tab is the
+// way out.
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -33,47 +32,6 @@ function useClock() {
     return () => clearInterval(id);
   }, []);
   return now;
-}
-
-function StaffExit({ open, onClose }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!open) { setUsername(''); setPassword(''); setError(''); }
-  }, [open]);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await api.post('/kiosk/exit', { username, password });
-      window.location.assign('/login');
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-    }
-  };
-
-  const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2.5 font-ninja text-base text-ninja-navy focus:outline-none focus:border-ninja-blue';
-  return (
-    <Modal isOpen={open} onClose={onClose} title="Leave kiosk mode" width="max-w-sm">
-      <form onSubmit={submit} className="space-y-3">
-        <input aria-label="Staff username" placeholder="Staff username" autoComplete="off" autoCapitalize="none"
-          value={username} onChange={(e) => setUsername(e.target.value)} className={field} />
-        <input aria-label="Password" placeholder="Password" type="password" autoComplete="off"
-          value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
-        {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}
-        <button type="submit" disabled={busy || !username || !password}
-          className="w-full font-ninja text-sm font-bold px-4 py-2.5 rounded-lg bg-ninja-blue text-white disabled:opacity-50">
-          {busy ? 'Checking…' : 'Leave kiosk mode'}
-        </button>
-      </form>
-    </Modal>
-  );
 }
 
 function Screen({ children, k }) {
@@ -101,7 +59,6 @@ export default function KioskPage() {
   const [step, setStep] = useState('search'); // search | classes | confirm | working | done | undone | error
   const [secondsLeft, setSecondsLeft] = useState(AUTO_BACK_S);
   const [outcome, setOutcome] = useState(null);
-  const [staffOpen, setStaffOpen] = useState(false);
   const inputRef = useRef(null);
   const searchSeq = useRef(0);
 
@@ -164,8 +121,8 @@ export default function KioskPage() {
   }, [step, query, reset]);
 
   useEffect(() => {
-    if (step === 'search' && me && !staffOpen) inputRef.current?.focus();
-  }, [step, me, staffOpen]);
+    if (step === 'search' && me) inputRef.current?.focus();
+  }, [step, me]);
 
   const pickMember = async (m) => {
     setMember(m);
@@ -211,7 +168,7 @@ export default function KioskPage() {
       <div className="min-h-[100dvh] bg-ninja-bg flex flex-col items-center justify-center gap-4 p-8 text-center">
         <Logo className="h-9" />
         <p className="font-ninja text-base text-ninja-navy max-w-sm">
-          This device isn't set up as a check-in kiosk. A center director can start one from Kiosk in DojoLink.
+          The check-in kiosk opens from Kiosk in DojoLink, signed in as a center director.
         </p>
         <a href="/login" className="font-ninja text-sm font-bold text-ninja-blue-ink">Sign in to DojoLink</a>
       </div>
@@ -445,15 +402,6 @@ export default function KioskPage() {
         </div>
       </main>
 
-      <footer className="flex justify-end px-6 pb-5 min-h-[3.25rem]">
-        {/* A kiosk in a tab has no kiosk session to leave; closing the tab is the way out. */}
-        {!me.staffTab && <button type="button" onClick={() => setStaffOpen(true)}
-          className="font-ninja text-xs font-bold text-ninja-muted px-3 py-2 rounded-lg hover:bg-white transition-colors">
-          Staff
-        </button>}
-      </footer>
-
-      <StaffExit open={staffOpen} onClose={() => setStaffOpen(false)} />
     </div>
   );
 }
