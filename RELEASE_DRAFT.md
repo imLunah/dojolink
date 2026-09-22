@@ -1,7 +1,9 @@
 # Update v2.2
 
 ## New
-* Reports page update
+* Made my own better check in portal which registers kids in on both Dojolink and MyStudio. (MyStudio never fixes their annoying bugs so I re-created it myself)
+* Check-in portal is on dashboard and will need to be integrated with MyStudio login
+
 
 
 
