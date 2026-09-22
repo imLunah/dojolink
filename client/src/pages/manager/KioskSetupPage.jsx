@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { TabletSmartphoneIcon } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
-import { CARD } from '../../lib/surfaces';
+import { Link } from 'react-router-dom';
+import { CARD, PANEL } from '../../lib/surfaces';
+import MyStudioReconnect from '../../components/manager/MyStudioReconnect';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import Segmented from '../../components/ui/Segmented';
 import ColorPalette from '../../components/theme/ColorPalette';
@@ -91,9 +93,8 @@ export default function KioskSetupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    api.get('/kiosk/setup').then(setSetup).catch((err) => setLoadError(err.message));
-  }, []);
+  const reload = () => api.get('/kiosk/setup').then(setSetup).catch((err) => setLoadError(err.message));
+  useEffect(() => { reload(); }, []);
 
   // Optimistic: the control moves at once and goes back if the save fails.
   const saveSetting = async (change) => {
@@ -179,6 +180,31 @@ export default function KioskSetupPage() {
               <h2 className="font-ninja font-extrabold text-base text-ninja-navy">MyStudio check-in portal</h2>
               {setup.configured === false ? (
                 <p className="font-ninja text-sm text-ninja-muted">MyStudio is not set up on this server.</p>
+              ) : setup.blocked ? (
+                // The kiosk runs only while the center's MyStudio connection
+                // does. Greyed behind the same repair the Daily schedule card
+                // offers; the two panels share one grid cell so the card grows
+                // with the reconnect form instead of clipping it.
+                <div className="grid">
+                  <div aria-hidden className="col-start-1 row-start-1 space-y-3 blur-[3px] opacity-50 select-none pointer-events-none">
+                    <p className="font-ninja text-sm text-ninja-navy">Signed in as a MyStudio account for this center.</p>
+                    <p className="font-ninja text-sm font-bold text-ninja-muted">Turn off</p>
+                  </div>
+                  <div className={`col-start-1 row-start-1 ${PANEL} p-3.5`}>
+                    <p className="font-ninja text-sm font-bold text-ninja-navy">
+                      {setup.blocked === 'expired' ? 'The MyStudio connection ran out' : "MyStudio isn't connected"}
+                    </p>
+                    <div className="mt-2">
+                      {setup.blocked === 'expired' ? (
+                        <MyStudioReconnect onConnected={reload} />
+                      ) : (
+                        <Link to="/account?mystudio=1" className="font-ninja text-sm font-semibold text-ninja-blue hover:underline">
+                          Connect it from Account settings
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
               ) : ready ? (
                 <div className="space-y-3">
                   <p className="font-ninja text-sm text-ninja-navy">

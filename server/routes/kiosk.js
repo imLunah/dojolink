@@ -53,6 +53,8 @@ async function loadKiosk(pool, locationId) {
 
 // Built field by field so the token cannot leave by being forgotten here.
 function publicShape(kiosk) {
+  // MyStudio itself is not connected, or its connection ran out.
+  if (kiosk && kiosk.blocked) return { connected: false, blocked: kiosk.blocked };
   if (!kiosk || kiosk.status === 'off') return { connected: false, off: Boolean(kiosk) };
   return {
     connected: true,
@@ -102,6 +104,30 @@ async function savedLogin(pool, locationId) {
   return conn && conn.login_email && conn.login_secret ? conn : null;
 }
 
+// The center's own MyStudio connection: 'none', 'expired' or 'connected'.
+//
+// The kiosk only runs while that connection does (the owner's call). Its
+// check-in portal token would carry on regardless, but a center whose
+// connection has lapsed is one whose director needs to sign back in, and a
+// kiosk quietly working on the side hides that. Read the same way the board
+// reads it: the stored status, and the expiry the credential states itself.
+async function connectionState(pool, locationId) {
+  const { rows } = await pool.query(
+    'SELECT status, session_cookie FROM mystudio_connections WHERE location_id = $1',
+    [locationId]
+  );
+  const conn = rows[0];
+  if (!conn) return 'none';
+  if (conn.status === 'expired') return 'expired';
+  try {
+    const expiresAt = ms.readCookieExpiry(ms.decryptCookie(conn.session_cookie));
+    if (expiresAt && expiresAt <= new Date()) return 'expired';
+  } catch {
+    // An unreadable expiry is not evidence of one; the board decides the same.
+  }
+  return 'connected';
+}
+
 // A failed automatic sign-in is not retried for a while, or a wrong saved
 // password would be sent to MyStudio on every keystroke at the kiosk.
 const AUTO_RETRY_MS = 10 * 60 * 1000;
@@ -112,6 +138,13 @@ const autoFailedAt = new Map();
 // switched off stays off. Returns whatever is there otherwise, and never
 // throws: a kiosk that cannot sign in reads as unavailable, not as an error.
 async function ensureKiosk(pool, locationId, { force = false } = {}) {
+  // Blocked reads as not connected to every caller, so no route has to know
+  // about it: they all refuse a kiosk whose status is not 'connected'.
+  const connection = await connectionState(pool, locationId);
+  if (connection !== 'connected') {
+    const existing = await loadKiosk(pool, locationId);
+    return { ...(existing || {}), status: 'blocked', blocked: connection };
+  }
   const kiosk = await loadKiosk(pool, locationId);
   if (kiosk && kiosk.status === 'connected') return kiosk;
   if (kiosk && kiosk.status === 'off' && !force) return kiosk;
