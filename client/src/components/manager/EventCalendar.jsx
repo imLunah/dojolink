@@ -7,7 +7,7 @@ import Modal from '../ui/Modal';
 import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import { CARD } from '../../lib/surfaces';
-import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon, PlusIcon, CheckIcon, MegaphoneIcon } from 'lucide-react';
+import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon, CheckIcon, MegaphoneIcon } from 'lucide-react';
 import useRefuseNudge from '../../lib/useRefuseNudge';
 
 
@@ -69,10 +69,13 @@ function Swatches({ value, onPick, label }) {
   );
 }
 
-// The center's types as chips. The last chip makes a new one: a name and a
-// color from the palette. "Edit types" switches the chips to managing them:
-// pressing one shows its colors, and each carries a delete with a spoken
-// confirm, like every other destructive action here.
+const NEW_TYPE = '__new__';
+
+// The center's types in a dropdown, with "New type" as its last option. That
+// option never becomes the value: it opens a small creator underneath (a name
+// and a color from the palette), and what it creates is selected. "Edit types"
+// lists them underneath to recolor or delete, the delete behind a spoken
+// confirm like every other destructive action here.
 function TypePicker({ types, value, onChange, onAddType, onRecolor, onDeleteType }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
@@ -81,6 +84,8 @@ function TypePicker({ types, value, onChange, onAddType, onRecolor, onDeleteType
   const [focus, setFocus] = useState(null); // type id whose colors are open
   const [confirmId, setConfirmId] = useState(null);
   const [error, setError] = useState('');
+
+  const current = types.find((t) => t.label === value);
 
   const add = async () => {
     if (!name.trim()) return;
@@ -93,7 +98,10 @@ function TypePicker({ types, value, onChange, onAddType, onRecolor, onDeleteType
     } catch (e) { setError(e.message || 'Could not add that type'); }
   };
 
-  const focused = types.find((t) => t.id === focus);
+  const pick = (v) => {
+    if (v === NEW_TYPE) { setAdding(true); setEditing(false); setError(''); return; }
+    onChange(v);
+  };
 
   return (
     <div>
@@ -108,66 +116,22 @@ function TypePicker({ types, value, onChange, onAddType, onRecolor, onDeleteType
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {types.map((t) => {
-          const selected = !editing && value === t.label;
-          const open = editing && focus === t.id;
-          return (
-            <div key={t.id} className="flex items-center">
-              <button
-                type="button"
-                aria-pressed={editing ? open : selected}
-                onClick={() => (editing ? setFocus(open ? null : t.id) : onChange(t.label))}
-                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-ninja text-xs font-bold transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)] active:scale-95 ${
-                  selected ? 'text-white' : open ? 'bg-ninja-border text-ninja-navy' : 'bg-ninja-bg text-ninja-navy hover:bg-ninja-border'
-                }`}
-                style={selected ? { backgroundColor: t.color } : undefined}
-              >
-                {!selected && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />}
-                {t.label}
-              </button>
-              {editing && (
-                confirmId === t.id ? (
-                  <button
-                    type="button"
-                    onClick={async () => { await onDeleteType(t); setConfirmId(null); if (focus === t.id) setFocus(null); }}
-                    className="ml-1 font-ninja text-xs font-bold px-2 py-1.5 rounded-md bg-ninja-red text-white active:scale-95"
-                  >
-                    Delete
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmId(t.id)}
-                    aria-label={`Delete ${t.label}`}
-                    className="ml-0.5 w-6 h-6 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-red"
-                  >
-                    <XIcon size={13} strokeWidth={2.5} />
-                  </button>
-                )
-              )}
-            </div>
-          );
-        })}
-
-        {!editing && !adding && (
-          <button
-            type="button"
-            onClick={() => { setAdding(true); setError(''); }}
-            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 font-ninja text-xs font-bold text-ninja-muted hover:text-ninja-navy hover:bg-ninja-bg transition-colors"
-          >
-            <PlusIcon size={13} strokeWidth={2.5} /> New type
-          </button>
-        )}
+      <div className="relative">
+        <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
+          style={{ backgroundColor: current ? current.color : 'transparent' }} />
+        <select
+          value={current ? value : ''}
+          onChange={(e) => pick(e.target.value)}
+          aria-label="Type"
+          className="w-full rounded-lg border border-ninja-border bg-white pl-8 pr-3 py-2 font-ninja text-sm text-ninja-navy focus:outline-none focus:border-ninja-blue transition-colors"
+        >
+          <option value="" disabled>Choose a type</option>
+          {types.map((t) => <option key={t.id} value={t.label}>{t.label}</option>)}
+          <option value={NEW_TYPE}>+ New type</option>
+        </select>
       </div>
 
-      {editing && focused && (
-        <div className="mt-2.5">
-          <Swatches label={`Color for ${focused.label}`} value={focused.color} onPick={(c) => onRecolor(focused, c)} />
-        </div>
-      )}
-
-      {adding && !editing && (
+      {adding && (
         <div className="mt-2.5 rounded-lg bg-ninja-bg p-2.5 space-y-2.5">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
@@ -199,6 +163,61 @@ function TypePicker({ types, value, onChange, onAddType, onRecolor, onDeleteType
           </div>
           <Swatches label="New type color" value={color} onPick={setColor} />
         </div>
+      )}
+
+      {editing && (
+        <ul className="mt-2.5 rounded-lg bg-ninja-bg p-1.5 space-y-0.5">
+          {types.map((t) => {
+            const open = focus === t.id;
+            return (
+              <li key={t.id} className="rounded-md">
+                <div className="flex items-center gap-2 px-1.5 py-1">
+                  <button
+                    type="button"
+                    onClick={() => setFocus(open ? null : t.id)}
+                    aria-expanded={open}
+                    aria-label={`Change color of ${t.label}`}
+                    className="w-4 h-4 rounded-full flex-shrink-0 transition-transform duration-150 ease-[var(--ease-out)] active:scale-90"
+                    style={{ backgroundColor: t.color }}
+                  />
+                  <span className="flex-1 min-w-0 truncate font-ninja text-sm text-ninja-navy">{t.label}</span>
+                  {confirmId === t.id ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmId(null)}
+                        className="font-ninja text-xs font-bold text-ninja-muted hover:text-ninja-navy px-1.5 rounded"
+                      >
+                        Keep
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => { await onDeleteType(t); setConfirmId(null); if (open) setFocus(null); }}
+                        className="font-ninja text-xs font-bold px-2 py-1 rounded-md bg-ninja-red text-white active:scale-95"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(t.id)}
+                      aria-label={`Delete ${t.label}`}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-red"
+                    >
+                      <XIcon size={13} strokeWidth={2.5} />
+                    </button>
+                  )}
+                </div>
+                {open && (
+                  <div className="px-1.5 pb-1.5 pt-0.5">
+                    <Swatches label={`Color for ${t.label}`} value={t.color} onPick={(c) => onRecolor(t, c)} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {error && <p className="mt-1.5 font-ninja text-xs font-bold text-ninja-red">{error}</p>}
