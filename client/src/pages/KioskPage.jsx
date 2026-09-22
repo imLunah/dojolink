@@ -279,7 +279,7 @@ export default function KioskPage() {
                           className="w-full flex items-center justify-between gap-2 rounded-xl border border-ninja-border bg-white px-5 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
                           <span className="font-ninja font-bold text-lg text-ninja-navy truncate">
-                            {r.firstName} {r.lastInitial}
+                            {r.firstName} {r.lastName}
                           </span>
                           <ChevronRightIcon size={18} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                         </button>
@@ -360,7 +360,13 @@ export default function KioskPage() {
                   {(() => {
                     if (!roster) return null;
                     const rq = rosterQuery.trim().toLowerCase();
-                    const shown = rq ? roster.filter((k) => k.firstName.toLowerCase().startsWith(rq)) : roster;
+                    const shown = rq
+                      ? roster.filter((k) => {
+                          const first = k.firstName.toLowerCase();
+                          const last = (k.lastName || '').toLowerCase();
+                          return first.startsWith(rq) || last.startsWith(rq) || `${first} ${last}`.startsWith(rq);
+                        })
+                      : roster;
                     if (!shown.length) {
                       return (
                         <p className="font-ninja text-lg text-ninja-muted text-center">
@@ -373,7 +379,7 @@ export default function KioskPage() {
                         <div key={k.participantId}
                           className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-3.5">
                           <span className="min-w-0">
-                            <span className="block font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastInitial}</span>
+                            <span className="block font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastName}</span>
                             <span className="block font-ninja text-sm text-ninja-muted">Checked in</span>
                           </span>
                           {k.undoable && (
@@ -388,7 +394,7 @@ export default function KioskPage() {
                           key={k.participantId} type="button" onClick={() => pickFromRoster(k, 'checkin')}
                           className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
-                          <span className="font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastInitial}</span>
+                          <span className="font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastName}</span>
                           {k.booked
                             ? <span className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>
                             : <ChevronRightIcon size={20} className="flex-shrink-0 text-ninja-muted" aria-hidden />}
@@ -471,7 +477,7 @@ export default function KioskPage() {
                   <p className="font-ninja font-bold text-xl text-ninja-muted">
                     {mode === 'undo' ? 'Undo check-in for' : 'Check in'}
                   </p>
-                  <p className="mt-2 font-ninja font-extrabold text-6xl text-ninja-navy">{member.firstName} {member.lastInitial}</p>
+                  <p className="mt-2 font-ninja font-extrabold text-6xl text-ninja-navy">{member.firstName} {member.lastName}</p>
                   <p className="mt-3 font-ninja text-2xl text-ninja-muted">{picked.className} · {fmtTime(picked.startTime)}</p>
                   <div className="mt-10 grid grid-cols-2 gap-4">
                     <button type="button"

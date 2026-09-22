@@ -1672,12 +1672,12 @@ async function getKioskRosterFor(token, { date, classKey, nowMinutes }) {
     out.push({
       participantId: member.participantId,
       firstName: member.firstName,
-      lastInitial: member.lastName ? `${member.lastName[0].toUpperCase()}.` : '',
+      lastName: member.lastName,
       booked,
       checkedIn: booked && isCheckedInRow(row),
     });
   }
-  out.sort((a, b) => Number(b.booked) - Number(a.booked) || a.firstName.localeCompare(b.firstName) || a.lastInitial.localeCompare(b.lastInitial));
+  out.sort((a, b) => Number(b.booked) - Number(a.booked) || a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName));
   return {
     class: {
       classKey,

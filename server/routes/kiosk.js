@@ -451,7 +451,7 @@ router.get('/me', async (req, res) => {
 // Every active member at the center, not only today's bookings, because a
 // family may not have booked. With no query it is the whole list, which the
 // kiosk shows before anyone types (the owner's call, like MyStudio's own
-// kiosk); names are first name and last initial either way.
+// kiosk), with full first and last names.
 router.get('/search', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.kioskLocationId;
@@ -486,7 +486,7 @@ router.get('/search', requireKiosk, async (req, res) => {
       .map((m) => ({
         participantId: m.participantId,
         firstName: m.firstName,
-        lastInitial: m.lastName ? `${m.lastName[0].toUpperCase()}.` : '',
+        lastName: m.lastName,
       }));
 
     res.json({ results });
