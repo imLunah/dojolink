@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate, today } from '../../utils/dateUtils';
 import { api } from '../../api/client';
@@ -23,6 +23,7 @@ export { ClubBadge };
 
 export default function ClubSessionsPanel({ sessions = [], onDeleted, onAttendeesUpdated, onCheckIn }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isReadOnly, viewAs } = useAuth();
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
   const isManager = ['manager', 'admin'].includes(user?.role) && !isSenseiView;
@@ -261,7 +262,9 @@ export default function ClubSessionsPanel({ sessions = [], onDeleted, onAttendee
                 {/* Log Progress — opens session detail with notes + comment thread */}
                 {!isReadOnly && (
                   <button
-                    onClick={() => navigate(`/clubs/${toSlug(s.club_name)}/sessions/${s.id}`)}
+                    onClick={() => navigate(`/clubs/${toSlug(s.club_name)}/sessions/${s.id}`, {
+                      state: { backTo: location.pathname, backLabel: "Today's Board" },
+                    })}
                     className="mt-auto w-full text-sm font-ninja font-bold text-white bg-ninja-blue rounded-lg py-2 hover:bg-ninja-blue/90 transition-colors"
                   >
                     Log Club

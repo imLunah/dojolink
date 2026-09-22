@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 
 const fadeUp = {
@@ -27,6 +27,8 @@ import { CARD } from '../lib/surfaces';
 export default function ClubSessionPage() {
   const { slug, id } = useParams();
   const navigate = useNavigate();
+  // Opened from Today's Board, the way back is the board, not the club.
+  const { backTo, backLabel } = useLocation().state || {};
   const { user, isReadOnly } = useAuth();
   const reduce = useReducedMotion();
 
@@ -142,11 +144,11 @@ export default function ClubSessionPage() {
 
           <div className="relative flex flex-col min-h-[12rem] sm:min-h-[14rem] p-5 sm:p-6">
             <button
-              onClick={() => navigate(`/clubs/${slug}`)}
+              onClick={() => navigate(backTo || `/clubs/${slug}`)}
               className="self-start font-ninja text-sm font-semibold text-white/70 hover:text-white transition-colors duration-150 flex items-center gap-1.5"
             >
               <ChevronLeftIcon size={16} strokeWidth={2.25} aria-hidden="true" />
-              {clubDef.name}
+              {backTo ? backLabel : clubDef.name}
             </button>
 
             <div className="mt-auto pt-6">
