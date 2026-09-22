@@ -1,42 +1,68 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Bar, BarChart, Cell, LabelList, XAxis, YAxis } from 'recharts';
 import Layout from '../../components/layout/Layout';
-import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
 import { api } from '../../api/client';
 import { BELTS, PROGRAM_LOGOS } from '../../utils/beltConfig';
-import { formatDate } from '../../utils/dateUtils';
-import BeltIcon, { beltIconSrc } from '../../components/ui/BeltIcon';
+import BeltIcon from '../../components/ui/BeltIcon';
 import { CARD } from '../../lib/surfaces';
 import { authorName } from '../../lib/authors';
 import { SkeletonCards } from '../../components/ui/Skeleton';
 
 const BELT_COLOR = Object.fromEntries(BELTS.map(b => [b.name, b.color]));
-const BELT_TEXT = Object.fromEntries(BELTS.map(b => [b.name, b.textColor]));
 const BELT_ORDER = BELTS.map(b => b.name);
 
 const ENROLLMENT_COLORS = { CREATE: '#006ADD', 'Robotics Academy': '#7c3aed', 'AI Academy': '#0891b2', JR: '#16a34a', 'VR Coding': '#14b8a6' };
 
-// Same files BeltIcon serves. An SVG <image> inside the chart can't mount a
-// React component, so the axis ticks need the path itself.
-const BELT_IMAGES = Object.fromEntries(BELT_ORDER.map((name) => [name, beltIconSrc(name)]));
+// The page is built the way a reporting surface in a component kit is: each
+// section is one card holding a stack of tiles a shade off the card, so the
+// rows read as objects you could pick up rather than lines ruled across a box.
+// The tint is the page token, not bg-white, so it follows the theme and the
+// dark overrides never have to fight it.
+const TILE = 'rounded-xl border border-ninja-border bg-ninja-bg/60';
 
-// One surface for the headline numbers, split by hairlines. Four separate
-// cards made four boxes that each held a single number, which is most of what
-// made this page read as blocky. Nothing here is a control, so nothing needs its
-// own edge.
+// White and Black disappear against a white or a slate card, so every swatch
+// carries a neutral hairline drawn inside it. A shadow rather than a border,
+// so it costs no width in a bar measured in percent.
+const SWATCH_EDGE = 'inset 0 0 0 1px rgb(var(--ninja-border))';
+
+// pg hands DATE columns back as UTC-midnight ISO strings. Read the calendar
+// part and build a local date, or every evening lands on the day before.
+function localDate(dateStr) {
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function shortDate(dateStr) {
+  return localDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function daysSince(dateStr) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((today - localDate(dateStr)) / 86400000);
+}
+
+function initials(name) {
+  const parts = String(name).trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// One surface for the headline numbers, split by hairlines, the way a metric
+// strip is: four numbers are one reading, not four objects.
 function StatStrip({ stats }) {
   return (
     <div className={`${CARD} overflow-hidden`}>
       <dl className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-ninja-border">
         {stats.map((s) => (
-          <div key={s.label} className="bg-white px-5 py-5 sm:px-6">
-            <dt className="font-ninja text-sm text-ninja-muted">{s.label}</dt>
-            <dd className={`mt-1.5 font-ninja font-black text-3xl sm:text-4xl leading-none tabular-nums tracking-tight ${s.tone || 'text-ninja-navy'}`}>
+          <div key={s.label} className="bg-white px-5 py-4 sm:px-6 sm:py-5">
+            <dt className="font-ninja text-[13px] text-ninja-muted">{s.label}</dt>
+            <dd className={`mt-1 font-ninja font-bold text-3xl leading-tight tabular-nums tracking-tight ${s.tone || 'text-ninja-navy'}`}>
               {s.value}
             </dd>
-            {s.sub && <dd className="mt-2 font-ninja text-xs text-ninja-muted">{s.sub}</dd>}
+            {s.sub && <dd className="mt-0.5 font-ninja text-xs text-ninja-muted">{s.sub}</dd>}
           </div>
         ))}
       </dl>
@@ -44,189 +70,134 @@ function StatStrip({ stats }) {
   );
 }
 
-function Section({ title, description, className = '', children }) {
+// The card, and the tile at its head that names it. The head is a tile like
+// the rows under it, so the whole section is one stack.
+function Section({ title, value, unit, children, footer, className = '' }) {
   return (
-    <section className={`${CARD} p-5 sm:p-6 flex flex-col min-w-0 ${className}`}>
-      <header className="mb-5">
-        <h2 className="text-ninja-navy font-ninja font-bold text-base leading-tight">{title}</h2>
-        {description && <p className="mt-1 font-ninja text-sm text-ninja-muted">{description}</p>}
+    <section className={`${CARD} p-2 flex flex-col gap-1.5 min-w-0 ${className}`}>
+      <header className={`${TILE} px-4 py-3.5`}>
+        <h2 className="font-ninja text-[13px] text-ninja-muted">{title}</h2>
+        {value != null && (
+          <p className="mt-0.5 flex items-baseline gap-1.5">
+            <span className="font-ninja font-bold text-[28px] leading-tight text-ninja-navy tabular-nums tracking-tight">{value}</span>
+            {unit && <span className="font-ninja text-[13px] text-ninja-muted">{unit}</span>}
+          </p>
+        )}
+        {footer}
       </header>
       {children}
     </section>
   );
 }
 
-// Both distributions are horizontal bars, so the category sits on the Y axis
-// and the count runs along X. The identity of a row is its artwork — a program
-// logo, a belt icon — so the tick renders an <image> rather than a text label.
-// That is the whole reason these are custom ticks: a plain Recharts category
-// axis can only draw text.
-const ROW_H = 38;
-const TICK_FONT = '12px Nunito, sans-serif';
-const ICON_W = 22;      // artwork box
-const ICON_GAP = 6;
-const LABEL_GAP = 10;   // breathing room between the label and the bar
-const PAD_L = 2;        // keeps the artwork off the very edge of the plot
-const AXIS_MIN = 96;
-const AXIS_MAX = 190;
-
-// A left axis hands its tick `x = axisLine - tickSize - tickMargin`, and those
-// default to 6 and 2. Content laid out from the tick's own x was landing eight
-// pixels left of the band, which clipped the left edge off every program logo.
-// Zeroing both makes the tick x the axis line exactly, so -axisW is the band's
-// left edge and the arithmetic below is true rather than nearly true.
-// (tickLine={false} does NOT zero tickSize — it only stops the line drawing.)
-const TICK_SIZE = 0;
-const TICK_MARGIN = 0;
-
-// The axis band was a fixed 96px, so "Robotics Academy" overflowed it and ran
-// underneath its own bar. Measure the labels instead: the band is only ever as
-// wide as the longest one actually needs.
-let measureCtx = null;
-function textWidth(text) {
-  if (typeof document === 'undefined') return String(text).length * 6.6;
-  measureCtx ||= document.createElement('canvas').getContext('2d');
-  measureCtx.font = TICK_FONT;
-  return measureCtx.measureText(String(text)).width;
-}
-
-function axisWidthFor(rows, tickLabel, hasIcons) {
-  const widest = rows.reduce((w, r) => Math.max(w, textWidth(tickLabel(r.name))), 0);
-  const lead = hasIcons ? ICON_W + ICON_GAP : 0;
-  return Math.min(AXIS_MAX, Math.max(AXIS_MIN, Math.ceil(PAD_L + lead + widest + LABEL_GAP)));
-}
-
-// Trims to fit rather than letting the label run over the bars. Only bites for
-// a name longer than AXIS_MAX allows; the full text stays in the tooltip.
-function ellipsize(text, room) {
-  if (textWidth(text) <= room) return text;
-  let out = text;
-  while (out.length > 1 && textWidth(`${out}…`) > room) out = out.slice(0, -1);
-  return `${out}…`;
-}
-
-function ImageTick({ x, y, payload, src, label, axisW }) {
-  const full = label(payload.value);
-  const lead = src ? ICON_W + ICON_GAP : 0;
-  const room = axisW - PAD_L - lead - LABEL_GAP;
-  // Laid out rightward from the band's left edge, which the zeroed tickSize and
-  // tickMargin above make exactly `x - axisW`.
-  const left = -axisW + PAD_L;
+// How the whole divides, in one bar. Each segment is a share of the total, so
+// the eye gets the split before it reads a single row.
+function CompositionBar({ rows, total }) {
+  if (total <= 0) return null;
   return (
-    <g transform={`translate(${x},${y})`}>
-      {src && <image href={src} x={left} y={-11} width={ICON_W} height={ICON_W} preserveAspectRatio="xMidYMid meet" />}
-      <text
-        x={left + lead}
-        y={0}
-        dy="0.32em"
-        className="fill-ninja-navy font-ninja"
-        fontSize={12}
-      >
-        {ellipsize(full, room)}
-        <title>{full}</title>
-      </text>
-    </g>
-  );
-}
-
-function CountTooltip({ active, payload, unit }) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
-  return (
-    <div className="rounded-lg border border-ninja-border bg-white px-2.5 py-1.5 shadow-lg">
-      <span className="block font-ninja text-[11px] text-ninja-muted leading-tight">{row.name}</span>
-      <span className="block font-ninja text-sm font-bold text-ninja-navy leading-tight tabular-nums">
-        {row.count} {unit}{row.count === 1 ? '' : 's'}
-        {row.pct != null && <span className="text-ninja-muted font-normal"> · {row.pct}%</span>}
-      </span>
+    <div className="mt-3 flex h-2 w-full gap-0.5 overflow-hidden rounded-full" role="img"
+      aria-label={rows.map((r) => `${r.name} ${r.count}`).join(', ')}>
+      {rows.map((r) => (
+        <motion.span
+          key={r.name}
+          title={`${r.name}: ${r.count}`}
+          className="h-full first:rounded-l-full last:rounded-r-full"
+          style={{ backgroundColor: r.color, boxShadow: SWATCH_EDGE }}
+          initial={{ width: 0 }}
+          animate={{ width: `${(r.count / total) * 100}%` }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        />
+      ))}
     </div>
   );
 }
 
-// Bars carry per-row colours (a belt is its belt colour, a program its brand
-// colour), which Recharts takes as a <Cell> per datum rather than one series
-// colour.
-function DistributionBars({ rows, unit, tickSrc, tickLabel = (v) => v }) {
-  const height = Math.max(ROW_H * rows.length, ROW_H);
-  // Measured every render on purpose: it is a handful of canvas measureText
-  // calls, and memoising it would key off callers' inline arrows and never hit.
-  const axisW = axisWidthFor(rows, tickLabel, rows.some((r) => tickSrc(r.name)));
-  // Left margin stays 0: the YAxis already reserves the band and the tick draws
-  // itself back into it, so adding it here as well would indent the plot by
-  // twice the label width.
+// A row of a distribution: identity, a bar against the busiest row, the count
+// and its share. The bar's far end is the largest row, not the total, so the
+// short rows are still readable as lengths.
+function BarRow({ rank, art, name, count, pct, color, max, index }) {
   return (
-    <ChartContainer config={{ count: { label: unit } }} className="w-full" style={{ height }}>
-      <BarChart
-        data={rows}
-        layout="vertical"
-        margin={{ top: 0, right: 40, bottom: 0, left: 0 }}
-        barCategoryGap="22%"
-      >
-        <XAxis type="number" hide domain={[0, (max) => Math.max(1, max)]} />
-        <YAxis
-          type="category"
-          dataKey="name"
-          width={axisW}
-          axisLine={false}
-          tickLine={false}
-          tickSize={TICK_SIZE}
-          tickMargin={TICK_MARGIN}
-          tick={(props) => (
-            <ImageTick {...props} axisW={axisW} src={tickSrc(props.payload.value)} label={tickLabel} />
-          )}
-        />
-        <ChartTooltip
-          cursor={{ fill: 'rgb(var(--ninja-muted) / 0.08)' }}
-          content={<CountTooltip unit={unit} />}
-        />
-        {/* The track gives every bar the same far end, so a short bar reads as
-            a share of the busiest row instead of floating in blank space. */}
-        <Bar
-          dataKey="count"
-          radius={[999, 999, 999, 999]}
-          animationDuration={600}
-          barSize={12}
-          background={{ fill: 'rgb(var(--ninja-muted) / 0.1)', radius: 999 }}
-        >
-          {rows.map((row) => (
-            <Cell key={row.name} fill={row.color} stroke={row.stroke || 'none'} />
-          ))}
-          <LabelList
-            dataKey="count"
-            position="right"
-            offset={8}
-            className="fill-ninja-navy font-ninja"
-            fontSize={12}
-            fontWeight={700}
+    <motion.li
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3), ease: 'easeOut' }}
+      className={`${TILE} flex items-center gap-3 px-3 py-2.5`}
+    >
+      {rank != null && <span className="w-3 shrink-0 text-right font-ninja text-[13px] text-ninja-muted tabular-nums">{rank}</span>}
+      <span className="shrink-0">{art}</span>
+      {/* Name and numbers on one line, the bar on its own line under them:
+          sharing one line with a name squeezed the bar to a stub in a
+          third-width card. */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate font-ninja text-[13px] font-semibold text-ninja-navy" title={name}>{name}</span>
+          <span className="shrink-0 font-ninja text-[13px] font-semibold text-ninja-navy tabular-nums">{count}</span>
+          <span className="w-9 shrink-0 text-right font-ninja text-xs text-ninja-muted tabular-nums">{pct}%</span>
+        </div>
+        <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ninja-border/60">
+          <motion.span
+            className="absolute inset-y-0 left-0 rounded-full"
+            style={{ backgroundColor: color, boxShadow: SWATCH_EDGE }}
+            initial={{ width: 0 }}
+            animate={{ width: `${max > 0 ? Math.max((count / max) * 100, 2) : 0}%` }}
+            transition={{ duration: 0.6, delay: Math.min(index * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] }}
           />
-        </Bar>
-      </BarChart>
-    </ChartContainer>
+        </span>
+      </div>
+    </motion.li>
   );
 }
 
 function EnrollmentChart({ data }) {
   const total = data.reduce((s, r) => s + r.count, 0);
-  // Largest first: the eye reads the top row as the headline.
+  // Largest first: this is a ranking, and the top row is the headline.
   const rows = [...data].sort((a, b) => b.count - a.count).map((r) => ({
     name: r.program,
     count: r.count,
     pct: total > 0 ? Math.round((r.count / total) * 100) : 0,
     color: ENROLLMENT_COLORS[r.program] || '#6b7280',
   }));
+  const max = rows[0]?.count || 0;
 
   return (
-    <Section title="Enrollment by program" description={`${total} enrollment${total === 1 ? '' : 's'} across ${rows.length} program${rows.length === 1 ? '' : 's'}`}>
+    <Section
+      title="Enrollment by program"
+      value={total}
+      unit={`enrollment${total === 1 ? '' : 's'} across ${plural(rows.length, 'program')}`}
+      footer={<CompositionBar rows={rows} total={total} />}
+    >
       {rows.length === 0 ? (
-        <p className="text-ninja-muted font-ninja text-sm">No enrollments yet.</p>
+        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">No enrollments yet.</p>
       ) : (
-        <DistributionBars rows={rows} unit="ninja" tickSrc={(name) => PROGRAM_LOGOS[name]} />
+        <ul className="flex flex-col gap-1.5">
+          {rows.map((r, i) => (
+            <BarRow
+              key={r.name}
+              index={i}
+              rank={i + 1}
+              art={
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-ninja-border bg-white">
+                  {PROGRAM_LOGOS[r.name]
+                    ? <img src={PROGRAM_LOGOS[r.name]} alt="" className="h-5 w-5 object-contain" />
+                    : <span className="font-ninja text-[11px] font-semibold text-ninja-navy">{initials(r.name)}</span>}
+                </span>
+              }
+              name={r.name}
+              count={r.count}
+              pct={r.pct}
+              color={r.color}
+              max={max}
+            />
+          ))}
+        </ul>
       )}
     </Section>
   );
 }
 
 function BeltChart({ data }) {
+  // Ladder order, not ranked: the belts are a sequence and the shape of the
+  // roster along it is the point.
   const sorted = [...data].sort((a, b) => BELT_ORDER.indexOf(a.belt_level) - BELT_ORDER.indexOf(b.belt_level));
   const total = sorted.reduce((s, r) => s + r.count, 0);
   const rows = sorted.map((r) => ({
@@ -234,54 +205,64 @@ function BeltChart({ data }) {
     count: r.count,
     pct: total > 0 ? Math.round((r.count / total) * 100) : 0,
     color: BELT_COLOR[r.belt_level] || '#e5e7eb',
-    // White on a white card needs an outline or the bar disappears.
-    stroke: r.belt_level === 'White' ? '#d1d5db' : undefined,
   }));
+  const max = Math.max(0, ...rows.map((r) => r.count));
 
   return (
-    <Section title="CREATE belts" description={`${total} ninja${total === 1 ? '' : 's'} on the ladder`}>
+    <Section
+      title="CREATE belts"
+      value={total}
+      unit={`ninja${total === 1 ? '' : 's'} on the ladder`}
+      footer={<CompositionBar rows={rows} total={total} />}
+    >
       {rows.length === 0 ? (
-        <p className="text-ninja-muted font-ninja text-sm">No CREATE students yet.</p>
+        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">No CREATE students yet.</p>
       ) : (
-        <DistributionBars rows={rows} unit="ninja" tickSrc={(belt) => BELT_IMAGES[belt]} />
+        <ul className="flex flex-col gap-1.5">
+          {rows.map((r, i) => (
+            <BarRow
+              key={r.name}
+              index={i}
+              art={<BeltIcon belt={r.name} size={26} />}
+              name={r.name}
+              count={r.count}
+              pct={r.pct}
+              color={r.color}
+              max={max}
+            />
+          ))}
+        </ul>
       )}
     </Section>
   );
 }
 
-// Days since a YYYY-MM-DD, counted in local calendar days (a pg DATE arrives as
-// UTC midnight, so raw milliseconds would be off by one every evening).
-function daysSince(dateStr) {
-  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
-  const then = new Date(y, m - 1, d);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((today - then) / 86400000);
-}
-
 function InactiveTable({ data, className }) {
   const never = data.filter((s) => !s.last_session).length;
-  const description = data.length === 0
-    ? 'Everyone has checked in recently'
-    : `${data.length} ninja${data.length === 1 ? '' : 's'}${never ? ` · ${never} never checked in` : ''}`;
 
   return (
-    <Section title="No check-ins in 30 days" description={description} className={className}>
+    <Section
+      title="No check-ins in 30 days"
+      value={data.length}
+      unit={never ? `ninja${data.length === 1 ? '' : 's'} · ${never} never checked in` : `ninja${data.length === 1 ? '' : 's'}`}
+      className={className}
+    >
       {data.length === 0 ? (
-        <p className="text-ninja-muted font-ninja text-sm">All students active recently.</p>
+        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">All students active recently.</p>
       ) : (
-        // Two columns once there is room: a list of names is short and wide
-        // screens were spending most of this card on empty space.
-        <ul className="grid sm:grid-cols-2 gap-x-6 max-h-80 overflow-y-auto -mx-2 pr-1">
+        <ul className="grid sm:grid-cols-2 gap-1.5 max-h-80 overflow-y-auto">
           {data.map((s) => (
             <li key={s.id}>
               <Link
                 to={`/manager/students/${s.id}`}
-                className="flex items-baseline justify-between gap-3 rounded-lg px-2 py-2 hover:bg-ninja-bg transition-colors"
+                className={`${TILE} flex items-center gap-3 px-3 py-2 transition-colors hover:bg-ninja-bg`}
               >
-                <span className="font-ninja text-sm text-ninja-navy truncate">{s.full_name}</span>
-                <span className="font-ninja text-xs text-ninja-muted shrink-0 tabular-nums">
-                  {s.last_session ? `${daysSince(s.last_session)} days ago` : 'Never'}
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ninja-border/70 font-ninja text-[11px] font-semibold text-ninja-navy">
+                  {initials(s.full_name)}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-ninja text-[13px] font-semibold text-ninja-navy">{s.full_name}</span>
+                <span className="shrink-0 font-ninja text-xs text-ninja-muted tabular-nums">
+                  {s.last_session ? `${daysSince(s.last_session)}d ago` : 'Never'}
                 </span>
               </Link>
             </li>
@@ -293,31 +274,34 @@ function InactiveTable({ data, className }) {
 }
 
 function BeltLog({ data, className }) {
-  // The query hands rows back grouped by student, not by date, so the newest
-  // belt could land anywhere in the list.
+  // The query groups rows by student, not by date, so the newest belt could
+  // land anywhere in the list.
   const rows = [...data].sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
   return (
-    <Section title="Belt advancements" description="Last 30 days, newest first" className={className}>
+    <Section title="Belt advancements · last 30 days" value={rows.length} unit={`belt-up${rows.length === 1 ? '' : 's'}`} className={className}>
       {rows.length === 0 ? (
-        <p className="text-ninja-muted font-ninja text-sm">No belt advancements recorded yet.</p>
+        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">No belt advancements recorded yet.</p>
       ) : (
-        <ul className="-mx-2 max-h-96 overflow-y-auto pr-1 xl:max-h-none xl:flex-1 xl:min-h-0">
+        <ul className="flex flex-col gap-1.5 max-h-96 overflow-y-auto xl:max-h-none xl:flex-1 xl:min-h-0">
           {rows.map((row, i) => (
             <motion.li
               key={`${row.full_name}-${row.session_date}-${row.belt_level_at}`}
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, delay: Math.min(i * 0.03, 0.3), ease: 'easeOut' }}
-              className="flex items-center gap-3 rounded-lg px-2 py-2.5"
+              className={`${TILE} flex items-center gap-3 px-3 py-2`}
             >
-              <BeltIcon belt={row.belt_level_at} size={32} className="shrink-0" />
+              <BeltIcon belt={row.belt_level_at} size={28} className="shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="font-ninja text-sm font-semibold text-ninja-navy truncate">{row.full_name}</p>
+                <p className="font-ninja text-[13px] font-semibold text-ninja-navy truncate">{row.full_name}</p>
                 <p className="font-ninja text-xs text-ninja-muted truncate">
-                  {row.belt_level_at}{row.belt_sublevel_at ? ` · Level ${row.belt_sublevel_at}` : ''} · {authorName(row.sensei_name)}
+                  {row.belt_level_at}{row.belt_sublevel_at ? ` · Level ${row.belt_sublevel_at}` : ''}
                 </p>
               </div>
-              <span className="font-ninja text-xs text-ninja-muted shrink-0 tabular-nums">{formatDate(row.session_date)}</span>
+              <div className="shrink-0 text-right">
+                <p className="font-ninja text-[13px] text-ninja-navy tabular-nums">{shortDate(row.session_date)}</p>
+                <p className="font-ninja text-xs text-ninja-muted truncate max-w-[9rem]">{authorName(row.sensei_name)}</p>
+              </div>
             </motion.li>
           ))}
         </ul>
@@ -358,7 +342,7 @@ export default function ReportsPage() {
             <StatStrip
               stats={[
                 { label: 'Active ninjas', value: totalStudents },
-                { label: 'Enrollments', value: enrollments, sub: `across ${data.enrollment.length} program${data.enrollment.length === 1 ? '' : 's'}` },
+                { label: 'Enrollments', value: enrollments, sub: `across ${plural(data.enrollment.length, 'program')}` },
                 { label: 'Belt-ups', value: data.beltLog.length, sub: 'last 30 days' },
                 {
                   label: 'Inactive',
