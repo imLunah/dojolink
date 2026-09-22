@@ -748,9 +748,7 @@ function QuickLinksCard({ isManager }) {
 function KioskCard() {
   return (
     <Link to="/manager/kiosk" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
-      <span className="w-10 h-10 rounded-xl flex items-center justify-center bg-ninja-blue/10 text-ninja-blue-ink flex-shrink-0">
-        <TabletSmartphoneIcon className="w-5 h-5" strokeWidth={1.9} aria-hidden />
-      </span>
+      <TabletSmartphoneIcon className="w-5 h-5 flex-shrink-0 text-ninja-muted group-hover:text-ninja-blue transition-colors" strokeWidth={1.9} aria-hidden />
       <span className="font-ninja font-bold text-ninja-navy text-lg group-hover:text-ninja-blue transition-colors">Check-in kiosk</span>
       <ChevronRightIcon className="ml-auto w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />
     </Link>

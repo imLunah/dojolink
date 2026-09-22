@@ -4,6 +4,7 @@ import { TabletSmartphoneIcon } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import { CARD } from '../../lib/surfaces';
 import { SkeletonList } from '../../components/ui/Skeleton';
+import Segmented from '../../components/ui/Segmented';
 import { api } from '../../api/client';
 
 // Setting up the check-in kiosk. A center that connected MyStudio with its
@@ -195,32 +196,28 @@ export default function KioskSetupPage() {
 
             {ready && (
               <section className={`${CARD} p-5 space-y-3`}>
-                <h2 id="kiosk-flow-heading" className="font-ninja font-extrabold text-base text-ninja-navy">Start with</h2>
-                <div role="radiogroup" aria-labelledby="kiosk-flow-heading" className="grid sm:grid-cols-2 gap-2">
-                  {[
-                    { key: 'name', label: "Ninja's name", hint: 'Find the ninja, then pick one of their classes.' },
-                    { key: 'class', label: 'Class', hint: "Pick today's class, then find the ninja in it." },
-                  ].map((o) => {
-                    const on = (setup.flow || 'name') === o.key;
-                    return (
-                      <button
-                        key={o.key} type="button" role="radio" aria-checked={on} onClick={() => setFlow(o.key)}
-                        className={`text-left rounded-xl border px-4 py-3 transition-colors ${on ? 'border-ninja-blue bg-ninja-blue/10' : 'border-ninja-border hover:bg-ninja-bg'}`}
-                      >
-                        <span className={`block font-ninja text-sm font-bold ${on ? 'text-ninja-blue-ink' : 'text-ninja-navy'}`}>{o.label}</span>
-                        <span className="block font-ninja text-xs text-ninja-muted mt-0.5">{o.hint}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Start with</h2>
+                <Segmented
+                  label="Start with"
+                  layoutId="kiosk-flow"
+                  value={setup.flow || 'name'}
+                  onChange={setFlow}
+                  options={[
+                    { value: 'name', label: "Ninja's name" },
+                    { value: 'class', label: 'Class' },
+                  ]}
+                />
+                <p className="font-ninja text-sm text-ninja-muted">
+                  {(setup.flow || 'name') === 'class'
+                    ? "Families pick today's class, then find their ninja in it."
+                    : 'Families find their ninja, then pick one of their classes.'}
+                </p>
               </section>
             )}
 
             <section className={`${CARD} p-5 space-y-4 ${ready ? '' : 'opacity-60'}`}>
               <div className="flex items-start gap-3">
-                <span className="w-10 h-10 rounded-xl flex items-center justify-center bg-ninja-blue/10 text-ninja-blue-ink flex-shrink-0">
-                  <TabletSmartphoneIcon size={20} strokeWidth={1.9} aria-hidden />
-                </span>
+                <TabletSmartphoneIcon size={20} strokeWidth={1.9} className="mt-0.5 flex-shrink-0 text-ninja-muted" aria-hidden />
                 <div className="min-w-0">
                   <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Open the kiosk</h2>
                   <p className="font-ninja text-sm text-ninja-muted mt-0.5">
