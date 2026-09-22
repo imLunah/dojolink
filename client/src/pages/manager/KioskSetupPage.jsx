@@ -134,7 +134,7 @@ export default function KioskSetupPage() {
         <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE }}>
           <h1 className="font-ninja font-extrabold text-2xl text-ninja-navy">Kiosk</h1>
           <p className="font-ninja text-sm text-ninja-muted mt-0.5">
-            Families check in their booked ninja on a tablet. Each check-in goes to MyStudio and onto Today's Board.
+            Families check their ninja in on a tablet. Each check-in goes to MyStudio and onto Today's Board.
           </p>
         </motion.header>
 

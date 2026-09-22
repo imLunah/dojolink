@@ -629,44 +629,56 @@ describe('check-in kiosk', () => {
     participant_id: '9001',
     participant_first_name: 'Testy',
     participant_last_name: 'McExample',
+    membership_registration_id: '777',
+    type: 'membership',
+    category_title: 'CODE NINJAS: CREATE',
+    membership_title: 'Monthly (2x/Week)',
+    more_reg: 'N',
     real_pin: '1234',
     date_of_birth: '2015-01-01',
     student_email: 'kid@example.invalid',
     student_mobile: '5550000000',
     buyer_first_name: 'Parent',
     buyer_postal_code: '90000',
-    class_reg_id: '44',
-    class_registration_detail_id: '55',
-    checkin_status: '',
   };
 
-  it('keeps nothing personal on a booking', () => {
-    const b = ms.normalizeBooking(row, cls);
-    expect(b).toMatchObject({
+  it('keeps nothing personal on a member', () => {
+    const m = ms.normalizeKioskMember(row);
+    expect(m).toMatchObject({
       participantId: '9001',
       fullName: 'Testy McExample',
-      classKey: '11:22:33',
-      program: 'CREATE',
-      checkedIn: false,
+      membershipRegistrationId: '777',
+      moreReg: false,
     });
-    const text = JSON.stringify(b);
+    const text = JSON.stringify(m);
     for (const leak of ['1234', '2015-01-01', 'kid@example', '5550000000', 'Parent', '90000']) {
       expect(text).not.toContain(leak);
     }
   });
 
-  it('opens an hour before a class and closes when it ends', () => {
+  it('offers a class until it ends', () => {
     const at = (h, m) => h * 60 + m;
-    expect(ms.inKioskWindow(cls, at(14, 59))).toBe(false);
-    expect(ms.inKioskWindow(cls, at(15, 0))).toBe(true);
-    expect(ms.inKioskWindow(cls, at(16, 30))).toBe(true);
-    expect(ms.inKioskWindow(cls, at(17, 0))).toBe(true);
-    expect(ms.inKioskWindow(cls, at(17, 1))).toBe(false);
+    expect(ms.classOpen(cls, at(9, 0))).toBe(true);
+    expect(ms.classOpen(cls, at(17, 0))).toBe(true);
+    expect(ms.classOpen(cls, at(17, 1))).toBe(false);
   });
 
   it('never offers a drop-in', () => {
     const dropIn = { ...cls, class_appointment_occurrence_id: '', start_time: 'Drop-in', end_time: '' };
-    expect(ms.inKioskWindow(dropIn, 16 * 60)).toBe(false);
+    expect(ms.classOpen(dropIn, 16 * 60)).toBe(false);
+  });
+
+  // The only guard between a mistaken tap and a wrong attendance on a
+  // family's membership, since the center lets the portal past its limits.
+  it('registers a membership only into the classes it covers', () => {
+    expect(ms.classFitsMembership('CREATE', 'CREATE')).toBe(true);
+    expect(ms.classFitsMembership('Academies', 'CREATE')).toBe(true);
+    expect(ms.classFitsMembership('Robotics Academy', 'CREATE')).toBe(true);
+    expect(ms.classFitsMembership('JR', 'CREATE')).toBe(false);
+    expect(ms.classFitsMembership('Minecraft Club', 'CREATE')).toBe(false);
+    expect(ms.classFitsMembership('JR', 'JR')).toBe(true);
+    expect(ms.classFitsMembership('CREATE', 'JR')).toBe(false);
+    expect(ms.classFitsMembership('CREATE', null)).toBe(false);
   });
 
   it('escapes strings React would read as references', () => {

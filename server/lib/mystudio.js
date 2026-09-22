@@ -1251,19 +1251,25 @@ async function getExpectedForDate(cookieOrSession, companyId, date) {
 // ---------------------------------------------------------------------------
 // The check-in portal (the kiosk)
 //
-// This is the one place DojoLink writes to MyStudio, and it writes one thing:
-// a check-in for a child who is already booked into a class today. The owner
-// chose to allow that write on 22 Sep 2026 so families can check in at a
-// DojoLink kiosk. Everything else in this file is still read-only, and every
-// other write path the portal has stays uncalled on purpose:
+// This is the one place DojoLink writes to MyStudio. The owner chose on 22 Sep
+// 2026 to let families check in at a DojoLink kiosk the way they do at
+// MyStudio's own: search for their child, pick one of today's classes, and be
+// checked in, booked into the class first if they had no place in it. Two
+// portal actions are called, and only these two:
 //
-//   - registerParticipantAttendance registers a child who is NOT booked. It is
-//     what MyStudio's own kiosk does for a walk-in, and it is the path that
-//     reaches a membership's limits and a card. A child with no booking is sent
-//     to the front desk instead.
-//   - waivecheckformemortrial is the drop-in and trial path. Drop-in classes are
-//     never offered.
-//   - participantCancelCurrentAppointment can cancel a registration. Not used.
+//   - checkInParticipant, for a child already booked into the class.
+//   - registerParticipantAttendance, for a child who is not. This books them
+//     in and counts against their membership, exactly as MyStudio's own kiosk
+//     does for a walk-in. It is only offered for a class the child's membership
+//     covers (see classFitsMembership), never for a club, and never for a child
+//     holding more than one membership, because the portal would then have to
+//     ask which one to charge.
+//
+// Still never called: waivecheckformemortrial (drop-ins and trials, which
+// carry a price), registerParticipantAttendanceWithCCNumber (asks for a card),
+// and participantCancelCurrentAppointment (can cancel a registration). When
+// MyStudio answers a check-in by asking for a card, the family is sent to the
+// front desk.
 //
 // The portal is its own app at /attendance-portal with its own sign-in. That
 // sign-in has no emailed code and hands back a per-center token the portal
@@ -1272,23 +1278,15 @@ async function getExpectedForDate(cookieOrSession, companyId, date) {
 // nothing else: measured, the class list answers with that cookie alone and
 // bounces to the portal's login page without it.
 //
-// The portal's participant list is every active member at the center with
-// `class_reg_id` set only on the ones booked into the class asked about. Same
-// trap as rule 1 at the top of this file, in a different shape: only a row
-// carrying class_reg_id is a booking. The rows also carry the PII listed in
-// rule 2, plus the child's check-in PIN, which MyStudio's own kiosk compares in
-// the browser. The raw row is held only for the length of one check-in call,
-// because the portal's action is sent the whole row back, and nothing of it
-// leaves this file except what normalizeBooking copies.
+// The portal's member rows carry the PII listed in rule 2 at the top of this
+// file, plus the child's check-in PIN, which MyStudio's own kiosk compares in
+// the browser. A raw row is held only for the length of one call, because the
+// portal's actions are sent the whole row back. Nothing of it leaves this file
+// except what normalizeKioskMember copies.
 // ---------------------------------------------------------------------------
 
 const PORTAL_LOGIN_PATH = '/attendance-portal/login';
 const PORTAL_CHECKIN_PATH = '/attendance-portal/classes/check-in';
-
-// A booking can be checked into from an hour before it starts until it ends.
-// Wide enough for a family that arrives early, narrow enough that the four
-// o'clock kid cannot be checked into the six o'clock class by mistake.
-const KIOSK_EARLY_MINUTES = 60;
 
 // Said to a family at the kiosk. The message is safe to put on screen.
 class MyStudioCheckInRefused extends MyStudioError {
@@ -1500,7 +1498,10 @@ function isDropInClass(cls) {
   return !String(cls.class_appointment_occurrence_id || '');
 }
 
-// Every row the portal returns for one class, raw. Stays inside this file.
+// The rows the portal returns for one class, raw, narrowed to one child when
+// `participantId` is given. Each row's class_reg_id is that child's booking in
+// THIS class, which is why a check-in always reads the row through here rather
+// than from the center-wide list. Stays inside this file.
 async function portalParticipants(token, cls, participantId) {
   const data = await portalGet(token, '/api/attendance/getAllParticipantsBasedOnSelectedClass', {
     program_date: cls.class_appointment_date,
@@ -1519,8 +1520,31 @@ function isCheckedInRow(row) {
   return Boolean(String(row.checkin_status || '').trim() || row.att_checkin_datetime);
 }
 
-// What the kiosk is allowed to know about one booking.
-function normalizeBooking(row, cls) {
+// Which classes a membership may be registered into from the kiosk.
+//
+// The center's memberships are "CODE NINJAS: CREATE" and "CODE NINJAS: JR",
+// and a CREATE membership is what Academies and Robotics Academy kids hold
+// (measured: a booked Robotics Academy child is on a CREATE membership). So
+// JR covers JR classes, and CREATE covers every other class except clubs,
+// which are sold separately. Anything else is a front desk conversation. The
+// portal itself would register any child into any class, and this center's
+// settings let it past limits and full capacity, so this is the only check
+// between a mistaken tap and a wrong attendance on a family's membership.
+function membershipProgram(member) {
+  return programForMembership(member.categoryTitle, member.membershipTitle);
+}
+
+function classFitsMembership(className, program) {
+  if (!program || isClubClass(className)) return false;
+  const isJr = /\bjr\b/i.test(className);
+  if (program === 'JR') return isJr;
+  if (program === 'CREATE') return !isJr;
+  return false;
+}
+
+// What the kiosk keeps about a member: enough to search by and to ask
+// MyStudio for their classes. Nothing personal beyond the name.
+function normalizeKioskMember(row) {
   const first = String(row.participant_first_name || '').trim();
   const last = String(row.participant_last_name || '').trim();
   return {
@@ -1528,57 +1552,116 @@ function normalizeBooking(row, cls) {
     firstName: first,
     lastName: last,
     fullName: [first, last].filter(Boolean).join(' '),
-    classKey: portalClassKey(cls),
-    className: String(cls.class_appointment_title || '').trim(),
-    startTime: String(cls.start_time || '').trim(),
-    endTime: String(cls.end_time || '').trim(),
-    program: programForClass(cls.class_appointment_title),
-    isClub: isClubClass(cls.class_appointment_title),
-    checkedIn: isCheckedInRow(row),
+    membershipRegistrationId: String(row.membership_registration_id || ''),
+    type: String(row.type || ''),
+    categoryTitle: String(row.category_title || ''),
+    membershipTitle: String(row.membership_title || ''),
+    moreReg: row.more_reg === 'Y',
   };
 }
 
-function inKioskWindow(cls, nowMinutes) {
+// Every active member at the center today. The whole center is the question
+// here: a family at the kiosk may not have booked.
+async function getKioskMembers(token, date) {
+  const data = await portalGet(token, '/api/attendance/allParticipants', { program_date: date });
+  const groups = data && data.student_detail;
+  if (!groups || typeof groups !== 'object') {
+    throw new MyStudioError('MyStudio returned an unexpected response');
+  }
+  const seen = new Set();
+  const out = [];
+  for (const row of Object.values(groups).flat()) {
+    if (!row || row.inactive_status === 'Y') continue;
+    const m = normalizeKioskMember(row);
+    if (!m.participantId || seen.has(m.participantId)) continue;
+    seen.add(m.participantId);
+    out.push(m);
+  }
+  return out;
+}
+
+// A class is on offer all day until it ends. The family picks the time, so
+// there is no reason to hide the six o'clock class at four.
+function classOpen(cls, nowMinutes) {
   if (isDropInClass(cls)) return false;
   const start = toMinutes(cls.start_time);
   const end = toMinutes(cls.end_time);
   if (start === Number.MAX_SAFE_INTEGER) return false;
   const close = end === Number.MAX_SAFE_INTEGER ? start + 60 : end;
-  return nowMinutes >= start - KIOSK_EARLY_MINUTES && nowMinutes <= close;
+  return nowMinutes <= close;
 }
 
-// Everyone booked into a class that can be checked into right now.
-async function getKioskBookings(token, date, nowMinutes) {
-  const classes = (await portalClassList(token, date)).filter((c) => inKioskWindow(c, nowMinutes));
-  const perClass = await mapPooled(classes, 4, async (cls) => {
-    const rows = await portalParticipants(token, cls);
-    return rows.filter((r) => r.class_reg_id).map((r) => normalizeBooking(r, cls));
+// Today's classes for one member, in the shape the kiosk shows. `booked` means
+// they already have a place; `canRegister` means the kiosk may book them in.
+async function getKioskClassesFor(token, member, date, nowMinutes) {
+  const regType = member.type === 'membership' ? 'M' : member.type === 'trial' ? 'T' : '';
+  const data = await portalGet(token, '/api/attendance/getAvailableClassDetails', {
+    participant_id: member.participantId,
+    reg_id: member.membershipRegistrationId,
+    reg_id_type: regType,
+    selected_date: date,
   });
-  return perClass.flat().filter((b) => b.participantId);
+  const list = data && Array.isArray(data.class_details) ? data.class_details : [];
+  const program = membershipProgram(member);
+
+  return list
+    .filter((cls) => classOpen(cls, nowMinutes))
+    .map((cls) => {
+      const className = String(cls.class_appointment_title || '').trim();
+      const booked = Boolean(cls.class_reg_id);
+      return {
+        classKey: portalClassKey(cls),
+        className,
+        startTime: String(cls.start_time || '').trim(),
+        endTime: String(cls.end_time || '').trim(),
+        booked,
+        checkedIn: isCheckedInRow(cls),
+        canRegister: !booked && !member.moreReg && classFitsMembership(className, program),
+      };
+    })
+    .filter((c) => c.booked || c.canRegister)
+    .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime) || a.className.localeCompare(b.className));
 }
 
-// Checks one booked child in. Everything is re-read from MyStudio first rather
-// than trusted from the search a moment ago: the booking, that it is still
-// open, and that nobody checked them in at the desk in the meantime.
-async function kioskCheckIn(token, { date, classKey, participantId, nowMinutes }) {
+// Checks one child in, booking them into the class first when they have no
+// place in it, the way MyStudio's own kiosk does. Everything is re-read from
+// MyStudio rather than trusted from what the kiosk showed a moment ago.
+async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
   const classes = await portalClassList(token, date);
   const cls = classes.find((c) => portalClassKey(c) === classKey);
   if (!cls) throw new MyStudioCheckInRefused("That class isn't on today's schedule. Please see the front desk.");
-  if (!inKioskWindow(cls, nowMinutes)) {
-    throw new MyStudioCheckInRefused("That class isn't open for check-in right now. Please see the front desk.");
+  if (!classOpen(cls, nowMinutes)) {
+    throw new MyStudioCheckInRefused('That class has already ended. Please see the front desk.');
   }
 
-  const rows = await portalParticipants(token, cls, participantId);
-  const row = rows.find((r) => String(r.participant_id) === String(participantId));
-  if (!row || !row.class_reg_id) {
-    throw new MyStudioCheckInRefused("We couldn't find a booking for this class. Please see the front desk.");
+  const rows = await portalParticipants(token, cls, member.participantId);
+  const row = rows.find((r) => String(r.participant_id) === String(member.participantId));
+  if (!row) throw new MyStudioCheckInRefused('Please see the front desk to check in.');
+
+  const className = String(cls.class_appointment_title || '').trim();
+  const booked = Boolean(row.class_reg_id);
+  const outcome = {
+    participantId: member.participantId,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    fullName: member.fullName,
+    classKey,
+    className,
+    startTime: String(cls.start_time || '').trim(),
+    program: programForClass(className),
+    isClub: isClubClass(className),
+  };
+
+  if (booked && isCheckedInRow(row)) return { ...outcome, already: true, registered: false };
+
+  if (!booked) {
+    if (row.more_reg === 'Y' || !classFitsMembership(className, membershipProgram(normalizeKioskMember(row)))) {
+      throw new MyStudioCheckInRefused('Please see the front desk to join this class.');
+    }
   }
 
-  const booking = normalizeBooking(row, cls);
-  if (booking.checkedIn) return { booking, already: true };
-
-  // Exactly what the portal sends for a booked child: the class it was opened
-  // on plus this booking's two ids, and the member row as MyStudio gave it.
+  // Exactly what the portal sends: the class row with this child's booking ids
+  // laid over it, and the member row as MyStudio gave it.
   const classDetails = {
     ...cls,
     class_reg_id: row.class_reg_id,
@@ -1586,17 +1669,22 @@ async function kioskCheckIn(token, { date, classKey, participantId, nowMinutes }
     att_attendance_status: '',
   };
   const body = encodeActionArgs([{ classDetails, membership: row }]);
+  const actionName = booked ? 'checkInParticipant' : 'registerParticipantAttendance';
 
   const run = async (force) => {
-    const ids = await portalActionIds(PORTAL_CHECKIN_PATH, ['checkInParticipant'], { token, force });
-    return callPortalAction(PORTAL_CHECKIN_PATH, ids.checkInParticipant, body, {
+    const ids = await portalActionIds(
+      PORTAL_CHECKIN_PATH,
+      ['checkInParticipant', 'registerParticipantAttendance'],
+      { token, force }
+    );
+    return callPortalAction(PORTAL_CHECKIN_PATH, ids[actionName], body, {
       token,
       contentType: 'text/plain;charset=UTF-8',
     });
   };
 
   // A null result means the action id was stale and nothing ran, so one retry
-  // with fresh ids cannot check anyone in twice.
+  // with fresh ids cannot act twice.
   let result = await run(false);
   if (result === null) result = await run(true);
   if (result === null) throw new MyStudioSignInUnavailable('MyStudio changed their check-in page.');
@@ -1604,10 +1692,16 @@ async function kioskCheckIn(token, { date, classKey, participantId, nowMinutes }
   // Field names only. The error text can name the child.
   const shape = result && typeof result === 'object' ? Object.keys(result).join(',') : typeof result;
 
-  if (result && result.success === true) return { booking, already: false };
+  if (result && result.success === true) return { ...outcome, already: false, registered: !booked };
+
+  if (result && result.action && result.action.type === 'check_cc_number') {
+    // MyStudio wants the card on file confirmed. That is not a tablet question.
+    console.error(`MyStudio kiosk ${actionName} wants a card: keys=[${shape}]`);
+    throw new MyStudioCheckInRefused('Please see the front desk to finish checking in.');
+  }
 
   if (result && result.error) {
-    console.error(`MyStudio kiosk check-in refused: keys=[${shape}]`);
+    console.error(`MyStudio kiosk ${actionName} refused: keys=[${shape}]`);
     const message = typeof result.error === 'string' ? result.error : (result.error.message || '');
     throw new MyStudioCheckInRefused(
       (message && `${String(message).trim()} Please see the front desk.`) ||
@@ -1615,9 +1709,7 @@ async function kioskCheckIn(token, { date, classKey, participantId, nowMinutes }
     );
   }
 
-  // Anything else, including the portal asking for card details, is a
-  // conversation for the front desk and not for a tablet.
-  console.error(`MyStudio kiosk check-in unexpected result: keys=[${shape}]`);
+  console.error(`MyStudio kiosk ${actionName} unexpected result: keys=[${shape}]`);
   throw new MyStudioCheckInRefused('Please see the front desk to finish checking in.');
 }
 
@@ -1626,11 +1718,13 @@ module.exports = {
   MyStudioCheckInRefused,
   portalLogin,
   portalClassList,
-  getKioskBookings,
+  getKioskMembers,
+  getKioskClassesFor,
   kioskCheckIn,
   encodeActionArgs,
-  inKioskWindow,
-  normalizeBooking,
+  classOpen,
+  classFitsMembership,
+  normalizeKioskMember,
   cleanPortalToken,
   MyStudioError,
   MyStudioSignInUnavailable,

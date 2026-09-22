@@ -13,10 +13,13 @@ const { addToBoard } = require('../lib/boardCheckIn');
 // staff route answers 401 and a family at the tablet cannot reach the app behind
 // it. Leaving takes any staff member's DojoLink username and password.
 //
-// A family searches for their ninja among today's bookings and taps to check
-// in. The check-in goes to MyStudio first, because that is the system of record
-// and the one that can say no. Only once it has accepted does the ninja go on
-// Today's Board, through the same addToBoard that POST /api/daily uses.
+// A family searches for their ninja by name, picks one of today's classes and
+// taps to check in. A child with no place in that class is booked into it
+// first, the way MyStudio's own kiosk does (see the kiosk section of
+// lib/mystudio.js for what is and is not allowed). The check-in goes to
+// MyStudio first, because that is the system of record and the one that can
+// say no. Only once it has accepted does the ninja go on Today's Board,
+// through the same addToBoard that POST /api/daily uses.
 
 function todayDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
@@ -65,29 +68,37 @@ async function markExpired(pool, id) {
   await pool.query(`UPDATE mystudio_kiosks SET status = 'expired' WHERE id = $1`, [id]);
 }
 
-// Today's bookings, briefly remembered per center. A family typing a name asks
+// Today's members, briefly remembered per center. A family typing a name asks
 // once per keystroke; MyStudio should be asked once in a while.
-const BOOKINGS_TTL_MS = 45 * 1000;
-const bookingsCache = new Map();
+const MEMBERS_TTL_MS = 60 * 1000;
+const membersCache = new Map();
 
-async function bookingsFor(kiosk, locationId) {
+async function membersFor(kiosk, locationId, { fresh = false } = {}) {
   const date = todayDate();
   const key = `${locationId}:${date}`;
-  const hit = bookingsCache.get(key);
-  if (hit && hit.expiresAt > Date.now()) return hit.bookings;
+  const hit = membersCache.get(key);
+  if (!fresh && hit && hit.expiresAt > Date.now()) return hit.members;
 
-  const bookings = await ms.getKioskBookings(
-    ms.decryptCookie(kiosk.portal_token),
-    date,
-    nowMinutes()
-  );
-  bookingsCache.set(key, { bookings, expiresAt: Date.now() + BOOKINGS_TTL_MS });
-  for (const [k, v] of bookingsCache) if (v.expiresAt <= Date.now()) bookingsCache.delete(k);
-  return bookings;
+  const members = await ms.getKioskMembers(ms.decryptCookie(kiosk.portal_token), date);
+  membersCache.set(key, { members, expiresAt: Date.now() + MEMBERS_TTL_MS });
+  for (const [k, v] of membersCache) if (v.expiresAt <= Date.now()) membersCache.delete(k);
+  return members;
 }
 
-function forgetBookings(locationId) {
-  for (const k of bookingsCache.keys()) if (k.startsWith(`${locationId}:`)) bookingsCache.delete(k);
+// The member a request names, looked up on our side so the client never
+// supplies the membership ids that go to MyStudio.
+async function findMember(kiosk, locationId, participantId) {
+  let members = await membersFor(kiosk, locationId);
+  let member = members.find((m) => m.participantId === participantId);
+  if (!member) {
+    members = await membersFor(kiosk, locationId, { fresh: true });
+    member = members.find((m) => m.participantId === participantId);
+  }
+  return member || null;
+}
+
+function forgetMembers(locationId) {
+  for (const k of membersCache.keys()) if (k.startsWith(`${locationId}:`)) membersCache.delete(k);
 }
 
 async function logCheckIn(pool, row) {
@@ -276,7 +287,7 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
         ms.encryptCookie(branch.token),
       ]
     );
-    forgetBookings(locationId);
+    forgetMembers(locationId);
 
     const kiosk = await loadKiosk(pool, locationId);
     res.json({ configured: true, ...publicShape(kiosk) });
@@ -291,7 +302,7 @@ router.delete('/setup', requireManager, requireOwnLocation, async (req, res) => 
   const pool = req.app.get('db');
   try {
     await pool.query('DELETE FROM mystudio_kiosks WHERE location_id = $1', [req.session.activeLocationId]);
-    forgetBookings(req.session.activeLocationId);
+    forgetMembers(req.session.activeLocationId);
     res.json({ connected: false });
   } catch (err) {
     console.error('Kiosk disconnect failed:', err.message);
@@ -355,8 +366,10 @@ router.get('/me', async (req, res) => {
 
 // GET /api/kiosk/search?q=
 //
-// Matches today's bookings only, and only after two letters, so the tablet
-// never lists the day's children to whoever walks up to it.
+// Every active member at the center, not only today's bookings, because a
+// family may not have booked. Only after two letters, and only a first name and
+// last initial, so the tablet never lists the center's children to whoever
+// walks up to it.
 router.get('/search', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.kiosk.locationId;
@@ -367,42 +380,72 @@ router.get('/search', requireKiosk, async (req, res) => {
     const kiosk = await loadKiosk(pool, locationId);
     if (!kiosk || kiosk.status !== 'connected') return res.json({ unavailable: true, results: [] });
 
-    let bookings;
+    let members;
     try {
-      bookings = await bookingsFor(kiosk, locationId);
+      members = await membersFor(kiosk, locationId);
     } catch (err) {
       if (err instanceof ms.MyStudioAuthError) {
         await markExpired(pool, kiosk.id);
         return res.json({ unavailable: true, results: [] });
       }
-      console.error('Kiosk bookings pull failed:', err.message);
+      console.error('Kiosk members pull failed:', err.message);
       return res.status(502).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
     }
 
     const words = q.split(' ');
-    const results = bookings
-      .filter((b) => {
-        const first = b.firstName.toLowerCase();
-        const last = b.lastName.toLowerCase();
-        const full = `${first} ${last}`;
-        if (words.length > 1) return full.startsWith(q);
+    const results = members
+      .filter((m) => {
+        const first = m.firstName.toLowerCase();
+        const last = m.lastName.toLowerCase();
+        if (words.length > 1) return `${first} ${last}`.startsWith(q);
         return first.startsWith(q) || last.startsWith(q);
       })
+      .sort((a, b) => a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName))
       .slice(0, 8)
-      .map((b) => ({
-        participantId: b.participantId,
-        classKey: b.classKey,
-        firstName: b.firstName,
-        lastInitial: b.lastName ? `${b.lastName[0].toUpperCase()}.` : '',
-        className: b.className,
-        startTime: b.startTime,
-        checkedIn: b.checkedIn,
+      .map((m) => ({
+        participantId: m.participantId,
+        firstName: m.firstName,
+        lastInitial: m.lastName ? `${m.lastName[0].toUpperCase()}.` : '',
       }));
 
     res.json({ results });
   } catch (err) {
     console.error('Kiosk search failed:', err.message);
     res.status(500).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
+  }
+});
+
+// GET /api/kiosk/classes?participantId=
+//
+// Today's classes this child can be checked into: the ones they are booked in,
+// and the ones their membership covers.
+router.get('/classes', requireKiosk, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = req.session.kiosk.locationId;
+  const participantId = String(req.query.participantId || '').trim();
+  if (!/^\d{1,20}$/.test(participantId)) return res.status(400).json({ error: 'Something went wrong. Please try again.' });
+
+  try {
+    const kiosk = await loadKiosk(pool, locationId);
+    if (!kiosk || kiosk.status !== 'connected') {
+      return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
+    }
+    const member = await findMember(kiosk, locationId, participantId);
+    if (!member) return res.status(404).json({ error: 'Please see the front desk to check in.' });
+
+    const classes = await ms.getKioskClassesFor(
+      ms.decryptCookie(kiosk.portal_token),
+      member,
+      todayDate(),
+      nowMinutes()
+    );
+    res.json({ classes });
+  } catch (err) {
+    if (err instanceof ms.MyStudioAuthError) {
+      return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
+    }
+    console.error('Kiosk classes failed:', err.message);
+    res.status(502).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
   }
 });
 
@@ -413,7 +456,7 @@ router.post('/checkin', requireKiosk, async (req, res) => {
   const participantId = String((req.body && req.body.participantId) || '').trim();
   const classKey = String((req.body && req.body.classKey) || '').trim();
 
-  if (!/^\d{1,20}$/.test(participantId) || !/^[\d:]{1,80}$/.test(classKey)) {
+  if (!/^\d{1,20}$/.test(participantId) || !/^\d+:\d+:\d+$/.test(classKey)) {
     return res.status(400).json({ error: 'Something went wrong. Please try again.' });
   }
 
@@ -432,10 +475,12 @@ router.post('/checkin', requireKiosk, async (req, res) => {
 
   let outcome;
   try {
+    const member = await findMember(kiosk, locationId, participantId);
+    if (!member) throw new ms.MyStudioCheckInRefused('Please see the front desk to check in.');
     outcome = await ms.kioskCheckIn(ms.decryptCookie(kiosk.portal_token), {
       date: todayDate(),
       classKey,
-      participantId,
+      member,
       nowMinutes: nowMinutes(),
     });
   } catch (err) {
@@ -459,28 +504,31 @@ router.post('/checkin', requireKiosk, async (req, res) => {
     });
   }
 
-  forgetBookings(locationId);
-  const { booking, already } = outcome;
-  const base = { ...log, className: booking.className, startTime: booking.startTime };
+  const { already, registered } = outcome;
+  const base = { ...log, className: outcome.className, startTime: outcome.startTime };
 
   // MyStudio has the check-in. The board is DojoLink's own copy and a failure
   // here is logged and survived, not reported as a failed check-in.
   let board = { studentId: null, assignmentId: null };
   try {
-    board = await addKioskCheckInToBoard(pool, locationId, booking);
+    board = await addKioskCheckInToBoard(pool, locationId, outcome);
   } catch (err) {
     console.error('Kiosk board check-in failed:', err.message);
   }
 
-  await logCheckIn(pool, { ...base, ...board, result: already ? 'already' : 'checked_in' });
+  await logCheckIn(pool, {
+    ...base,
+    ...board,
+    result: already ? 'already' : registered ? 'registered' : 'checked_in',
+  });
   pool.query('UPDATE mystudio_kiosks SET last_used_at = now() WHERE id = $1', [kiosk.id]).catch(() => {});
 
   res.json({
     ok: true,
     already,
-    firstName: booking.firstName,
-    className: booking.className,
-    startTime: booking.startTime,
+    firstName: outcome.firstName,
+    className: outcome.className,
+    startTime: outcome.startTime,
   });
 });
 

@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckIcon, SearchIcon } from 'lucide-react';
+import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import Logo from '../components/ui/Logo';
 import Modal from '../components/ui/Modal';
 import { api } from '../api/client';
 import { useLightOnly } from '../context/ThemeContext';
 
 // The check-in kiosk: a tablet on the front counter where a family finds their
-// ninja among today's bookings and checks them in. Runs on a kiosk session,
+// ninja, picks one of today's classes and checks in. A child with no place in
+// the class is booked into it first, the way MyStudio's own kiosk does; the
+// server decides which classes a membership may join. Runs on a kiosk session,
 // which is a center and nothing else, so nothing behind this page is reachable
-// from it. Only booked children can be found; everyone else is sent to the
-// front desk, because checking in a child who is not booked would register
-// them, and that is a conversation, not a tap.
+// from it.
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -92,8 +92,10 @@ export default function KioskPage() {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  const [member, setMember] = useState(null);
+  const [classes, setClasses] = useState(null);
   const [picked, setPicked] = useState(null);
-  const [step, setStep] = useState('search'); // search | confirm | working | done | error
+  const [step, setStep] = useState('search'); // search | classes | confirm | working | done | error
   const [outcome, setOutcome] = useState(null);
   const [staffOpen, setStaffOpen] = useState(false);
   const inputRef = useRef(null);
@@ -106,6 +108,8 @@ export default function KioskPage() {
   const reset = useCallback(() => {
     setQuery('');
     setResults([]);
+    setMember(null);
+    setClasses(null);
     setPicked(null);
     setOutcome(null);
     setStep('search');
@@ -139,7 +143,7 @@ export default function KioskPage() {
   useEffect(() => {
     if (step === 'done') { const id = setTimeout(reset, DONE_MS); return () => clearTimeout(id); }
     if (step === 'error') { const id = setTimeout(reset, ERROR_MS); return () => clearTimeout(id); }
-    if (step === 'confirm' || (step === 'search' && query)) {
+    if (step === 'classes' || step === 'confirm' || (step === 'search' && query)) {
       const id = setTimeout(reset, IDLE_MS);
       return () => clearTimeout(id);
     }
@@ -150,11 +154,24 @@ export default function KioskPage() {
     if (step === 'search' && me && !staffOpen) inputRef.current?.focus();
   }, [step, me, staffOpen]);
 
+  const pickMember = async (m) => {
+    setMember(m);
+    setClasses(null);
+    setStep('classes');
+    try {
+      const data = await api.get(`/kiosk/classes?participantId=${encodeURIComponent(m.participantId)}`);
+      setClasses(data.classes || []);
+    } catch (err) {
+      setOutcome({ error: err.message });
+      setStep('error');
+    }
+  };
+
   const checkIn = async () => {
-    if (!picked) return;
+    if (!picked || !member) return;
     setStep('working');
     try {
-      const data = await api.post('/kiosk/checkin', { participantId: picked.participantId, classKey: picked.classKey });
+      const data = await api.post('/kiosk/checkin', { participantId: member.participantId, classKey: picked.classKey });
       setOutcome(data);
       setStep('done');
     } catch (err) {
@@ -223,24 +240,18 @@ export default function KioskPage() {
                     <div className="mt-4 space-y-2" aria-live="polite">
                       {results.map((r) => (
                         <button
-                          key={`${r.participantId}-${r.classKey}`} type="button" disabled={r.checkedIn}
-                          onClick={() => { setPicked(r); setStep('confirm'); }}
-                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98] disabled:active:scale-100"
+                          key={r.participantId} type="button" onClick={() => pickMember(r)}
+                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
-                          <span className="min-w-0">
-                            <span className="block font-ninja font-extrabold text-xl text-ninja-navy truncate">
-                              {r.firstName} {r.lastInitial}
-                            </span>
-                            <span className="block font-ninja text-sm text-ninja-muted">{r.className} · {fmtTime(r.startTime)}</span>
+                          <span className="font-ninja font-extrabold text-xl text-ninja-navy truncate">
+                            {r.firstName} {r.lastInitial}
                           </span>
-                          <span className={`flex-shrink-0 font-ninja text-sm font-bold ${r.checkedIn ? 'text-ninja-muted' : 'text-ninja-blue-ink'}`}>
-                            {r.checkedIn ? 'Checked in' : 'Check in'}
-                          </span>
+                          <ChevronRightIcon size={22} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                         </button>
                       ))}
                       {q.length >= 2 && !searching && results.length === 0 && (
                         <p className="pt-2 font-ninja text-base text-ninja-muted text-center">
-                          No booking found for "{q}". Please see the front desk.
+                          No ninja found for "{q}". Please see the front desk.
                         </p>
                       )}
                     </div>
@@ -249,14 +260,55 @@ export default function KioskPage() {
               </Screen>
             )}
 
-            {step === 'confirm' && picked && (
+            {step === 'classes' && member && (
+              <Screen k="classes">
+                <h1 className="font-ninja font-extrabold text-3xl text-ninja-navy text-center">
+                  Which class is {member.firstName} here for?
+                </h1>
+                <div className="mt-6 space-y-2">
+                  {classes === null && (
+                    <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding today's classes…</p>
+                  )}
+                  {classes?.length === 0 && (
+                    <p className="font-ninja text-lg text-ninja-muted text-center">
+                      There are no classes for {member.firstName} to check in to today. Please see the front desk.
+                    </p>
+                  )}
+                  {classes?.map((c) => (
+                    <button
+                      key={c.classKey} type="button" disabled={c.checkedIn}
+                      onClick={() => { setPicked(c); setStep('confirm'); }}
+                      className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98] disabled:active:scale-100"
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">
+                          {fmtTime(c.startTime)}
+                        </span>
+                        <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
+                      </span>
+                      <span className={`flex-shrink-0 font-ninja text-sm font-bold ${c.checkedIn || !c.booked ? 'text-ninja-muted' : 'text-ninja-blue-ink'}`}>
+                        {c.checkedIn ? 'Checked in' : c.booked ? 'Booked' : ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-6 text-center">
+                  <button type="button" onClick={reset}
+                    className="font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
+                    Back
+                  </button>
+                </div>
+              </Screen>
+            )}
+
+            {step === 'confirm' && picked && member && (
               <Screen k="confirm">
                 <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center">
                   <p className="font-ninja font-bold text-base text-ninja-muted">Check in</p>
-                  <p className="mt-1 font-ninja font-extrabold text-4xl text-ninja-navy">{picked.firstName} {picked.lastInitial}</p>
+                  <p className="mt-1 font-ninja font-extrabold text-4xl text-ninja-navy">{member.firstName} {member.lastInitial}</p>
                   <p className="mt-2 font-ninja text-lg text-ninja-muted">{picked.className} · {fmtTime(picked.startTime)}</p>
                   <div className="mt-8 grid grid-cols-2 gap-3">
-                    <button type="button" onClick={reset}
+                    <button type="button" onClick={() => { setPicked(null); setStep('classes'); }}
                       className="font-ninja text-lg font-bold py-4 rounded-2xl border border-ninja-border text-ninja-navy">
                       Back
                     </button>
