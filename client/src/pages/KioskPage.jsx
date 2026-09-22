@@ -4,7 +4,7 @@ import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import Logo from '../components/ui/Logo';
 import { api } from '../api/client';
 import { useLightOnly } from '../context/ThemeContext';
-import { buildAccentTokens, buildCustomTokens } from '../lib/accents';
+import { buildAccentTokens, buildCustomTokens, accentInk } from '../lib/accents';
 
 // The check-in kiosk: a screen at the front counter, opened in a tab by a
 // signed-in director, where a family finds their ninja, picks one of today's
@@ -23,6 +23,28 @@ const AUTO_BACK_S = 10;
 const IDLE_MS = 30000;
 const AUTO_BACK_STEPS = new Set(['done', 'undone', 'error']);
 const RESULT_STEPS = new Set(['confirm', 'working', 'done', 'undone', 'error']);
+
+// DojoLink blue, for a center that has not picked a kiosk color.
+const DEFAULT_KIOSK_COLOR = '#006add';
+
+const hexRgb = (hex) => {
+  const n = parseInt(String(hex).slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+// t of the color, the rest white.
+const tint = (rgb, t) => rgb.map((v) => Math.round(v * t + 255 * (1 - t)));
+const css = (rgb) => `rgb(${rgb.join(' ')})`;
+
+// The theme a center's color paints: a panel running from a pale wash of the
+// color at the top to the full color at the bottom, like MyStudio's own
+// kiosk, with the date and time in a shade of it dark enough to read there.
+function kioskTheme(hex) {
+  const rgb = hexRgb(hex);
+  return {
+    panel: `linear-gradient(180deg, ${css(tint(rgb, 0.08))} 0%, ${css(tint(rgb, 0.3))} 38%, ${css(rgb)} 100%)`,
+    ink: css(accentInk(rgb, false)),
+  };
+}
 
 // MyStudio sends "04:00 PM".
 const fmtTime = (t) => String(t || '').replace(/^0(\d)/, '$1');
@@ -232,38 +254,49 @@ export default function KioskPage() {
   // The kiosk wears the center's color, set on the Kiosk page, rather than the
   // accent of whoever opened the tab. Every ninja-blue inside reads these.
   const colorVars = me.color ? buildCustomTokens(me.color, false) : buildAccentTokens('blue', false);
+  const theme = kioskTheme(me.color || DEFAULT_KIOSK_COLOR);
 
   return (
     // The page is exactly one screen and never scrolls; long lists scroll in
     // their own box, so the clock, the search and the back button stay put.
-    <div className="h-[100dvh] overflow-hidden bg-ninja-bg flex flex-col" style={colorVars}>
-      <header className="flex items-start justify-between gap-4 px-6 sm:px-10 pt-6">
-        <div>
-          <p className="font-ninja font-bold text-sm text-ninja-muted">
-            {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-          <p className="font-ninja font-extrabold text-2xl text-ninja-navy tabular-nums">
-            {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          </p>
+    // Landscape tablet: the center's color as a panel on the left, check-in on
+    // the right. Upright, the panel becomes a band across the top.
+    <div className="h-[100dvh] overflow-hidden bg-white flex flex-col lg:flex-row" style={colorVars}>
+      <aside
+        className="flex-shrink-0 lg:w-[44%] flex flex-col px-6 sm:px-10 pt-6 pb-6 lg:pb-12"
+        style={{ background: theme.panel }}
+      >
+        <div className="flex items-start justify-between gap-4 font-ninja font-bold text-lg lg:text-xl" style={{ color: theme.ink }}>
+          <div>
+            <p>{now.toLocaleDateString('en-US', { weekday: 'long' })}</p>
+            <p className="tabular-nums">{now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</p>
+          </div>
+          <p className="tabular-nums text-right">{now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
         </div>
-        <Logo className="h-8" />
-      </header>
+        <div className="lg:flex-1 flex items-center justify-center pt-4 lg:py-10">
+          {/* Inline white, not bg-white: this card sits on the color panel and
+              must not follow any theme override. */}
+          <div className="w-full max-w-md rounded-3xl px-8 py-6 lg:py-20 text-center shadow-sm" style={{ backgroundColor: 'rgb(255 255 255 / 0.88)' }}>
+            <Logo className="h-7 lg:h-9 mx-auto" />
+            <h1 className="mt-4 lg:mt-8 font-ninja font-extrabold text-3xl lg:text-5xl text-ninja-navy text-balance">
+              Welcome to {me.centerName}
+            </h1>
+          </div>
+        </div>
+      </aside>
 
-      <main className="flex-1 min-h-0 flex flex-col items-center px-6 sm:px-10 pt-8 sm:pt-12 pb-6">
+      <main className="flex-1 min-h-0 flex flex-col items-center px-6 sm:px-10 pt-6 lg:pt-12 pb-6">
         <div className={`w-full flex-1 min-h-0 flex flex-col ${RESULT_STEPS.has(step) ? 'max-w-2xl' : 'max-w-xl'}`}>
           <AnimatePresence mode="wait" initial={false}>
             {step === 'search' && (
               <Screen k="search">
-                <h1 className="font-ninja font-extrabold text-3xl sm:text-4xl text-ninja-navy text-center">
-                  Welcome to {me.centerName}
-                </h1>
                 {closed ? (
-                  <p className="mt-6 font-ninja text-lg text-ninja-muted text-center">
+                  <p className="font-ninja text-lg text-ninja-muted text-center">
                     Check-in is unavailable right now. Please see the front desk.
                   </p>
                 ) : (
                   <>
-                    <label htmlFor="kiosk-search" className="block mt-8 mb-2 font-ninja font-bold text-base text-ninja-navy text-center">
+                    <label htmlFor="kiosk-search" className="block mb-3 font-ninja font-bold text-xl text-ninja-navy text-center">
                       Find your ninja to check in
                     </label>
                     <div className="relative">
@@ -304,16 +337,13 @@ export default function KioskPage() {
 
             {step === 'schedule' && (
               <Screen k="schedule">
-                <h1 className="font-ninja font-extrabold text-3xl sm:text-4xl text-ninja-navy text-center">
-                  Welcome to {me.centerName}
-                </h1>
                 {closed ? (
-                  <p className="mt-6 font-ninja text-lg text-ninja-muted text-center">
+                  <p className="font-ninja text-lg text-ninja-muted text-center">
                     Check-in is unavailable right now. Please see the front desk.
                   </p>
                 ) : (
                   <>
-                    <p className="mt-8 mb-3 font-ninja font-bold text-base text-ninja-navy text-center">
+                    <p className="mb-3 font-ninja font-bold text-xl text-ninja-navy text-center">
                       Pick your class to check in
                     </p>
                     <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
