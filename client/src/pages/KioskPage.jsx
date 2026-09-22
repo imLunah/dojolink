@@ -56,14 +56,26 @@ export default function KioskPage() {
   const [picked, setPicked] = useState(null);
   // What the confirm screen is about to do to `picked`: check in, or undo.
   const [mode, setMode] = useState('checkin');
-  const [step, setStep] = useState('search'); // search | classes | confirm | working | done | undone | error
+  // Name first: search -> classes -> confirm. Class first: schedule -> roster -> confirm.
+  const [step, setStep] = useState('search'); // search | classes | schedule | roster | confirm | working | done | undone | error
+  const [schedule, setSchedule] = useState(null);
+  const [roster, setRoster] = useState(null);
+  const [rosterQuery, setRosterQuery] = useState('');
+  // Where Back on the confirm screen returns to.
+  const [confirmFrom, setConfirmFrom] = useState(null);
+  const homeStep = useRef('search');
   const [secondsLeft, setSecondsLeft] = useState(AUTO_BACK_S);
   const [outcome, setOutcome] = useState(null);
   const inputRef = useRef(null);
   const searchSeq = useRef(0);
 
   useEffect(() => {
-    api.get('/kiosk/me').then(setMe).catch(() => setMe(null));
+    api.get('/kiosk/me')
+      .then((data) => {
+        if (data?.flow === 'class') { homeStep.current = 'schedule'; setStep('schedule'); }
+        setMe(data);
+      })
+      .catch(() => setMe(null));
   }, []);
 
   const reset = useCallback(() => {
@@ -74,7 +86,10 @@ export default function KioskPage() {
     setPicked(null);
     setMode('checkin');
     setOutcome(null);
-    setStep('search');
+    setRoster(null);
+    setRosterQuery('');
+    setConfirmFrom(null);
+    setStep(homeStep.current);
   }, []);
 
   // The whole list shows before anyone types, and the box narrows it a beat
@@ -113,7 +128,7 @@ export default function KioskPage() {
   }, [step, secondsLeft, reset]);
 
   useEffect(() => {
-    if (step === 'classes' || step === 'confirm' || (step === 'search' && query)) {
+    if (step === 'classes' || step === 'roster' || step === 'confirm' || (step === 'search' && query)) {
       const id = setTimeout(reset, IDLE_MS);
       return () => clearTimeout(id);
     }
@@ -123,6 +138,38 @@ export default function KioskPage() {
   useEffect(() => {
     if (step === 'search' && me) inputRef.current?.focus();
   }, [step, me]);
+
+  // The class list is read fresh every time the kiosk comes back to it.
+  useEffect(() => {
+    if (step !== 'schedule' || !me?.ready) return undefined;
+    let alive = true;
+    setSchedule(null);
+    api.get('/kiosk/schedule')
+      .then((data) => { if (alive) { setUnavailable(Boolean(data.unavailable)); setSchedule(data.classes || []); } })
+      .catch((err) => { if (alive) { setOutcome({ error: err.message }); setStep('error'); } });
+    return () => { alive = false; };
+  }, [step, me]);
+
+  const pickClass = async (c) => {
+    setPicked(c);
+    setRoster(null);
+    setRosterQuery('');
+    setStep('roster');
+    try {
+      const data = await api.get(`/kiosk/roster?classKey=${encodeURIComponent(c.classKey)}`);
+      setRoster(data.roster || []);
+    } catch (err) {
+      setOutcome({ error: err.message });
+      setStep('error');
+    }
+  };
+
+  const pickFromRoster = (kid, action) => {
+    setMember(kid);
+    setMode(action);
+    setConfirmFrom('roster');
+    setStep('confirm');
+  };
 
   const pickMember = async (m) => {
     setMember(m);
@@ -158,6 +205,7 @@ export default function KioskPage() {
   const askUndo = (c) => {
     setPicked(c);
     setMode('undo');
+    setConfirmFrom(classes ? 'classes' : null);
     setStep('confirm');
   };
 
@@ -247,6 +295,114 @@ export default function KioskPage() {
               </Screen>
             )}
 
+            {step === 'schedule' && (
+              <Screen k="schedule">
+                <h1 className="font-ninja font-extrabold text-3xl sm:text-4xl text-ninja-navy text-center">
+                  Welcome to {me.centerName}
+                </h1>
+                {closed ? (
+                  <p className="mt-6 font-ninja text-lg text-ninja-muted text-center">
+                    Check-in is unavailable right now. Please see the front desk.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-8 mb-3 font-ninja font-bold text-base text-ninja-navy text-center">
+                      Pick your class to check in
+                    </p>
+                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
+                      {schedule === null && (
+                        <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding today's classes…</p>
+                      )}
+                      {schedule?.length === 0 && (
+                        <p className="font-ninja text-lg text-ninja-muted text-center">
+                          There are no more classes today. Please see the front desk.
+                        </p>
+                      )}
+                      {schedule?.map((c) => (
+                        <button
+                          key={c.classKey} type="button" onClick={() => pickClass(c)}
+                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-ninja font-extrabold text-xl text-ninja-navy tabular-nums">{fmtTime(c.startTime)}</span>
+                            <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
+                          </span>
+                          <ChevronRightIcon size={22} className="flex-shrink-0 text-ninja-muted" aria-hidden />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </Screen>
+            )}
+
+            {step === 'roster' && picked && (
+              <Screen k="roster">
+                <h1 className="font-ninja font-extrabold text-3xl text-ninja-navy text-center">
+                  {picked.className} · {fmtTime(picked.startTime)}
+                </h1>
+                <div className="relative mt-6">
+                  <SearchIcon size={22} className="absolute left-4 top-1/2 -translate-y-1/2 text-ninja-muted" aria-hidden />
+                  <input
+                    aria-label="Find your ninja" value={rosterQuery} onChange={(e) => setRosterQuery(e.target.value)}
+                    autoComplete="off" autoCorrect="off" autoCapitalize="words" spellCheck={false}
+                    className="w-full rounded-2xl border border-ninja-border bg-white pl-12 pr-4 py-4 font-ninja text-xl text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue"
+                    placeholder="Find your ninja"
+                  />
+                </div>
+                <div className="mt-4 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
+                  {roster === null && (
+                    <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding the class…</p>
+                  )}
+                  {(() => {
+                    if (!roster) return null;
+                    const rq = rosterQuery.trim().toLowerCase();
+                    const shown = rq ? roster.filter((k) => k.firstName.toLowerCase().startsWith(rq)) : roster;
+                    if (!shown.length) {
+                      return (
+                        <p className="font-ninja text-lg text-ninja-muted text-center">
+                          {rq ? `No ninja found for "${rosterQuery.trim()}".` : 'Nobody can check in to this class here.'} Please see the front desk.
+                        </p>
+                      );
+                    }
+                    return shown.map((k) => (
+                      k.checkedIn ? (
+                        <div key={k.participantId}
+                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-3.5">
+                          <span className="min-w-0">
+                            <span className="block font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastInitial}</span>
+                            <span className="block font-ninja text-sm text-ninja-muted">Checked in</span>
+                          </span>
+                          {k.undoable && (
+                            <button type="button" onClick={() => pickFromRoster(k, 'undo')}
+                              className="flex-shrink-0 font-ninja text-base font-bold px-6 py-3 rounded-xl bg-ninja-red text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]">
+                              Undo
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          key={k.participantId} type="button" onClick={() => pickFromRoster(k, 'checkin')}
+                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                        >
+                          <span className="font-ninja font-bold text-lg text-ninja-navy truncate">{k.firstName} {k.lastInitial}</span>
+                          {k.booked
+                            ? <span className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue-ink">Booked</span>
+                            : <ChevronRightIcon size={20} className="flex-shrink-0 text-ninja-muted" aria-hidden />}
+                        </button>
+                      )
+                    ));
+                  })()}
+                </div>
+                <div className="mt-6 flex-shrink-0 text-center">
+                  <button type="button" onClick={reset}
+                    className="font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
+                    Back
+                  </button>
+                </div>
+              </Screen>
+            )}
+
             {step === 'classes' && member && (
               <Screen k="classes">
                 <h1 className="font-ninja font-extrabold text-3xl text-ninja-navy text-center">
@@ -281,7 +437,7 @@ export default function KioskPage() {
                     ) : (
                       <button
                         key={c.classKey} type="button"
-                        onClick={() => { setPicked(c); setMode('checkin'); setStep('confirm'); }}
+                        onClick={() => { setPicked(c); setMode('checkin'); setConfirmFrom('classes'); setStep('confirm'); }}
                         className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                       >
                         <span className="min-w-0">
@@ -317,10 +473,11 @@ export default function KioskPage() {
                   <div className="mt-8 grid grid-cols-2 gap-3">
                     <button type="button"
                       onClick={() => {
-                        setPicked(null);
                         setMode('checkin');
-                        // Undo from the finished screen has no class list behind it.
-                        if (classes) setStep('classes'); else reset();
+                        if (confirmFrom === 'roster') { setStep('roster'); return; }
+                        setPicked(null);
+                        // Undo from the finished screen has no list behind it.
+                        if (confirmFrom === 'classes' && classes) setStep('classes'); else reset();
                       }}
                       className="font-ninja text-lg font-bold py-4 rounded-2xl border border-ninja-border text-ninja-navy">
                       Back

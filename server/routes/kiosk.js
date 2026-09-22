@@ -41,7 +41,7 @@ function nowMinutes() {
 async function loadKiosk(pool, locationId) {
   const { rows } = await pool.query(
     `SELECT k.id, k.location_id, k.company_id, k.company_name, k.login_email,
-            k.portal_token, k.status, k.connected_at, k.last_used_at,
+            k.portal_token, k.status, k.connected_at, k.last_used_at, k.flow,
             u.display_name AS connected_by_name
        FROM mystudio_kiosks k
        LEFT JOIN users u ON u.id = k.connected_by
@@ -62,6 +62,7 @@ function publicShape(kiosk) {
     connectedAt: kiosk.connected_at,
     connectedByName: kiosk.connected_by_name || null,
     lastUsedAt: kiosk.last_used_at,
+    flow: kiosk.flow === 'class' ? 'class' : 'name',
   };
 }
 
@@ -378,6 +379,26 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
   }
 });
 
+// PATCH /api/kiosk/setup  { flow: 'name' | 'class' }
+//
+// How the kiosk starts: find your ninja then pick a class, or pick the class
+// then find your ninja in it.
+router.patch('/setup', requireManager, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const flow = req.body && req.body.flow;
+  if (!['name', 'class'].includes(flow)) return res.status(400).json({ error: 'Pick how the kiosk starts.' });
+  try {
+    const locationId = req.session.activeLocationId;
+    const { rowCount } = await pool.query('UPDATE mystudio_kiosks SET flow = $2 WHERE location_id = $1', [locationId, flow]);
+    if (!rowCount) return res.status(400).json({ error: 'Turn the kiosk on first.' });
+    const kiosk = await loadKiosk(pool, locationId);
+    res.json({ configured: true, canUseSavedLogin: Boolean(await savedLogin(pool, locationId)), ...publicShape(kiosk) });
+  } catch (err) {
+    console.error('Kiosk flow save failed:', err.message);
+    res.status(500).json({ error: 'Failed to save the kiosk setting' });
+  }
+});
+
 // DELETE /api/kiosk/setup
 router.delete('/setup', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
@@ -416,6 +437,8 @@ router.get('/me', async (req, res) => {
     res.json({
       centerName: rows[0].name,
       ready: Boolean(kiosk && kiosk.status === 'connected'),
+      // Whether families start from their ninja's name or from the class.
+      flow: kiosk && kiosk.flow === 'class' ? 'class' : 'name',
     });
   } catch (err) {
     console.error('Kiosk me failed:', err.message);
@@ -511,6 +534,76 @@ router.get('/classes', requireKiosk, async (req, res) => {
       return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
     }
     console.error('Kiosk classes failed:', err.message);
+    res.status(502).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
+  }
+});
+
+// Class keys this kiosk checked a child into that can still be undone.
+async function undoableKeys(pool, locationId, { participantId = null, classKey = null } = {}) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT participant_id, class_key FROM mystudio_kiosk_checkins
+      WHERE location_id = $1
+        AND ($2::text IS NULL OR participant_id = $2)
+        AND ($3::text IS NULL OR class_key = $3)
+        AND result IN ('checked_in', 'registered') AND undone_at IS NULL
+        AND created_at > now() - make_interval(mins => $4)`,
+    [locationId, participantId, classKey, UNDO_WINDOW_MINUTES]
+  );
+  return new Set(rows.map((r) => `${r.participant_id}|${r.class_key}`));
+}
+
+// GET /api/kiosk/schedule
+//
+// Today's classes that have not ended, for a kiosk that starts from the class.
+router.get('/schedule', requireKiosk, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = req.kioskLocationId;
+  try {
+    const kiosk = await ensureKiosk(pool, locationId);
+    if (!kiosk || kiosk.status !== 'connected') return res.json({ unavailable: true, classes: [] });
+    const classes = await ms.getKioskSchedule(ms.decryptCookie(kiosk.portal_token), todayDate(), nowMinutes());
+    res.json({ classes });
+  } catch (err) {
+    if (err instanceof ms.MyStudioAuthError) return res.json({ unavailable: true, classes: [] });
+    console.error('Kiosk schedule failed:', err.message);
+    res.status(502).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
+  }
+});
+
+// GET /api/kiosk/roster?classKey=
+//
+// The children who can be checked into one class: booked first, then everyone
+// whose membership covers it.
+router.get('/roster', requireKiosk, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = req.kioskLocationId;
+  const classKey = String(req.query.classKey || '').trim();
+  if (!/^\d+:\d+:\d+$/.test(classKey)) return res.status(400).json({ error: 'Something went wrong. Please try again.' });
+
+  try {
+    const kiosk = await ensureKiosk(pool, locationId);
+    if (!kiosk || kiosk.status !== 'connected') {
+      return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
+    }
+    const found = await ms.getKioskRosterFor(ms.decryptCookie(kiosk.portal_token), {
+      date: todayDate(),
+      classKey,
+      nowMinutes: nowMinutes(),
+    });
+    if (!found) return res.status(409).json({ error: "That class isn't open for check-in. Please see the front desk." });
+    const undoable = await undoableKeys(pool, locationId, { classKey });
+    res.json({
+      class: found.class,
+      roster: found.roster.map((r) => ({
+        ...r,
+        undoable: r.checkedIn && undoable.has(`${r.participantId}|${classKey}`),
+      })),
+    });
+  } catch (err) {
+    if (err instanceof ms.MyStudioAuthError) {
+      return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
+    }
+    console.error('Kiosk roster failed:', err.message);
     res.status(502).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
   }
 });

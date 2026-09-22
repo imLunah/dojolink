@@ -93,6 +93,19 @@ export default function KioskSetupPage() {
     api.get('/kiosk/setup').then(setSetup).catch((err) => setLoadError(err.message));
   }, []);
 
+  const setFlow = async (flow) => {
+    if (flow === setup.flow) return;
+    const before = setup;
+    setSetup({ ...setup, flow });
+    setError('');
+    try {
+      setSetup(await api.patch('/kiosk/setup', { flow }));
+    } catch (err) {
+      setSetup(before);
+      setError(err.message);
+    }
+  };
+
   const turnOn = async () => {
     setBusy(true);
     setError('');
@@ -179,6 +192,29 @@ export default function KioskSetupPage() {
                 </div>
               )}
             </section>
+
+            {ready && (
+              <section className={`${CARD} p-5 space-y-3`}>
+                <h2 id="kiosk-flow-heading" className="font-ninja font-extrabold text-base text-ninja-navy">Start with</h2>
+                <div role="radiogroup" aria-labelledby="kiosk-flow-heading" className="grid sm:grid-cols-2 gap-2">
+                  {[
+                    { key: 'name', label: "Ninja's name", hint: 'Find the ninja, then pick one of their classes.' },
+                    { key: 'class', label: 'Class', hint: "Pick today's class, then find the ninja in it." },
+                  ].map((o) => {
+                    const on = (setup.flow || 'name') === o.key;
+                    return (
+                      <button
+                        key={o.key} type="button" role="radio" aria-checked={on} onClick={() => setFlow(o.key)}
+                        className={`text-left rounded-xl border px-4 py-3 transition-colors ${on ? 'border-ninja-blue bg-ninja-blue/10' : 'border-ninja-border hover:bg-ninja-bg'}`}
+                      >
+                        <span className={`block font-ninja text-sm font-bold ${on ? 'text-ninja-blue-ink' : 'text-ninja-navy'}`}>{o.label}</span>
+                        <span className="block font-ninja text-xs text-ninja-muted mt-0.5">{o.hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <section className={`${CARD} p-5 space-y-4 ${ready ? '' : 'opacity-60'}`}>
               <div className="flex items-start gap-3">

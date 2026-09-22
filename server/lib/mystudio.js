@@ -1635,6 +1635,60 @@ async function getKioskClassesFor(token, member, date, nowMinutes) {
     .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime) || a.className.localeCompare(b.className));
 }
 
+// Today's classes a family can still pick, for a kiosk that starts from the
+// class. Drop-ins and classes that have ended are left out.
+async function getKioskSchedule(token, date, nowMinutes) {
+  const classes = await portalClassList(token, date);
+  return classes
+    .filter((cls) => classOpen(cls, nowMinutes))
+    .map((cls) => ({
+      classKey: portalClassKey(cls),
+      className: String(cls.class_appointment_title || '').trim(),
+      startTime: String(cls.start_time || '').trim(),
+      endTime: String(cls.end_time || '').trim(),
+    }))
+    .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime) || a.className.localeCompare(b.className));
+}
+
+// Who can be checked into one class: everyone booked into it, and everyone
+// whose membership covers it (classFitsMembership). Booked first, then by
+// name. Nothing personal beyond the name leaves this function.
+async function getKioskRosterFor(token, { date, classKey, nowMinutes }) {
+  const classes = await portalClassList(token, date);
+  const cls = classes.find((c) => portalClassKey(c) === classKey);
+  if (!cls || !classOpen(cls, nowMinutes)) return null;
+
+  const className = String(cls.class_appointment_title || '').trim();
+  const seen = new Set();
+  const out = [];
+  for (const row of await portalParticipants(token, cls)) {
+    if (!row || row.inactive_status === 'Y') continue;
+    const member = normalizeKioskMember(row);
+    if (!member.participantId || seen.has(member.participantId)) continue;
+    seen.add(member.participantId);
+    const booked = Boolean(row.class_reg_id);
+    const canRegister = !booked && !member.moreReg && classFitsMembership(className, membershipProgram(member));
+    if (!booked && !canRegister) continue;
+    out.push({
+      participantId: member.participantId,
+      firstName: member.firstName,
+      lastInitial: member.lastName ? `${member.lastName[0].toUpperCase()}.` : '',
+      booked,
+      checkedIn: booked && isCheckedInRow(row),
+    });
+  }
+  out.sort((a, b) => Number(b.booked) - Number(a.booked) || a.firstName.localeCompare(b.firstName) || a.lastInitial.localeCompare(b.lastInitial));
+  return {
+    class: {
+      classKey,
+      className,
+      startTime: String(cls.start_time || '').trim(),
+      endTime: String(cls.end_time || '').trim(),
+    },
+    roster: out,
+  };
+}
+
 // Checks one child in, booking them into the class first when they have no
 // place in it, the way MyStudio's own kiosk does. Everything is re-read from
 // MyStudio rather than trusted from what the kiosk showed a moment ago.
@@ -1792,6 +1846,8 @@ module.exports = {
   getKioskClassesFor,
   kioskCheckIn,
   kioskUndo,
+  getKioskSchedule,
+  getKioskRosterFor,
   kioskClassState: (row) => ({ checkedIn: isCheckedInRow(row) }),
   encodeActionArgs,
   classOpen,
