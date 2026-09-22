@@ -55,6 +55,10 @@ function Row({ student, checked, onToggle, dense }) {
   );
 }
 
+// `wide` is for a picker that has the full page to itself. Breakpoints are
+// viewport-based, so the columns cannot simply be switched on everywhere: the
+// panel's inline editor lives in a narrow card on a wide screen and would get
+// three squashed columns out of the same classes.
 export default function AttendeePicker({
   students,
   selectedIds,
@@ -62,6 +66,7 @@ export default function AttendeePicker({
   search,
   onSearchChange,
   dense = false,
+  wide = false,
   maxHeight = 'max-h-72',
 }) {
   const filtered = students.filter((s) =>
@@ -72,7 +77,7 @@ export default function AttendeePicker({
     <div className="space-y-2.5">
       {/* The glyph lives inside the field, so a search box stops looking like
           every other text input on the page. */}
-      <div className="relative">
+      <div className={`relative ${wide ? 'max-w-sm' : ''}`}>
         <SearchIcon
           size={dense ? 14 : 16}
           strokeWidth={2.25}
@@ -94,7 +99,9 @@ export default function AttendeePicker({
           three edges between a name and the card it sits in and clipped the
           first row through the middle. It is a plain scrolling column now; the
           rows are the only things with a shape. */}
-      <div className={`${maxHeight} overflow-y-auto overscroll-contain -mx-1 px-1 py-0.5`}>
+      <div className={`${maxHeight} overflow-y-auto overscroll-contain -mx-1 px-1 py-0.5 ${
+        wide ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-4 content-start' : ''
+      }`}>
         {filtered.map((s) => (
           <Row
             key={s.id}
@@ -105,7 +112,9 @@ export default function AttendeePicker({
           />
         ))}
         {filtered.length === 0 && (
-          <p className="text-ninja-muted font-ninja text-sm text-center py-6">No ninjas found.</p>
+          <p className={`text-ninja-muted font-ninja text-sm text-center py-6 ${wide ? 'col-span-full' : ''}`}>
+            No ninjas found.
+          </p>
         )}
       </div>
     </div>

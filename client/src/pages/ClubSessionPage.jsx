@@ -114,7 +114,7 @@ export default function ClubSessionPage() {
 
   return (
     <Layout>
-      <motion.div className="space-y-5 max-w-3xl mx-auto" variants={stagger} initial="hidden" animate="show">
+      <motion.div className="space-y-5" variants={stagger} initial="hidden" animate="show">
         {/* Header.
             The session used to open on a chip and a date sitting on a grey
             slab, which said nothing about which club you were in. It now wears
@@ -140,7 +140,7 @@ export default function ClubSessionPage() {
             )}
           </div>
 
-          <div className="relative flex flex-col min-h-[10rem] sm:min-h-[11rem] p-5 sm:p-6">
+          <div className="relative flex flex-col min-h-[12rem] sm:min-h-[14rem] p-5 sm:p-6">
             <button
               onClick={() => navigate(`/clubs/${slug}`)}
               className="self-start font-ninja text-sm font-semibold text-white/70 hover:text-white transition-colors duration-150 flex items-center gap-1.5"
@@ -196,6 +196,8 @@ export default function ClubSessionPage() {
                 })}
                 search={attendeeSearch}
                 onSearchChange={setAttendeeSearch}
+                wide
+                maxHeight="max-h-80"
               />
 
               <div className="flex items-center gap-2 pt-3 border-t border-ninja-border">
@@ -222,7 +224,7 @@ export default function ClubSessionPage() {
               /* Faces, not a wall of bordered name tags. A register is a room
                  of children, and it should be possible to tell at a glance who
                  was in it without reading every word. */
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 -mx-2">
+              <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-1 -mx-2">
                 {session.attendees.map((a, i) => (
                   <motion.li
                     key={a.id}
