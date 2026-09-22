@@ -689,6 +689,9 @@ describe('check-in kiosk', () => {
     expect(ms.classFitsMembership('CREATE', 'JR')).toBe(false);
     expect(ms.classFitsMembership('Roblox Club', 'JR')).toBe(true);
     expect(ms.classFitsMembership('CREATE', null)).toBe(false);
+    expect(ms.classFitsMembership('IN SCHOOL ONLY', 'CREATE')).toBe(false);
+    expect(ms.classFitsMembership('Coding - CREATE', 'CREATE')).toBe(true);
+    expect(ms.classFitsMembership('Coding - CREATE', 'JR')).toBe(false);
   });
 
   it('escapes strings React would read as references', () => {

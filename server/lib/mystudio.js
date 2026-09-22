@@ -1548,7 +1548,9 @@ function membershipProgram(member) {
 }
 
 function classFitsMembership(className, program) {
-  if (!program) return false;
+  // "IN SCHOOL ONLY" (Fullerton) is a school's own session, not a center
+  // class anyone can join: booked kids check in, nobody books in here.
+  if (!program || /\bin[\s-]*school\b/i.test(className)) return false;
   if (program === 'JR') return !/\bcreate\b/i.test(className);
   if (program === 'CREATE') return !/\bjr\b/i.test(className);
   return false;
@@ -1580,9 +1582,21 @@ async function getKioskMembers(token, date) {
   if (!groups || typeof groups !== 'object') {
     throw new MyStudioError('MyStudio returned an unexpected response');
   }
+  let rows = Object.values(groups).flat();
+
+  // A center can switch on "hide all participants list" in its portal
+  // settings (Fullerton has): the whole-center list then comes back empty,
+  // "Student details are not available", while each class still lists its own
+  // eligible members. Build the list from today's classes instead.
+  if (!rows.length && data.attendance_settings && data.attendance_settings.hide_all_participants_list) {
+    const classes = (await portalClassList(token, date)).filter((c) => !isDropInClass(c));
+    const perClass = await mapPooled(classes, 4, (cls) => portalParticipants(token, cls));
+    rows = perClass.flat();
+  }
+
   const seen = new Set();
   const out = [];
-  for (const row of Object.values(groups).flat()) {
+  for (const row of rows) {
     if (!row || row.inactive_status === 'Y') continue;
     const m = normalizeKioskMember(row);
     if (!m.participantId || seen.has(m.participantId)) continue;
