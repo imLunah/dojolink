@@ -22,7 +22,6 @@ import Modal from '../../components/ui/Modal';
 import { api } from '../../api/client';
 import { today, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import { CARD, PANEL } from '../../lib/surfaces';
 import { Skeleton } from '../../components/ui/Skeleton';
 import useExpectedToday from '../../lib/useExpectedToday';
@@ -743,8 +742,10 @@ function QuickLinksCard({ isManager }) {
   );
 }
 
-// The check-in kiosk, one tap from the dashboard. It rides on MyStudio, so it
-// shows where that does: to directors, with experimental features on.
+// The check-in kiosk, one tap from the dashboard, for every director. Not
+// behind the experimental toggle: that setting is per browser, and an iPad
+// home-screen app keeps its own, so the card went missing on the one device
+// the kiosk is for.
 function KioskCard() {
   return (
     <Link to="/manager/kiosk" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
@@ -892,7 +893,6 @@ export default function DirectorDashboard() {
   // in sensei view gets the sensei copy, same as the navs treat them.
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
   const isManager = ['manager', 'admin'].includes(user?.role) && !isSenseiView;
-  const { experimental } = useTheme();
   const canWrite = isManager && !isReadOnly;
   const todayStr = today();
   const [loading, setLoading] = useState(true);
@@ -964,7 +964,7 @@ export default function DirectorDashboard() {
             <motion.div {...fadeUp(1)}>
               <QuickLinksCard isManager={isManager} />
             </motion.div>
-            {isManager && experimental && (
+            {isManager && (
               <motion.div {...fadeUp(2)}>
                 <KioskCard />
               </motion.div>
