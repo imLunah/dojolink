@@ -236,7 +236,7 @@ export default function KioskPage() {
       </header>
 
       <main className="flex-1 flex flex-col items-center px-6 sm:px-10 pt-10 sm:pt-16 pb-10">
-        <div className={`w-full ${step === 'search' ? 'max-w-3xl' : 'max-w-xl'}`}>
+        <div className={`w-full ${step === 'search' ? 'max-w-4xl' : 'max-w-xl'}`}>
           <AnimatePresence mode="wait" initial={false}>
             {step === 'search' && (
               <Screen k="search">
@@ -261,18 +261,22 @@ export default function KioskPage() {
                         placeholder="First or last name"
                       />
                     </div>
-                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2" aria-live="polite">
+                    {/* The list scrolls in its own box sized to the screen, so the
+                        search stays in view however long the roster is. */}
+                    <div className="mt-4 max-h-[calc(100dvh-26rem)] overflow-y-auto overscroll-contain rounded-2xl" aria-live="polite">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                       {results.map((r) => (
                         <button
                           key={r.participantId} type="button" onClick={() => pickMember(r)}
-                          className="flex items-center justify-between gap-2 rounded-2xl border border-ninja-border bg-white px-4 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                          className="flex items-center justify-between gap-2 rounded-xl border border-ninja-border bg-white px-3.5 py-2.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
-                          <span className="font-ninja font-extrabold text-lg text-ninja-navy truncate">
+                          <span className="font-ninja font-bold text-base text-ninja-navy truncate">
                             {r.firstName} {r.lastInitial}
                           </span>
-                          <ChevronRightIcon size={20} className="flex-shrink-0 text-ninja-muted" aria-hidden />
+                          <ChevronRightIcon size={18} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                         </button>
                       ))}
+                      </div>
                     </div>
                     <div>
                       {q && !searching && results.length === 0 && (
