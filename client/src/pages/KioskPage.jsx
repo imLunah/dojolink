@@ -15,12 +15,13 @@ import { useLightOnly } from '../context/ThemeContext';
 
 const EASE = [0.23, 1, 0.32, 1];
 
-// How long a finished or failed screen stays up, and how long a half-typed
-// name waits for the next keystroke, before the kiosk clears itself for the
-// next family.
-const DONE_MS = 6000;
-const ERROR_MS = 12000;
-const IDLE_MS = 45000;
+// A finished, undone or failed screen counts down on its button and then goes
+// back to the name search by itself, so the next family never finds the last
+// one's name on screen. A half-finished search or class pick goes back after
+// a stretch with no taps.
+const AUTO_BACK_S = 10;
+const IDLE_MS = 30000;
+const AUTO_BACK_STEPS = new Set(['done', 'undone', 'error']);
 
 // MyStudio sends "04:00 PM".
 const fmtTime = (t) => String(t || '').replace(/^0(\d)/, '$1');
@@ -95,7 +96,10 @@ export default function KioskPage() {
   const [member, setMember] = useState(null);
   const [classes, setClasses] = useState(null);
   const [picked, setPicked] = useState(null);
-  const [step, setStep] = useState('search'); // search | classes | confirm | working | done | error
+  // What the confirm screen is about to do to `picked`: check in, or undo.
+  const [mode, setMode] = useState('checkin');
+  const [step, setStep] = useState('search'); // search | classes | confirm | working | done | undone | error
+  const [secondsLeft, setSecondsLeft] = useState(AUTO_BACK_S);
   const [outcome, setOutcome] = useState(null);
   const [staffOpen, setStaffOpen] = useState(false);
   const inputRef = useRef(null);
@@ -111,6 +115,7 @@ export default function KioskPage() {
     setMember(null);
     setClasses(null);
     setPicked(null);
+    setMode('checkin');
     setOutcome(null);
     setStep('search');
   }, []);
@@ -139,10 +144,18 @@ export default function KioskPage() {
     return () => clearTimeout(id);
   }, [query, step]);
 
-  // The next family should not find the last one's name in the box.
+  // The count shown on the button is the timer, so the two cannot disagree.
   useEffect(() => {
-    if (step === 'done') { const id = setTimeout(reset, DONE_MS); return () => clearTimeout(id); }
-    if (step === 'error') { const id = setTimeout(reset, ERROR_MS); return () => clearTimeout(id); }
+    if (!AUTO_BACK_STEPS.has(step)) return undefined;
+    setSecondsLeft(AUTO_BACK_S);
+    const id = setInterval(() => setSecondsLeft((n) => n - 1), 1000);
+    return () => clearInterval(id);
+  }, [step]);
+  useEffect(() => {
+    if (AUTO_BACK_STEPS.has(step) && secondsLeft <= 0) reset();
+  }, [step, secondsLeft, reset]);
+
+  useEffect(() => {
     if (step === 'classes' || step === 'confirm' || (step === 'search' && query)) {
       const id = setTimeout(reset, IDLE_MS);
       return () => clearTimeout(id);
@@ -167,17 +180,28 @@ export default function KioskPage() {
     }
   };
 
-  const checkIn = async () => {
+  const confirm = async () => {
     if (!picked || !member) return;
     setStep('working');
     try {
-      const data = await api.post('/kiosk/checkin', { participantId: member.participantId, classKey: picked.classKey });
-      setOutcome(data);
-      setStep('done');
+      const body = { participantId: member.participantId, classKey: picked.classKey };
+      if (mode === 'undo') {
+        setOutcome(await api.post('/kiosk/undo', body));
+        setStep('undone');
+      } else {
+        setOutcome(await api.post('/kiosk/checkin', body));
+        setStep('done');
+      }
     } catch (err) {
       setOutcome({ error: err.message });
       setStep('error');
     }
+  };
+
+  const askUndo = (c) => {
+    setPicked(c);
+    setMode('undo');
+    setStep('confirm');
   };
 
   if (me === undefined) return <div className="min-h-[100dvh] bg-ninja-bg" />;
@@ -276,8 +300,8 @@ export default function KioskPage() {
                   )}
                   {classes?.map((c) => (
                     <button
-                      key={c.classKey} type="button" disabled={c.checkedIn}
-                      onClick={() => { setPicked(c); setStep('confirm'); }}
+                      key={c.classKey} type="button" disabled={c.checkedIn && !c.undoable}
+                      onClick={() => (c.checkedIn ? askUndo(c) : (setPicked(c), setMode('checkin'), setStep('confirm')))}
                       className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98] disabled:active:scale-100"
                     >
                       <span className="min-w-0">
@@ -286,8 +310,8 @@ export default function KioskPage() {
                         </span>
                         <span className="block font-ninja text-sm text-ninja-muted">{c.className}</span>
                       </span>
-                      <span className={`flex-shrink-0 font-ninja text-sm font-bold ${c.checkedIn || !c.booked ? 'text-ninja-muted' : 'text-ninja-blue-ink'}`}>
-                        {c.checkedIn ? 'Checked in' : c.booked ? 'Booked' : ''}
+                      <span className={`flex-shrink-0 font-ninja text-sm font-bold ${c.undoable ? 'text-ninja-red' : c.checkedIn || !c.booked ? 'text-ninja-muted' : 'text-ninja-blue-ink'}`}>
+                        {c.undoable ? 'Checked in · Undo' : c.checkedIn ? 'Checked in' : c.booked ? 'Booked' : ''}
                       </span>
                     </button>
                   ))}
@@ -304,17 +328,25 @@ export default function KioskPage() {
             {step === 'confirm' && picked && member && (
               <Screen k="confirm">
                 <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center">
-                  <p className="font-ninja font-bold text-base text-ninja-muted">Check in</p>
+                  <p className="font-ninja font-bold text-base text-ninja-muted">
+                    {mode === 'undo' ? 'Undo check-in for' : 'Check in'}
+                  </p>
                   <p className="mt-1 font-ninja font-extrabold text-4xl text-ninja-navy">{member.firstName} {member.lastInitial}</p>
                   <p className="mt-2 font-ninja text-lg text-ninja-muted">{picked.className} · {fmtTime(picked.startTime)}</p>
                   <div className="mt-8 grid grid-cols-2 gap-3">
-                    <button type="button" onClick={() => { setPicked(null); setStep('classes'); }}
+                    <button type="button"
+                      onClick={() => {
+                        setPicked(null);
+                        setMode('checkin');
+                        // Undo from the finished screen has no class list behind it.
+                        if (classes) setStep('classes'); else reset();
+                      }}
                       className="font-ninja text-lg font-bold py-4 rounded-2xl border border-ninja-border text-ninja-navy">
                       Back
                     </button>
-                    <button type="button" onClick={checkIn}
-                      className="font-ninja text-lg font-bold py-4 rounded-2xl bg-ninja-blue text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]">
-                      Check in
+                    <button type="button" onClick={confirm}
+                      className={`font-ninja text-lg font-bold py-4 rounded-2xl text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${mode === 'undo' ? 'bg-ninja-red' : 'bg-ninja-blue'}`}>
+                      {mode === 'undo' ? 'Undo' : 'Check in'}
                     </button>
                   </div>
                 </div>
@@ -323,7 +355,9 @@ export default function KioskPage() {
 
             {step === 'working' && (
               <Screen k="working">
-                <p className="font-ninja font-bold text-xl text-ninja-muted text-center" role="status">Checking in…</p>
+                <p className="font-ninja font-bold text-xl text-ninja-muted text-center" role="status">
+                  {mode === 'undo' ? 'Undoing…' : 'Checking in…'}
+                </p>
               </Screen>
             )}
 
@@ -337,9 +371,34 @@ export default function KioskPage() {
                     {outcome.already ? `${outcome.firstName} is already checked in` : `${outcome.firstName} is checked in`}
                   </p>
                   <p className="mt-2 font-ninja text-lg text-ninja-muted">{outcome.className} · {fmtTime(outcome.startTime)}</p>
+                  <div className="mt-8 flex justify-center gap-3">
+                    {!outcome.already && picked && (
+                      <button type="button" onClick={() => askUndo({ ...picked, className: outcome.className, startTime: outcome.startTime })}
+                        className="font-ninja text-lg font-bold px-8 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
+                        Undo
+                      </button>
+                    )}
+                    <button type="button" onClick={reset}
+                      className="font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl bg-ninja-blue text-white tabular-nums">
+                      Done ({secondsLeft})
+                    </button>
+                  </div>
+                </div>
+              </Screen>
+            )}
+
+            {step === 'undone' && outcome && (
+              <Screen k="undone">
+                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center" role="status">
+                  <p className="font-ninja font-extrabold text-3xl text-ninja-navy">
+                    {outcome.firstName ? `${outcome.firstName}'s check-in was undone` : 'Check-in undone'}
+                  </p>
+                  <p className="mt-2 font-ninja text-lg text-ninja-muted">
+                    {outcome.unregistered ? 'Removed from ' : ''}{outcome.className} · {fmtTime(outcome.startTime)}
+                  </p>
                   <button type="button" onClick={reset}
-                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl bg-ninja-blue text-white">
-                    Done
+                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl bg-ninja-blue text-white tabular-nums">
+                    Done ({secondsLeft})
                   </button>
                 </div>
               </Screen>
@@ -352,8 +411,8 @@ export default function KioskPage() {
                     {outcome?.error || 'Something went wrong. Please see the front desk.'}
                   </p>
                   <button type="button" onClick={reset}
-                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
-                    Back
+                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy tabular-nums">
+                    Back ({secondsLeft})
                   </button>
                 </div>
               </Screen>

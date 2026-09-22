@@ -1254,8 +1254,8 @@ async function getExpectedForDate(cookieOrSession, companyId, date) {
 // This is the one place DojoLink writes to MyStudio. The owner chose on 22 Sep
 // 2026 to let families check in at a DojoLink kiosk the way they do at
 // MyStudio's own: search for their child, pick one of today's classes, and be
-// checked in, booked into the class first if they had no place in it. Two
-// portal actions are called, and only these two:
+// checked in, booked into the class first if they had no place in it. Three
+// portal actions are called, and only these three:
 //
 //   - checkInParticipant, for a child already booked into the class.
 //   - registerParticipantAttendance, for a child who is not. This books them
@@ -1264,10 +1264,17 @@ async function getExpectedForDate(cookieOrSession, companyId, date) {
 //     covers (see classFitsMembership), never for a club, and never for a child
 //     holding more than one membership, because the portal would then have to
 //     ask which one to charge.
+//   - participantCancelCurrentAppointment, to take back a kiosk check-in made
+//     by mistake (added 22 Sep 2026 at the owner's request). With
+//     cancelRegistration it also removes the booking, and is used that way
+//     ONLY when the kiosk made the booking itself; a child who was booked
+//     beforehand is only checked back out, so a mis-tap never costs a family
+//     a place they reserved. The route allows it only for check-ins this
+//     kiosk made, and only for a short while after (routes/kiosk.js).
 //
 // Still never called: waivecheckformemortrial (drop-ins and trials, which
-// carry a price), registerParticipantAttendanceWithCCNumber (asks for a card),
-// and participantCancelCurrentAppointment (can cancel a registration). When
+// carry a price) and registerParticipantAttendanceWithCCNumber (asks for a
+// card). When
 // MyStudio answers a check-in by asking for a card, the family is sent to the
 // front desk.
 //
@@ -1287,6 +1294,7 @@ async function getExpectedForDate(cookieOrSession, companyId, date) {
 
 const PORTAL_LOGIN_PATH = '/attendance-portal/login';
 const PORTAL_CHECKIN_PATH = '/attendance-portal/classes/check-in';
+const KIOSK_ACTIONS = ['checkInParticipant', 'registerParticipantAttendance', 'participantCancelCurrentAppointment'];
 
 // Said to a family at the kiosk. The message is safe to put on screen.
 class MyStudioCheckInRefused extends MyStudioError {
@@ -1516,8 +1524,12 @@ async function portalParticipants(token, cls, participantId) {
   return Object.values(groups).flat().filter(Boolean);
 }
 
+// `checkin_status` on the portal is the label of the button MyStudio would
+// show, not a state: "Check in" means NOT checked in yet, "Cancel check in"
+// means checked in. Measured on a live check-in. The timestamp is the state.
 function isCheckedInRow(row) {
-  return Boolean(String(row.checkin_status || '').trim() || row.att_checkin_datetime);
+  return Boolean(row.att_checkin_datetime) ||
+    String(row.checkin_status || '').trim().toLowerCase() === 'cancel check in';
 }
 
 // Which classes a membership may be registered into from the kiosk.
@@ -1674,7 +1686,7 @@ async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
   const run = async (force) => {
     const ids = await portalActionIds(
       PORTAL_CHECKIN_PATH,
-      ['checkInParticipant', 'registerParticipantAttendance'],
+      KIOSK_ACTIONS,
       { token, force }
     );
     return callPortalAction(PORTAL_CHECKIN_PATH, ids[actionName], body, {
@@ -1713,6 +1725,64 @@ async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
   throw new MyStudioCheckInRefused('Please see the front desk to finish checking in.');
 }
 
+// Takes back one kiosk check-in. `cancelRegistration` removes the booking as
+// well, and the caller passes it only when the kiosk made that booking.
+async function kioskUndo(token, { date, classKey, participantId, cancelRegistration }) {
+  const classes = await portalClassList(token, date);
+  const cls = classes.find((c) => portalClassKey(c) === classKey);
+  if (!cls) throw new MyStudioCheckInRefused("That class isn't on today's schedule. Please see the front desk.");
+
+  const rows = await portalParticipants(token, cls, participantId);
+  const row = rows.find((r) => String(r.participant_id) === String(participantId));
+  if (!row || !row.class_reg_id) {
+    throw new MyStudioCheckInRefused("There's nothing to undo for this class. Please see the front desk.");
+  }
+
+  // What the portal's own cancel sends: the class row with this booking's ids
+  // over it, the member row, and whether the booking goes too.
+  const classDetails = {
+    ...cls,
+    class_reg_id: row.class_reg_id,
+    class_registration_detail_id: row.class_registration_detail_id,
+    att_attendance_status: '',
+  };
+  const body = encodeActionArgs([{
+    classDetails,
+    membership: row,
+    cancelRegistration: Boolean(cancelRegistration),
+    isDropIn: false,
+  }]);
+
+  const run = async (force) => {
+    const ids = await portalActionIds(PORTAL_CHECKIN_PATH, KIOSK_ACTIONS, { token, force });
+    return callPortalAction(PORTAL_CHECKIN_PATH, ids.participantCancelCurrentAppointment, body, {
+      token,
+      contentType: 'text/plain;charset=UTF-8',
+    });
+  };
+
+  let result = await run(false);
+  if (result === null) result = await run(true);
+  if (result === null) throw new MyStudioSignInUnavailable('MyStudio changed their check-in page.');
+
+  const shape = result && typeof result === 'object' ? Object.keys(result).join(',') : typeof result;
+  if (result && result.success === true) {
+    return {
+      className: String(cls.class_appointment_title || '').trim(),
+      startTime: String(cls.start_time || '').trim(),
+    };
+  }
+
+  console.error(`MyStudio kiosk undo refused: keys=[${shape}]`);
+  const message = result && result.error
+    ? (typeof result.error === 'string' ? result.error : (result.error.message || ''))
+    : '';
+  throw new MyStudioCheckInRefused(
+    (message && `${String(message).trim()} Please see the front desk.`) ||
+      "MyStudio didn't accept the undo. Please see the front desk."
+  );
+}
+
 module.exports = {
   MyStudioAuthError,
   MyStudioCheckInRefused,
@@ -1721,6 +1791,8 @@ module.exports = {
   getKioskMembers,
   getKioskClassesFor,
   kioskCheckIn,
+  kioskUndo,
+  kioskClassState: (row) => ({ checkedIn: isCheckedInRow(row) }),
   encodeActionArgs,
   classOpen,
   classFitsMembership,

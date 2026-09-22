@@ -656,6 +656,13 @@ describe('check-in kiosk', () => {
     }
   });
 
+  it('reads the portal button label, not its presence, as check-in state', () => {
+    const base = { class_appointment_title: 'CREATE', start_time: '04:00 PM', end_time: '05:00 PM', class_appointment_occurrence_id: '1' };
+    expect(ms.kioskClassState({ ...base, checkin_status: 'Check in' }).checkedIn).toBe(false);
+    expect(ms.kioskClassState({ ...base, checkin_status: 'Cancel check in', att_checkin_datetime: '2026-01-05 16:01:00' }).checkedIn).toBe(true);
+    expect(ms.kioskClassState({ ...base, checkin_status: '' }).checkedIn).toBe(false);
+  });
+
   it('offers a class until it ends', () => {
     const at = (h, m) => h * 60 + m;
     expect(ms.classOpen(cls, at(9, 0))).toBe(true);

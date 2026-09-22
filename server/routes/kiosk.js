@@ -97,6 +97,27 @@ async function findMember(kiosk, locationId, participantId) {
   return member || null;
 }
 
+// How long a kiosk check-in can be taken back from the tablet. Long enough to
+// notice the wrong class was tapped, short enough that it cannot be used later
+// to quietly undo somebody else's attendance.
+const UNDO_WINDOW_MINUTES = 30;
+
+// The most recent check-in THIS kiosk made for a child and class that can
+// still be undone, or null.
+async function undoableCheckIn(pool, locationId, participantId, classKey) {
+  const { rows } = await pool.query(
+    `SELECT id, result, assignment_id
+       FROM mystudio_kiosk_checkins
+      WHERE location_id = $1 AND participant_id = $2 AND class_key = $3
+        AND result IN ('checked_in', 'registered') AND undone_at IS NULL
+        AND created_at > now() - make_interval(mins => $4)
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [locationId, participantId, classKey, UNDO_WINDOW_MINUTES]
+  );
+  return rows[0] || null;
+}
+
 function forgetMembers(locationId) {
   for (const k of membersCache.keys()) if (k.startsWith(`${locationId}:`)) membersCache.delete(k);
 }
@@ -439,7 +460,15 @@ router.get('/classes', requireKiosk, async (req, res) => {
       todayDate(),
       nowMinutes()
     );
-    res.json({ classes });
+    const { rows: recent } = await pool.query(
+      `SELECT DISTINCT class_key FROM mystudio_kiosk_checkins
+        WHERE location_id = $1 AND participant_id = $2
+          AND result IN ('checked_in', 'registered') AND undone_at IS NULL
+          AND created_at > now() - make_interval(mins => $3)`,
+      [locationId, participantId, UNDO_WINDOW_MINUTES]
+    );
+    const undoable = new Set(recent.map((r) => r.class_key));
+    res.json({ classes: classes.map((c) => ({ ...c, undoable: c.checkedIn && undoable.has(c.classKey) })) });
   } catch (err) {
     if (err instanceof ms.MyStudioAuthError) {
       return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
@@ -530,6 +559,82 @@ router.post('/checkin', requireKiosk, async (req, res) => {
     className: outcome.className,
     startTime: outcome.startTime,
   });
+});
+
+// POST /api/kiosk/undo  { participantId, classKey }
+//
+// Takes back a check-in this kiosk made in the last half hour. When the kiosk
+// also made the booking, the booking goes too; a child who was booked before
+// they arrived is only checked back out and keeps their place. The ninja comes
+// off Today's Board if the kiosk put them there and nobody has logged the
+// session yet.
+router.post('/undo', requireKiosk, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = req.session.kiosk.locationId;
+  const participantId = String((req.body && req.body.participantId) || '').trim();
+  const classKey = String((req.body && req.body.classKey) || '').trim();
+
+  if (!/^\d{1,20}$/.test(participantId) || !/^\d+:\d+:\d+$/.test(classKey)) {
+    return res.status(400).json({ error: 'Something went wrong. Please try again.' });
+  }
+
+  try {
+    const kiosk = await loadKiosk(pool, locationId);
+    if (!kiosk || kiosk.status !== 'connected') {
+      return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
+    }
+
+    const entry = await undoableCheckIn(pool, locationId, participantId, classKey);
+    if (!entry) {
+      return res.status(409).json({ error: "This check-in can't be undone here. Please see the front desk." });
+    }
+
+    const member = await findMember(kiosk, locationId, participantId);
+    const registered = entry.result === 'registered';
+
+    let undone;
+    try {
+      undone = await ms.kioskUndo(ms.decryptCookie(kiosk.portal_token), {
+        date: todayDate(),
+        classKey,
+        participantId,
+        cancelRegistration: registered,
+      });
+    } catch (err) {
+      if (err instanceof ms.MyStudioCheckInRefused) return res.status(409).json({ error: err.message });
+      if (err instanceof ms.MyStudioAuthError) {
+        await markExpired(pool, kiosk.id);
+        return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
+      }
+      console.error('Kiosk undo failed:', err.message);
+      return res.status(502).json({
+        error: err.uncertain
+          ? "We couldn't confirm the undo. Please see the front desk."
+          : 'Check-in is having trouble right now. Please see the front desk.',
+      });
+    }
+
+    await pool.query('UPDATE mystudio_kiosk_checkins SET undone_at = now() WHERE id = $1', [entry.id]);
+    if (entry.assignment_id) {
+      // Only an untouched row: a session a sensei has logged is not the
+      // kiosk's to remove.
+      await pool.query(
+        'DELETE FROM daily_assignments WHERE id = $1 AND completed = false',
+        [entry.assignment_id]
+      ).catch((err) => console.error('Kiosk undo board cleanup failed:', err.message));
+    }
+
+    res.json({
+      ok: true,
+      unregistered: registered,
+      firstName: member ? member.firstName : '',
+      className: undone.className,
+      startTime: undone.startTime,
+    });
+  } catch (err) {
+    console.error('Kiosk undo failed:', err.message);
+    res.status(500).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
+  }
 });
 
 // POST /api/kiosk/exit  { username, password }
