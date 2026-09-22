@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { Bar, BarChart, Cell, LabelList, XAxis, YAxis } from 'recharts';
 import Layout from '../../components/layout/Layout';
 import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
@@ -21,13 +22,37 @@ const ENROLLMENT_COLORS = { CREATE: '#006ADD', 'Robotics Academy': '#7c3aed', 'A
 // React component, so the axis ticks need the path itself.
 const BELT_IMAGES = Object.fromEntries(BELT_ORDER.map((name) => [name, beltIconSrc(name)]));
 
-function StatCard({ label, value, sub }) {
+// One surface for the headline numbers, split by hairlines. Four separate
+// cards made four boxes that each held a single number, which is most of what
+// made this page read as blocky. Nothing here is a control, so nothing needs its
+// own edge.
+function StatStrip({ stats }) {
   return (
-    <div className={`${CARD} p-4`}>
-      <p className="text-ninja-muted font-ninja text-xs uppercase tracking-wide mb-1">{label}</p>
-      <p className="font-ninja font-black text-3xl leading-none text-ninja-navy tabular-nums">{value}</p>
-      {sub && <p className="text-ninja-muted font-ninja text-xs mt-1">{sub}</p>}
+    <div className={`${CARD} overflow-hidden`}>
+      <dl className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-ninja-border">
+        {stats.map((s) => (
+          <div key={s.label} className="bg-white px-5 py-5 sm:px-6">
+            <dt className="font-ninja text-sm text-ninja-muted">{s.label}</dt>
+            <dd className={`mt-1.5 font-ninja font-black text-3xl sm:text-4xl leading-none tabular-nums tracking-tight ${s.tone || 'text-ninja-navy'}`}>
+              {s.value}
+            </dd>
+            {s.sub && <dd className="mt-2 font-ninja text-xs text-ninja-muted">{s.sub}</dd>}
+          </div>
+        ))}
+      </dl>
     </div>
+  );
+}
+
+function Section({ title, description, className = '', children }) {
+  return (
+    <section className={`${CARD} p-5 sm:p-6 flex flex-col min-w-0 ${className}`}>
+      <header className="mb-5">
+        <h2 className="text-ninja-navy font-ninja font-bold text-base leading-tight">{title}</h2>
+        {description && <p className="mt-1 font-ninja text-sm text-ninja-muted">{description}</p>}
+      </header>
+      {children}
+    </section>
   );
 }
 
@@ -36,7 +61,7 @@ function StatCard({ label, value, sub }) {
 // logo, a belt icon — so the tick renders an <image> rather than a text label.
 // That is the whole reason these are custom ticks: a plain Recharts category
 // axis can only draw text.
-const ROW_H = 34;
+const ROW_H = 38;
 const TICK_FONT = '12px Nunito, sans-serif';
 const ICON_W = 22;      // artwork box
 const ICON_GAP = 6;
@@ -154,7 +179,15 @@ function DistributionBars({ rows, unit, tickSrc, tickLabel = (v) => v }) {
           cursor={{ fill: 'rgb(var(--ninja-muted) / 0.08)' }}
           content={<CountTooltip unit={unit} />}
         />
-        <Bar dataKey="count" radius={[999, 999, 999, 999]} animationDuration={600} barSize={14}>
+        {/* The track gives every bar the same far end, so a short bar reads as
+            a share of the busiest row instead of floating in blank space. */}
+        <Bar
+          dataKey="count"
+          radius={[999, 999, 999, 999]}
+          animationDuration={600}
+          barSize={12}
+          background={{ fill: 'rgb(var(--ninja-muted) / 0.1)', radius: 999 }}
+        >
           {rows.map((row) => (
             <Cell key={row.name} fill={row.color} stroke={row.stroke || 'none'} />
           ))}
@@ -174,7 +207,8 @@ function DistributionBars({ rows, unit, tickSrc, tickLabel = (v) => v }) {
 
 function EnrollmentChart({ data }) {
   const total = data.reduce((s, r) => s + r.count, 0);
-  const rows = data.map((r) => ({
+  // Largest first: the eye reads the top row as the headline.
+  const rows = [...data].sort((a, b) => b.count - a.count).map((r) => ({
     name: r.program,
     count: r.count,
     pct: total > 0 ? Math.round((r.count / total) * 100) : 0,
@@ -182,17 +216,13 @@ function EnrollmentChart({ data }) {
   }));
 
   return (
-    <div className={`${CARD} p-5`}>
-      <div className="flex items-baseline justify-between mb-4">
-        <h3 className="text-ninja-navy font-ninja font-bold text-base">Enrollment by Program</h3>
-        <span className="font-ninja text-xs text-ninja-muted">{total} enrolled</span>
-      </div>
+    <Section title="Enrollment by program" description={`${total} enrollment${total === 1 ? '' : 's'} across ${rows.length} program${rows.length === 1 ? '' : 's'}`}>
       {rows.length === 0 ? (
         <p className="text-ninja-muted font-ninja text-sm">No enrollments yet.</p>
       ) : (
         <DistributionBars rows={rows} unit="ninja" tickSrc={(name) => PROGRAM_LOGOS[name]} />
       )}
-    </div>
+    </Section>
   );
 }
 
@@ -202,82 +232,97 @@ function BeltChart({ data }) {
   const rows = sorted.map((r) => ({
     name: r.belt_level,
     count: r.count,
+    pct: total > 0 ? Math.round((r.count / total) * 100) : 0,
     color: BELT_COLOR[r.belt_level] || '#e5e7eb',
     // White on a white card needs an outline or the bar disappears.
     stroke: r.belt_level === 'White' ? '#d1d5db' : undefined,
   }));
 
   return (
-    <div className={`${CARD} p-5`}>
-      <div className="flex items-baseline justify-between mb-4">
-        <h3 className="text-ninja-navy font-ninja font-bold text-base">Belt Distribution (CREATE)</h3>
-        <span className="font-ninja text-xs text-ninja-muted">{total} ninja{total === 1 ? '' : 's'}</span>
-      </div>
+    <Section title="CREATE belts" description={`${total} ninja${total === 1 ? '' : 's'} on the ladder`}>
       {rows.length === 0 ? (
         <p className="text-ninja-muted font-ninja text-sm">No CREATE students yet.</p>
       ) : (
         <DistributionBars rows={rows} unit="ninja" tickSrc={(belt) => BELT_IMAGES[belt]} />
       )}
-    </div>
+    </Section>
   );
 }
 
+// Days since a YYYY-MM-DD, counted in local calendar days (a pg DATE arrives as
+// UTC midnight, so raw milliseconds would be off by one every evening).
+function daysSince(dateStr) {
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+  const then = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((today - then) / 86400000);
+}
 
-function InactiveTable({ data }) {
+function InactiveTable({ data, className }) {
+  const never = data.filter((s) => !s.last_session).length;
+  const description = data.length === 0
+    ? 'Everyone has checked in recently'
+    : `${data.length} ninja${data.length === 1 ? '' : 's'}${never ? ` · ${never} never checked in` : ''}`;
+
   return (
-    <div className={`${CARD} p-5`}>
-      <h3 className="text-ninja-navy font-ninja font-bold text-base mb-1">No Check-Ins (Last 30 Days)</h3>
-      <p className="text-ninja-muted font-ninja text-xs mb-4">{data.length} student{data.length !== 1 ? 's' : ''}</p>
+    <Section title="No check-ins in 30 days" description={description} className={className}>
       {data.length === 0 ? (
         <p className="text-ninja-muted font-ninja text-sm">All students active recently.</p>
       ) : (
-        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-          {data.map(s => (
-            <div key={s.id} className="flex items-center justify-between py-1.5 border-b border-ninja-border last:border-0">
-              <a href={`/manager/students/${s.id}`} className="font-ninja text-sm text-ninja-navy hover:text-ninja-blue transition-colors">
-                {s.full_name}
-              </a>
-              <span className="font-ninja text-xs text-ninja-muted">
-                {s.last_session ? `Last: ${formatDate(s.last_session)}` : 'Never logged'}
-              </span>
-            </div>
+        // Two columns once there is room: a list of names is short and wide
+        // screens were spending most of this card on empty space.
+        <ul className="grid sm:grid-cols-2 gap-x-6 max-h-80 overflow-y-auto -mx-2 pr-1">
+          {data.map((s) => (
+            <li key={s.id}>
+              <Link
+                to={`/manager/students/${s.id}`}
+                className="flex items-baseline justify-between gap-3 rounded-lg px-2 py-2 hover:bg-ninja-bg transition-colors"
+              >
+                <span className="font-ninja text-sm text-ninja-navy truncate">{s.full_name}</span>
+                <span className="font-ninja text-xs text-ninja-muted shrink-0 tabular-nums">
+                  {s.last_session ? `${daysSince(s.last_session)} days ago` : 'Never'}
+                </span>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </Section>
   );
 }
 
-function BeltLog({ data }) {
+function BeltLog({ data, className }) {
+  // The query hands rows back grouped by student, not by date, so the newest
+  // belt could land anywhere in the list.
+  const rows = [...data].sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
   return (
-    <div className={`${CARD} p-5`}>
-      <div className="flex items-baseline justify-between mb-4">
-        <h3 className="text-ninja-navy font-ninja font-bold text-base">Belt Advancements</h3>
-        <span className="font-ninja text-xs text-ninja-muted">Last 30 days</span>
-      </div>
-      {data.length === 0 ? (
+    <Section title="Belt advancements" description="Last 30 days, newest first" className={className}>
+      {rows.length === 0 ? (
         <p className="text-ninja-muted font-ninja text-sm">No belt advancements recorded yet.</p>
       ) : (
-        <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
-          {data.map((row, i) => (
-            <motion.div
+        <ul className="-mx-2 max-h-96 overflow-y-auto pr-1 xl:max-h-none xl:flex-1 xl:min-h-0">
+          {rows.map((row, i) => (
+            <motion.li
               key={`${row.full_name}-${row.session_date}-${row.belt_level_at}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, delay: Math.min(i * 0.03, 0.3), ease: 'easeOut' }}
-              className="flex items-center gap-3 py-2 border-b border-ninja-border last:border-0"
+              className="flex items-center gap-3 rounded-lg px-2 py-2.5"
             >
-              <BeltIcon belt={row.belt_level_at} size={30} className="shrink-0" />
+              <BeltIcon belt={row.belt_level_at} size={32} className="shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="font-ninja text-sm text-ninja-navy truncate">{row.full_name}</p>
-                <p className="font-ninja text-xs text-ninja-muted truncate">Earned {row.belt_level_at}{row.belt_sublevel_at ? ` · Lv ${row.belt_sublevel_at}` : ''}</p>
+                <p className="font-ninja text-sm font-semibold text-ninja-navy truncate">{row.full_name}</p>
+                <p className="font-ninja text-xs text-ninja-muted truncate">
+                  {row.belt_level_at}{row.belt_sublevel_at ? ` · Level ${row.belt_sublevel_at}` : ''} · {authorName(row.sensei_name)}
+                </p>
               </div>
-              <span className="font-ninja text-xs text-ninja-muted text-right shrink-0">{formatDate(row.session_date)}<br />{authorName(row.sensei_name)}</span>
-            </motion.div>
+              <span className="font-ninja text-xs text-ninja-muted shrink-0 tabular-nums">{formatDate(row.session_date)}</span>
+            </motion.li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </Section>
   );
 }
 
@@ -293,38 +338,51 @@ export default function ReportsPage() {
   }, []);
 
   const totalStudents = data?.totalStudents ?? data?.enrollment.reduce((s, r) => s + r.count, 0) ?? 0;
+  const enrollments = data?.enrollment.reduce((s, r) => s + r.count, 0) ?? 0;
+  const inactivePct = totalStudents > 0 && data ? Math.round((data.inactive.length / totalStudents) * 100) : 0;
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-ninja-navy font-ninja font-bold text-2xl">Reports</h1>
-          <p className="text-ninja-muted font-ninja text-sm mt-0.5">Enrollment and activity overview</p>
-        </div>
+      <div className="space-y-6">
+        {/* A page title sits on the page, same as the dashboard's masthead. */}
+        <header>
+          <h1 className="text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight">Reports</h1>
+          <p className="text-ninja-muted font-ninja text-sm mt-1">Enrollment and activity at this center</p>
+        </header>
 
         {loading && <SkeletonCards count={6} label="Loading reports" />}
         {error && <p className="text-ninja-red font-ninja text-center py-12">{error}</p>}
 
         {data && (
-          <div className="space-y-5">
-            {/* Summary stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard label="Total Students" value={totalStudents} />
-              <StatCard label="Programs" value={data.enrollment.length} />
-              <StatCard label="Belt-Ups 30d" value={data.beltLog.length} sub="recent advancements" />
-              <StatCard label="Inactive 30d" value={data.inactive.length} sub="no check-in" />
-            </div>
+          <>
+            <StatStrip
+              stats={[
+                { label: 'Active ninjas', value: totalStudents },
+                { label: 'Enrollments', value: enrollments, sub: `across ${data.enrollment.length} program${data.enrollment.length === 1 ? '' : 's'}` },
+                { label: 'Belt-ups', value: data.beltLog.length, sub: 'last 30 days' },
+                {
+                  label: 'Inactive',
+                  value: data.inactive.length,
+                  sub: `${inactivePct}% of ninjas, no check-in in 30 days`,
+                  tone: data.inactive.length > 0 ? 'text-ninja-red' : undefined,
+                },
+              ]}
+            />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Two across on a laptop, three on a wide screen with the belt log
+                running the full height of the right column. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
               <EnrollmentChart data={data.enrollment} />
               <BeltChart data={data.belts} />
+              <InactiveTable data={data.inactive} className="xl:col-span-2" />
+              {/* contain:size stops the log's length from setting the row
+                  heights; it stretches to what its neighbours need and scrolls. */}
+              <BeltLog
+                data={data.beltLog}
+                className="xl:col-start-3 xl:row-start-1 xl:row-span-2 xl:[contain:size]"
+              />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InactiveTable data={data.inactive} />
-              <BeltLog data={data.beltLog} />
-            </div>
-          </div>
+          </>
         )}
       </div>
     </Layout>
