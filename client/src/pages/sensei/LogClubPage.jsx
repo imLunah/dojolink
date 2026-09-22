@@ -91,7 +91,7 @@ export default function LogClubPage() {
           <button onClick={() => navigate(-1)} className="text-ninja-muted hover:text-ninja-blue font-ninja text-sm flex items-center gap-1 transition-colors">
             ← Back
           </button>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
+          <div className="bg-amber-50 border border-ninja-border rounded-xl p-6 text-center">
             <p className="text-amber-700 font-ninja font-semibold">You can only log sessions at your home center.</p>
           </div>
         </div>

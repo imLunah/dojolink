@@ -256,7 +256,7 @@ export default function AccountPage() {
   );
 
   const forcedBanner = isForced && (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+    <div className="bg-amber-50 border border-ninja-border rounded-xl px-4 py-3 flex items-start gap-3">
       <LockIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
       <div>
         <p className="text-amber-800 font-ninja font-semibold text-sm">Password reset required</p>

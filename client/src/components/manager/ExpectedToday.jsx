@@ -186,7 +186,7 @@ export default function ExpectedToday({
   const runningOut = canRenew && hoursLeft !== null && hoursLeft > 0 && hoursLeft <= 6;
 
   const expiryNotice = runningOut ? (
-    <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5">
+    <div className="mb-3 flex items-start gap-2 rounded-xl border border-ninja-border bg-amber-500/10 p-2.5">
       <span aria-hidden className="mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0">
         <TriangleAlertIcon size={15} />
       </span>

@@ -79,7 +79,7 @@ const mdComponents = {
   li: ({ children }) => <li>{children}</li>,
   a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-ninja-blue hover:underline">{children}</a>,
   code: ({ children }) => <code className="bg-amber-100 px-1 rounded font-mono text-xs">{children}</code>,
-  blockquote: ({ children }) => <blockquote className="border-l-2 border-amber-400 pl-3 italic text-amber-800">{children}</blockquote>,
+  blockquote: ({ children }) => <blockquote className="border-l-2 border-ninja-border pl-3 italic text-amber-800">{children}</blockquote>,
 };
 
 function PinnedNoteSection({ clubName, initialNote, initialAuthor, initialUpdatedAt, onUpdated, isReadOnly }) {
@@ -435,7 +435,7 @@ function SessionsSection({ sessions, memberCount, slug, navigate, isManager, isR
                       <span className="font-ninja text-[11px] text-ninja-muted flex-shrink-0">{rel}</span>
                     )}
                     {isOverdue && (
-                      <span className="text-[10px] font-ninja font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200 uppercase tracking-wide flex-shrink-0">
+                      <span className="text-[10px] font-ninja font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-ninja-border uppercase tracking-wide flex-shrink-0">
                         Overdue
                       </span>
                     )}

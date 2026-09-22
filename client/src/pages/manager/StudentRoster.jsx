@@ -740,7 +740,7 @@ export default function StudentRoster() {
             {!importResult && (
               <>
                 {importError && (
-                  <div className="bg-red-50 border border-red-200 text-ninja-red rounded-lg p-3 mb-4 text-sm font-ninja">
+                  <div className="bg-red-50 border border-ninja-border text-ninja-red rounded-lg p-3 mb-4 text-sm font-ninja">
                     {importError}
                   </div>
                 )}
@@ -755,7 +755,7 @@ export default function StudentRoster() {
             {importResult?.preview && (
               <div className="space-y-3">
                 {importError && (
-                  <div className="bg-red-50 border border-red-200 text-ninja-red rounded-lg p-3 text-sm font-ninja">
+                  <div className="bg-red-50 border border-ninja-border text-ninja-red rounded-lg p-3 text-sm font-ninja">
                     {importError}
                   </div>
                 )}

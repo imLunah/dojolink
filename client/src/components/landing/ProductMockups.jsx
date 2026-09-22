@@ -48,9 +48,9 @@ const BOARD = [
 ];
 
 const EDGE = {
-  logged:  'border-emerald-400',
-  todo:    'border-amber-400',
-  overdue: 'border-red-400',
+  logged:  'border-ninja-border',
+  todo:    'border-ninja-border',
+  overdue: 'border-ninja-border',
 };
 const NOTE_DOT = {
   logged:  'bg-emerald-500',

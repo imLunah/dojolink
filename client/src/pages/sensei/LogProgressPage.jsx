@@ -261,7 +261,7 @@ export default function LogProgressPage() {
                             isSelected
                               ? 'bg-ninja-blue text-white'
                               : isDone
-                              ? 'bg-green-50 border border-green-300 text-green-700 hover:border-green-500'
+                              ? 'bg-green-50 border border-ninja-border text-green-700 '
                               : 'bg-ninja-bg border border-ninja-border text-ninja-navy hover:border-ninja-blue'
                           }`}
                         >
@@ -297,7 +297,7 @@ export default function LogProgressPage() {
           {/* Right panel: log form + what has already been logged */}
           <div className="lg:flex-1 min-w-0 space-y-6">
             {isReadOnly ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm text-center">
+              <div className="bg-amber-50 border border-ninja-border rounded-xl p-6 shadow-sm text-center">
                 <p className="text-amber-700 font-ninja font-semibold">
                   You can only log progress at your home center.
                 </p>
@@ -326,7 +326,7 @@ export default function LogProgressPage() {
                   </p>
                 )}
                 {!editLog && pendingCount(selectedProgram) > 1 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-sm font-ninja text-amber-700">
+                  <div className="bg-amber-50 border border-ninja-border rounded-xl p-3 mb-4 text-sm font-ninja text-amber-700">
                     <strong>{pendingCount(selectedProgram)} sessions to log.</strong> Starting with the oldest
                     {sessionDateFor(selectedProgram) ? ` (${formatDate(sessionDateFor(selectedProgram))})` : ''}. They'll still show up for today after.
                   </div>

@@ -10,9 +10,9 @@ import { Skeleton } from '../ui/Skeleton';
 import { CalendarIcon, UsersIcon } from 'lucide-react';
 
 function ClubBadge({ name }) {
-  const c = CLUB_COLORS[name] || { bg: 'bg-ninja-bg', text: 'text-ninja-navy', border: 'border-ninja-border' };
+  const c = CLUB_COLORS[name] || { bg: 'bg-ninja-bg', text: 'text-ninja-navy' };
   return (
-    <span className={`text-xs font-ninja font-semibold px-2 py-0.5 rounded-md border ${c.bg} ${c.text} ${c.border}`}>
+    <span className={`text-xs font-ninja font-semibold px-2 py-0.5 rounded-md border border-ninja-border ${c.bg} ${c.text}`}>
       {name}
     </span>
   );
@@ -139,7 +139,6 @@ export default function ClubSessionsPanel({ sessions = [], onDeleted, onAttendee
               <div
                 key={s.id}
                 className={`group relative ${CARD} overflow-hidden flex flex-col hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
-                style={{ borderColor: `${color.solid}33` }}
               >
                 {/* Colored header band — cover image if set, else club-color gradient */}
                 <div

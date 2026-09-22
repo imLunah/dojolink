@@ -582,7 +582,7 @@ export default function LogEntryForm({ student, program, enrollment, onLogged, o
             className="flex-1 bg-ninja-bg border border-ninja-border text-ninja-muted rounded-lg px-4 py-2 font-ninja cursor-not-allowed"
           />
           {sessionDate !== today() && (
-            <span className="text-xs font-ninja text-ninja-blue bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg whitespace-nowrap">
+            <span className="text-xs font-ninja text-ninja-blue bg-blue-50 border border-ninja-border px-2 py-1 rounded-lg whitespace-nowrap">
               Check-in date
             </span>
           )}

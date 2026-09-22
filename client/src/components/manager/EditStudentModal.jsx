@@ -60,7 +60,7 @@ export default function EditStudentModal({ isOpen, onClose, student, programs = 
     <Modal isOpen={isOpen} onClose={onClose} title="Edit Ninja">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-ninja-red rounded-lg p-3 text-sm font-ninja">
+          <div className="bg-red-50 border border-ninja-border text-ninja-red rounded-lg p-3 text-sm font-ninja">
             {error}
           </div>
         )}

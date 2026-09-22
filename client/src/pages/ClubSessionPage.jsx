@@ -115,7 +115,7 @@ export default function ClubSessionPage() {
         {/* Header */}
         <motion.div variants={fadeUp} className="bg-white border border-ninja-border rounded-xl p-5 shadow-sm">
           <div className="flex flex-wrap items-center gap-3 mb-1">
-            <span className={`text-sm font-ninja font-bold px-3 py-1 rounded-md border ${c.bg} ${c.text} ${c.border}`}>
+            <span className={`text-sm font-ninja font-bold px-3 py-1 rounded-md border border-ninja-border ${c.bg} ${c.text}`}>
               {clubDef.name}
             </span>
             <h1 className="text-xl font-bold font-ninja text-ninja-navy">{formatDate(session.session_date)}</h1>

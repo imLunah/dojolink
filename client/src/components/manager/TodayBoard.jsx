@@ -255,7 +255,6 @@ export default function TodayBoard({
             const isOverdue = group.assignments.some(
               (a) => !a.completed && a.session_date && String(a.session_date).split('T')[0] < todayStr
             );
-            const borderColor = allDone ? '#4ade80' : isOverdue ? '#f87171' : '#fde047';
             const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
             const sessionCount = group.assignments.length;
             const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
@@ -270,8 +269,7 @@ export default function TodayBoard({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05, duration: 0.25, ease: 'easeOut' }}
-                className="bg-white rounded-2xl p-4 cursor-pointer"
-                style={{ border: `2px solid ${borderColor}` }}
+                className="bg-white border border-ninja-border rounded-2xl p-4 cursor-pointer"
                 onClick={() => navigate(`/manager/students/${group.student_id}`)}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
@@ -300,12 +298,12 @@ export default function TodayBoard({
                       <PinnedNotePill note={group.pinned_note} parentNote={group.special_instructions} />
                     )}
                     {isOverdue && (
-                      <span className="text-xs font-ninja font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">
+                      <span className="text-xs font-ninja font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-ninja-border">
                         Overdue
                       </span>
                     )}
                     {allDone && (
-                      <span className="text-xs font-ninja font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
+                      <span className="text-xs font-ninja font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-ninja-border">
                         Logged ✓
                       </span>
                     )}
@@ -370,8 +368,8 @@ export default function TodayBoard({
           const isOverdue = group.assignments.some(
             (a) => !a.completed && a.session_date && String(a.session_date).split('T')[0] < todayStr
           );
-          const borderClass = allDone ? 'border-green-400' : isOverdue ? 'border-red-400' : 'border-yellow-300';
-          const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
+          const borderClass = allDone ? 'border-ninja-border' : isOverdue ? 'border-ninja-border' : 'border-ninja-border';
+            const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
           const sessionCount = group.assignments.length;
           const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
           const realPrograms = uniquePrograms.filter(Boolean);

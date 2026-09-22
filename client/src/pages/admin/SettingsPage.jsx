@@ -114,7 +114,7 @@ export default function SettingsPage() {
         {!isAdmin && (
           <motion.div
             variants={fadeUp}
-            className="flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 mb-6"
+            className="flex items-start gap-2.5 rounded-xl border border-ninja-border bg-amber-500/5 p-3 mb-6"
           >
             <span aria-hidden className="mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0">
               <WarningIcon width="16" height="16" />

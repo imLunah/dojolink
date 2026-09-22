@@ -2,7 +2,7 @@ const VARIANTS = {
   primary: 'bg-ninja-blue hover:bg-ninja-blue-hover text-white font-ninja font-bold rounded-lg px-5 py-2.5',
   secondary: 'bg-white border border-ninja-border text-ninja-navy hover:border-ninja-blue hover:text-ninja-blue font-ninja font-bold rounded-lg px-5 py-2.5',
   ghost: 'bg-transparent text-ninja-navy hover:text-ninja-blue font-ninja font-bold',
-  danger: 'bg-red-50 border border-red-200 text-ninja-red hover:bg-red-100 font-ninja font-bold rounded-lg px-5 py-2.5',
+  danger: 'bg-red-50 border border-ninja-border text-ninja-red hover:bg-red-100 font-ninja font-bold rounded-lg px-5 py-2.5',
 };
 
 // One transition covers colour + the press scale. `active:scale-[0.97]` gives

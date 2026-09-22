@@ -481,7 +481,7 @@ function BeltEditor() {
   return (
     <div>
       {!isSeeded && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-5 flex items-center justify-between gap-4">
+        <div className="bg-blue-50 border border-ninja-border rounded-2xl p-4 mb-5 flex items-center justify-between gap-4">
           <div>
             <p className="text-ninja-navy font-ninja font-semibold text-sm">Viewing built-in defaults</p>
             <p className="text-ninja-muted font-ninja text-xs mt-0.5">Initialize to enable editing. Belt projects will be saved to the database.</p>
@@ -510,7 +510,7 @@ function BeltEditor() {
               style={{
                 background: active ? c.bg : 'transparent',
                 color: active ? c.text : 'var(--ninja-muted, #6b7280)',
-                border: `1px solid ${active ? c.border : 'var(--ninja-border, #e5e7eb)'}`,
+                border: '1px solid var(--ninja-border, #e5e7eb)',
                 fontWeight: active ? 700 : 500,
               }}
             >
@@ -655,7 +655,7 @@ export default function CurriculumPage() {
             here — but the edit lands everywhere, and nothing else on the page
             would tell them that. */}
         {!isAdmin && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 mb-6">
+          <div className="flex items-start gap-2.5 rounded-xl border border-ninja-border bg-amber-500/5 p-3 mb-6">
             <span aria-hidden className="mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0">
               <WarningIcon width="16" height="16" />
             </span>
@@ -690,7 +690,7 @@ export default function CurriculumPage() {
         ) : (
           <>
             {readOnly && (
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-5 flex items-center justify-between gap-4">
+              <div className="bg-blue-50 border border-ninja-border rounded-2xl p-4 mb-5 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-ninja-navy font-ninja font-semibold text-sm">Viewing built-in defaults</p>
                   <p className="text-ninja-muted font-ninja text-xs mt-0.5">Initialize to enable editing. Modules and lessons will be saved to the database.</p>

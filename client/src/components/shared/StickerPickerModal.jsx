@@ -42,7 +42,7 @@ export default function StickerPickerModal({ isOpen, onClose, student, onSaved }
         </p>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-ninja-red rounded-lg p-3 text-sm font-ninja">
+          <div className="bg-red-50 border border-ninja-border text-ninja-red rounded-lg p-3 text-sm font-ninja">
             {error}
           </div>
         )}
