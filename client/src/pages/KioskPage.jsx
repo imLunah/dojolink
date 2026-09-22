@@ -259,33 +259,33 @@ export default function KioskPage() {
   return (
     // The page is exactly one screen and never scrolls; long lists scroll in
     // their own box, so the clock, the search and the back button stay put.
-    // Landscape tablet: the center's color as a panel on the left, check-in on
-    // the right. Upright, the panel becomes a band across the top.
-    <div className="h-[100dvh] overflow-hidden bg-white flex flex-col lg:flex-row" style={colorVars}>
+    // Always the landscape layout, at every width (the owner's call): the
+    // center's color as a panel on the left, check-in on the right.
+    <div className="h-[100dvh] overflow-hidden bg-white flex flex-row" style={colorVars}>
       <aside
-        className="flex-shrink-0 lg:w-[44%] flex flex-col px-6 sm:px-10 pt-6 pb-6 lg:pb-12"
+        className="flex-shrink-0 w-[44%] flex flex-col px-5 md:px-10 pt-6 pb-8 lg:pb-12"
         style={{ background: theme.panel }}
       >
-        <div className="flex items-start justify-between gap-4 font-ninja font-bold text-lg lg:text-xl" style={{ color: theme.ink }}>
+        <div className="flex items-start justify-between gap-4 font-ninja font-bold text-base md:text-lg lg:text-xl" style={{ color: theme.ink }}>
           <div>
             <p>{now.toLocaleDateString('en-US', { weekday: 'long' })}</p>
             <p className="tabular-nums">{now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</p>
           </div>
           <p className="tabular-nums text-right">{now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
         </div>
-        <div className="lg:flex-1 flex items-center justify-center pt-4 lg:py-10">
+        <div className="flex-1 flex items-center justify-center py-6 lg:py-10">
           {/* Inline white, not bg-white: this card sits on the color panel and
               must not follow any theme override. */}
-          <div className="w-full max-w-md rounded-3xl px-8 py-6 lg:py-20 text-center shadow-sm" style={{ backgroundColor: 'rgb(255 255 255 / 0.88)' }}>
+          <div className="w-full max-w-md rounded-3xl px-5 md:px-8 py-10 lg:py-20 text-center shadow-sm" style={{ backgroundColor: 'rgb(255 255 255 / 0.88)' }}>
             <Logo className="h-7 lg:h-9 mx-auto" />
-            <h1 className="mt-4 lg:mt-8 font-ninja font-extrabold text-3xl lg:text-5xl text-ninja-navy text-balance">
+            <h1 className="mt-6 lg:mt-8 font-ninja font-extrabold text-3xl md:text-4xl lg:text-5xl text-ninja-navy text-balance">
               Welcome to {me.centerName}
             </h1>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 min-h-0 flex flex-col items-center px-6 sm:px-10 pt-6 lg:pt-12 pb-6">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col items-center px-5 md:px-10 pt-8 lg:pt-12 pb-6">
         <div className={`w-full flex-1 min-h-0 flex flex-col ${RESULT_STEPS.has(step) ? 'max-w-2xl' : 'max-w-xl'}`}>
           <AnimatePresence mode="wait" initial={false}>
             {step === 'search' && (
