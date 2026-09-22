@@ -4,6 +4,7 @@ import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import Logo from '../components/ui/Logo';
 import { api } from '../api/client';
 import { useLightOnly } from '../context/ThemeContext';
+import { buildAccentTokens, buildCustomTokens } from '../lib/accents';
 
 // The check-in kiosk: a screen at the front counter, opened in a tab by a
 // signed-in director, where a family finds their ninja, picks one of today's
@@ -228,11 +229,14 @@ export default function KioskPage() {
 
   const q = query.trim();
   const closed = !me.ready || unavailable;
+  // The kiosk wears the center's color, set on the Kiosk page, rather than the
+  // accent of whoever opened the tab. Every ninja-blue inside reads these.
+  const colorVars = me.color ? buildCustomTokens(me.color, false) : buildAccentTokens('blue', false);
 
   return (
     // The page is exactly one screen and never scrolls; long lists scroll in
     // their own box, so the clock, the search and the back button stay put.
-    <div className="h-[100dvh] overflow-hidden bg-ninja-bg flex flex-col">
+    <div className="h-[100dvh] overflow-hidden bg-ninja-bg flex flex-col" style={colorVars}>
       <header className="flex items-start justify-between gap-4 px-6 sm:px-10 pt-6">
         <div>
           <p className="font-ninja font-bold text-sm text-ninja-muted">

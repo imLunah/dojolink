@@ -41,7 +41,7 @@ function nowMinutes() {
 async function loadKiosk(pool, locationId) {
   const { rows } = await pool.query(
     `SELECT k.id, k.location_id, k.company_id, k.company_name, k.login_email,
-            k.portal_token, k.status, k.connected_at, k.last_used_at, k.flow,
+            k.portal_token, k.status, k.connected_at, k.last_used_at, k.flow, k.color,
             u.display_name AS connected_by_name
        FROM mystudio_kiosks k
        LEFT JOIN users u ON u.id = k.connected_by
@@ -63,6 +63,7 @@ function publicShape(kiosk) {
     connectedByName: kiosk.connected_by_name || null,
     lastUsedAt: kiosk.last_used_at,
     flow: kiosk.flow === 'class' ? 'class' : 'name',
+    color: kiosk.color || null,
   };
 }
 
@@ -379,22 +380,41 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
   }
 });
 
-// PATCH /api/kiosk/setup  { flow: 'name' | 'class' }
+// PATCH /api/kiosk/setup  { flow?: 'name' | 'class', color?: '#rrggbb' | null }
 //
-// How the kiosk starts: find your ninja then pick a class, or pick the class
-// then find your ninja in it.
+// The kiosk's settings: how it starts (find your ninja then pick a class, or
+// pick the class then find your ninja in it) and its color (null is
+// DojoLink's own blue).
 router.patch('/setup', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
-  const flow = req.body && req.body.flow;
-  if (!['name', 'class'].includes(flow)) return res.status(400).json({ error: 'Pick how the kiosk starts.' });
+  const body = req.body || {};
+  const sets = [];
+  const params = [req.session.activeLocationId];
+
+  if (body.flow !== undefined) {
+    if (!['name', 'class'].includes(body.flow)) return res.status(400).json({ error: 'Pick how the kiosk starts.' });
+    params.push(body.flow);
+    sets.push(`flow = $${params.length}`);
+  }
+  if (body.color !== undefined) {
+    const color = body.color === null ? null : String(body.color).toLowerCase();
+    if (color !== null && !/^#[0-9a-f]{6}$/.test(color)) return res.status(400).json({ error: 'Pick a color.' });
+    params.push(color);
+    sets.push(`color = $${params.length}`);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'Nothing to change.' });
+
   try {
     const locationId = req.session.activeLocationId;
-    const { rowCount } = await pool.query('UPDATE mystudio_kiosks SET flow = $2 WHERE location_id = $1', [locationId, flow]);
+    const { rowCount } = await pool.query(
+      `UPDATE mystudio_kiosks SET ${sets.join(', ')} WHERE location_id = $1`,
+      params
+    );
     if (!rowCount) return res.status(400).json({ error: 'Turn the kiosk on first.' });
     const kiosk = await loadKiosk(pool, locationId);
     res.json({ configured: true, canUseSavedLogin: Boolean(await savedLogin(pool, locationId)), ...publicShape(kiosk) });
   } catch (err) {
-    console.error('Kiosk flow save failed:', err.message);
+    console.error('Kiosk settings save failed:', err.message);
     res.status(500).json({ error: 'Failed to save the kiosk setting' });
   }
 });
@@ -439,6 +459,7 @@ router.get('/me', async (req, res) => {
       ready: Boolean(kiosk && kiosk.status === 'connected'),
       // Whether families start from their ninja's name or from the class.
       flow: kiosk && kiosk.flow === 'class' ? 'class' : 'name',
+      color: (kiosk && kiosk.color) || null,
     });
   } catch (err) {
     console.error('Kiosk me failed:', err.message);

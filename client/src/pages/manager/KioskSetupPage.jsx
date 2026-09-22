@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { TabletSmartphoneIcon } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import { CARD } from '../../lib/surfaces';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import Segmented from '../../components/ui/Segmented';
+import ColorPalette from '../../components/theme/ColorPalette';
 import { api } from '../../api/client';
 
 // Setting up the check-in kiosk. A center that connected MyStudio with its
@@ -94,17 +95,42 @@ export default function KioskSetupPage() {
     api.get('/kiosk/setup').then(setSetup).catch((err) => setLoadError(err.message));
   }, []);
 
-  const setFlow = async (flow) => {
-    if (flow === setup.flow) return;
+  // Optimistic: the control moves at once and goes back if the save fails.
+  const saveSetting = async (change) => {
     const before = setup;
-    setSetup({ ...setup, flow });
+    setSetup({ ...setup, ...change });
     setError('');
     try {
-      setSetup(await api.patch('/kiosk/setup', { flow }));
+      setSetup(await api.patch('/kiosk/setup', change));
     } catch (err) {
       setSetup(before);
       setError(err.message);
     }
+  };
+
+  const setFlow = (flow) => { if (flow !== setup.flow) saveSetting({ flow }); };
+
+  // The native picker fires on every step of a drag. The color follows it on
+  // screen at once and is saved once the dragging stops.
+  const pickTimer = useRef(null);
+  useEffect(() => () => clearTimeout(pickTimer.current), []);
+  const pickCustom = (value) => {
+    const color = String(value).toLowerCase();
+    setSetup((cur) => ({ ...cur, color }));
+    clearTimeout(pickTimer.current);
+    pickTimer.current = setTimeout(async () => {
+      setError('');
+      try {
+        setSetup(await api.patch('/kiosk/setup', { color }));
+      } catch (err) {
+        setError(err.message);
+      }
+    }, 600);
+  };
+  // 'default' from the palette is DojoLink's own blue, stored as no color.
+  const setColor = (value) => {
+    const color = value === 'default' ? null : String(value).toLowerCase();
+    if (color !== (setup.color || null)) saveSetting({ color });
   };
 
   const turnOn = async () => {
@@ -212,6 +238,30 @@ export default function KioskSetupPage() {
                     ? "Families pick today's class, then find their ninja in it."
                     : 'Families find their ninja, then pick one of their classes.'}
                 </p>
+              </section>
+            )}
+
+            {ready && (
+              <section className={`${CARD} p-5 space-y-4`}>
+                <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Color</h2>
+                <div className="flex flex-wrap items-center gap-4">
+                  <ColorPalette value={setup.color || 'default'} onChange={setColor} />
+                  <label className="relative flex items-center gap-2 font-ninja text-sm font-bold text-ninja-navy cursor-pointer">
+                    <span
+                      className="w-7 h-7 rounded-full ring-1 ring-black/10"
+                      style={{ background: 'conic-gradient(#ef4444, #eab308, #22c55e, #14b8a6, #3b82f6, #8b5cf6, #ec4899, #ef4444)' }}
+                      aria-hidden
+                    />
+                    Custom
+                    <input
+                      type="color"
+                      aria-label="Custom kiosk color"
+                      value={setup.color || '#006add'}
+                      onChange={(e) => pickCustom(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </label>
+                </div>
               </section>
             )}
 
