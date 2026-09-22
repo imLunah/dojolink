@@ -62,6 +62,35 @@ function ClassLabel({ startTime, className }) {
   );
 }
 
+// "04:00 PM" as minutes since midnight, or null.
+function startMinutes(t) {
+  const m = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(String(t || '').trim());
+  if (!m) return null;
+  return (Number(m[1]) % 12 + (/PM/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2]);
+}
+
+// Scrolls a class list so the classes starting at the current time are at the
+// top: at 4:10 the 4:00 classes lead, and the ones already under way sit just
+// above, a scroll away for a family running late. Runs when the list arrives.
+function useScrollToNow(list) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const box = ref.current;
+    if (!box || !list || !list.length) return;
+    const d = new Date();
+    const now = d.getHours() * 60 + d.getMinutes();
+    const starts = list.map((c) => startMinutes(c.startTime));
+    // The latest start that has already come round; before the first class,
+    // the list simply starts at the top.
+    const current = Math.max(-1, ...starts.filter((m) => m !== null && m <= now));
+    if (current < 0) { box.scrollTop = 0; return; }
+    const row = box.querySelector(`[data-start="${current}"]`);
+    // The box is position: relative, so offsetTop is already measured from it.
+    if (row) box.scrollTop = row.offsetTop;
+  }, [list]);
+  return ref;
+}
+
 // MyStudio sends "04:00 PM".
 const fmtTime = (t) => String(t || '').replace(/^0(\d)/, '$1');
 
@@ -95,12 +124,14 @@ export default function KioskPage() {
   const [unavailable, setUnavailable] = useState(false);
   const [member, setMember] = useState(null);
   const [classes, setClasses] = useState(null);
+  const classesBox = useScrollToNow(classes);
   const [picked, setPicked] = useState(null);
   // What the confirm screen is about to do to `picked`: check in, or undo.
   const [mode, setMode] = useState('checkin');
   // Name first: search -> classes -> confirm. Class first: schedule -> roster -> confirm.
   const [step, setStep] = useState('search'); // search | classes | schedule | roster | confirm | working | done | undone | error
   const [schedule, setSchedule] = useState(null);
+  const scheduleBox = useScrollToNow(schedule);
   const [roster, setRoster] = useState(null);
   const [rosterQuery, setRosterQuery] = useState('');
   // Where Back on the confirm screen returns to.
@@ -387,7 +418,7 @@ export default function KioskPage() {
                     <p className="mb-3 font-ninja font-bold text-xl text-ninja-navy text-center">
                       Pick your class to check in
                     </p>
-                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
+                    <div ref={scheduleBox} className="relative flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
                       {schedule === null && (
                         <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding today's classes…</p>
                       )}
@@ -398,7 +429,7 @@ export default function KioskPage() {
                       )}
                       {schedule?.map((c) => (
                         <button
-                          key={c.classKey} type="button" onClick={() => pickClass(c)}
+                          key={c.classKey} type="button" onClick={() => pickClass(c)} data-start={startMinutes(c.startTime) ?? ''}
                           className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
                           <ClassLabel startTime={c.startTime} className={c.className} />
@@ -491,7 +522,7 @@ export default function KioskPage() {
                 <h1 className="font-ninja font-extrabold text-3xl text-ninja-navy text-center">
                   Which class is {member.firstName} here for?
                 </h1>
-                <div className="mt-6 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
+                <div ref={classesBox} className="relative mt-6 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
                   {classes === null && (
                     <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding today's classes…</p>
                   )}
@@ -502,7 +533,7 @@ export default function KioskPage() {
                   )}
                   {classes?.map((c) => (
                     c.checkedIn ? (
-                      <div key={c.classKey}
+                      <div key={c.classKey} data-start={startMinutes(c.startTime) ?? ''}
                         className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4">
                         <ClassLabel startTime={c.startTime} className={c.className} />
                         <span className="ml-auto flex-shrink-0 font-ninja text-sm font-bold text-ninja-muted">Checked in</span>
@@ -515,7 +546,7 @@ export default function KioskPage() {
                       </div>
                     ) : (
                       <button
-                        key={c.classKey} type="button"
+                        key={c.classKey} type="button" data-start={startMinutes(c.startTime) ?? ''}
                         onClick={() => { setPicked(c); setMode('checkin'); setConfirmFrom('classes'); setStep('confirm'); }}
                         className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                       >
