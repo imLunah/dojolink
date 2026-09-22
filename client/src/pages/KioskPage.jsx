@@ -21,6 +21,7 @@ const EASE = [0.23, 1, 0.32, 1];
 const AUTO_BACK_S = 10;
 const IDLE_MS = 30000;
 const AUTO_BACK_STEPS = new Set(['done', 'undone', 'error']);
+const RESULT_STEPS = new Set(['confirm', 'working', 'done', 'undone', 'error']);
 
 // MyStudio sends "04:00 PM".
 const fmtTime = (t) => String(t || '').replace(/^0(\d)/, '$1');
@@ -34,10 +35,12 @@ function useClock() {
   return now;
 }
 
-function Screen({ children, k }) {
+// `center` stands a short screen (confirm, done, error) in the middle of the
+// tablet instead of leaving it at the top of an empty page.
+function Screen({ children, k, center = false }) {
   return (
     <motion.div key={k} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.3, ease: EASE }} className="w-full flex-1 min-h-0 flex flex-col">
+      transition={{ duration: 0.3, ease: EASE }} className={`w-full flex-1 min-h-0 flex flex-col ${center ? 'justify-center pb-16' : ''}`}>
       {children}
     </motion.div>
   );
@@ -243,7 +246,7 @@ export default function KioskPage() {
       </header>
 
       <main className="flex-1 min-h-0 flex flex-col items-center px-6 sm:px-10 pt-8 sm:pt-12 pb-6">
-        <div className="w-full max-w-xl flex-1 min-h-0 flex flex-col">
+        <div className={`w-full flex-1 min-h-0 flex flex-col ${RESULT_STEPS.has(step) ? 'max-w-2xl' : 'max-w-xl'}`}>
           <AnimatePresence mode="wait" initial={false}>
             {step === 'search' && (
               <Screen k="search">
@@ -463,14 +466,14 @@ export default function KioskPage() {
             )}
 
             {step === 'confirm' && picked && member && (
-              <Screen k="confirm">
-                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center">
-                  <p className="font-ninja font-bold text-base text-ninja-muted">
+              <Screen k="confirm" center>
+                <div className="bg-white border border-ninja-border rounded-3xl px-10 py-12 text-center">
+                  <p className="font-ninja font-bold text-xl text-ninja-muted">
                     {mode === 'undo' ? 'Undo check-in for' : 'Check in'}
                   </p>
-                  <p className="mt-1 font-ninja font-extrabold text-4xl text-ninja-navy">{member.firstName} {member.lastInitial}</p>
-                  <p className="mt-2 font-ninja text-lg text-ninja-muted">{picked.className} · {fmtTime(picked.startTime)}</p>
-                  <div className="mt-8 grid grid-cols-2 gap-3">
+                  <p className="mt-2 font-ninja font-extrabold text-6xl text-ninja-navy">{member.firstName} {member.lastInitial}</p>
+                  <p className="mt-3 font-ninja text-2xl text-ninja-muted">{picked.className} · {fmtTime(picked.startTime)}</p>
+                  <div className="mt-10 grid grid-cols-2 gap-4">
                     <button type="button"
                       onClick={() => {
                         setMode('checkin');
@@ -479,11 +482,11 @@ export default function KioskPage() {
                         // Undo from the finished screen has no list behind it.
                         if (confirmFrom === 'classes' && classes) setStep('classes'); else reset();
                       }}
-                      className="font-ninja text-lg font-bold py-4 rounded-2xl border border-ninja-border text-ninja-navy">
+                      className="font-ninja text-2xl font-bold py-6 rounded-2xl border border-ninja-border text-ninja-navy">
                       Back
                     </button>
                     <button type="button" onClick={confirm}
-                      className={`font-ninja text-lg font-bold py-4 rounded-2xl text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${mode === 'undo' ? 'bg-ninja-red' : 'bg-ninja-blue'}`}>
+                      className={`font-ninja text-2xl font-bold py-6 rounded-2xl text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${mode === 'undo' ? 'bg-ninja-red' : 'bg-ninja-blue'}`}>
                       {mode === 'undo' ? 'Undo' : 'Check in'}
                     </button>
                   </div>
@@ -492,32 +495,32 @@ export default function KioskPage() {
             )}
 
             {step === 'working' && (
-              <Screen k="working">
-                <p className="font-ninja font-bold text-xl text-ninja-muted text-center" role="status">
+              <Screen k="working" center>
+                <p className="font-ninja font-bold text-3xl text-ninja-muted text-center" role="status">
                   {mode === 'undo' ? 'Undoing…' : 'Checking in…'}
                 </p>
               </Screen>
             )}
 
             {step === 'done' && outcome && (
-              <Screen k="done">
-                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center" role="status">
-                  <span className="mx-auto w-16 h-16 rounded-full flex items-center justify-center bg-ninja-blue text-white">
-                    <CheckIcon size={34} strokeWidth={3} aria-hidden />
+              <Screen k="done" center>
+                <div className="bg-white border border-ninja-border rounded-3xl px-10 py-12 text-center" role="status">
+                  <span className="mx-auto w-24 h-24 rounded-full flex items-center justify-center bg-ninja-blue text-white">
+                    <CheckIcon size={52} strokeWidth={3} aria-hidden />
                   </span>
-                  <p className="mt-5 font-ninja font-extrabold text-3xl text-ninja-navy">
+                  <p className="mt-6 font-ninja font-extrabold text-5xl text-ninja-navy">
                     {outcome.already ? `${outcome.firstName} is already checked in` : `${outcome.firstName} is checked in`}
                   </p>
-                  <p className="mt-2 font-ninja text-lg text-ninja-muted">{outcome.className} · {fmtTime(outcome.startTime)}</p>
-                  <div className="mt-8 flex justify-center gap-3">
+                  <p className="mt-3 font-ninja text-2xl text-ninja-muted">{outcome.className} · {fmtTime(outcome.startTime)}</p>
+                  <div className="mt-10 flex justify-center gap-4">
                     {!outcome.already && picked && (
                       <button type="button" onClick={() => askUndo({ ...picked, className: outcome.className, startTime: outcome.startTime })}
-                        className="font-ninja text-lg font-bold px-8 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
+                        className="font-ninja text-2xl font-bold px-12 py-6 rounded-2xl border border-ninja-border text-ninja-navy">
                         Undo
                       </button>
                     )}
                     <button type="button" onClick={reset}
-                      className="font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl bg-ninja-blue text-white tabular-nums">
+                      className="font-ninja text-2xl font-bold px-14 py-6 rounded-2xl bg-ninja-blue text-white tabular-nums">
                       Done ({secondsLeft})
                     </button>
                   </div>
@@ -526,16 +529,16 @@ export default function KioskPage() {
             )}
 
             {step === 'undone' && outcome && (
-              <Screen k="undone">
-                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center" role="status">
-                  <p className="font-ninja font-extrabold text-3xl text-ninja-navy">
+              <Screen k="undone" center>
+                <div className="bg-white border border-ninja-border rounded-3xl px-10 py-12 text-center" role="status">
+                  <p className="font-ninja font-extrabold text-5xl text-ninja-navy">
                     {outcome.firstName ? `${outcome.firstName}'s check-in was undone` : 'Check-in undone'}
                   </p>
-                  <p className="mt-2 font-ninja text-lg text-ninja-muted">
+                  <p className="mt-3 font-ninja text-2xl text-ninja-muted">
                     {outcome.unregistered ? 'Removed from ' : ''}{outcome.className} · {fmtTime(outcome.startTime)}
                   </p>
                   <button type="button" onClick={reset}
-                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl bg-ninja-blue text-white tabular-nums">
+                    className="mt-10 font-ninja text-2xl font-bold px-14 py-6 rounded-2xl bg-ninja-blue text-white tabular-nums">
                     Done ({secondsLeft})
                   </button>
                 </div>
@@ -543,13 +546,13 @@ export default function KioskPage() {
             )}
 
             {step === 'error' && (
-              <Screen k="error">
-                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center" role="alert">
-                  <p className="font-ninja font-extrabold text-2xl text-ninja-navy">
+              <Screen k="error" center>
+                <div className="bg-white border border-ninja-border rounded-3xl px-10 py-12 text-center" role="alert">
+                  <p className="font-ninja font-extrabold text-4xl text-ninja-navy">
                     {outcome?.error || 'Something went wrong. Please see the front desk.'}
                   </p>
                   <button type="button" onClick={reset}
-                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy tabular-nums">
+                    className="mt-10 font-ninja text-2xl font-bold px-14 py-6 rounded-2xl border border-ninja-border text-ninja-navy tabular-nums">
                     Back ({secondsLeft})
                   </button>
                 </div>
