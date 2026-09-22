@@ -64,6 +64,10 @@ const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'));
 const AppearancePage = lazy(() => import('./pages/AppearancePage'));
 const WelcomePage = lazy(() => import('./pages/WelcomePage'));
+const KioskSetupPage = lazy(() => import('./pages/manager/KioskSetupPage'));
+// Outside every staff and parent route on purpose: it runs on a kiosk session,
+// which is neither.
+const KioskPage = lazy(() => import('./pages/KioskPage'));
 
 export default function App() {
   return (
@@ -92,6 +96,7 @@ export default function App() {
             <Route path="/manager/events"   element={<ProtectedRoute role="manager"><EventsPage /></ProtectedRoute>} />
             <Route path="/manager/events/new" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />
             <Route path="/manager/events/:id/edit" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />
+            <Route path="/manager/kiosk"    element={<ProtectedRoute role="manager"><KioskSetupPage /></ProtectedRoute>} />
             <Route path="/manager/students/new" element={<ProtectedRoute role="manager"><AddStudentPage /></ProtectedRoute>} />
             <Route path="/manager/students/:id" element={<ProtectedRoute role="sensei"><StudentProfile /></ProtectedRoute>} />
             <Route path="/manager/students/:id/courses/:program" element={<ProtectedRoute role="sensei"><StudentProfile /></ProtectedRoute>} />
@@ -141,6 +146,8 @@ export default function App() {
             {/* Account */}
             <Route path="/account" element={<ProtectedRoute role="sensei"><AccountPage /></ProtectedRoute>} />
             <Route path="/appearance" element={<ProtectedRoute role="sensei"><AppearancePage /></ProtectedRoute>} />
+
+            <Route path="/kiosk" element={<KioskPage />} />
 
             {/* Public */}
             <Route path="/privacy"       element={<PrivacyPage />} />

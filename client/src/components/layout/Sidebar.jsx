@@ -6,7 +6,8 @@ import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
 import { LogOutIcon } from 'lucide-react';
-import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
+import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon, TabletSmartphoneIcon } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 const EXPANDED_W = 224; // matches w-56
 const COLLAPSED_W = 76; // icon rail
@@ -63,7 +64,15 @@ export const managerLinks = [
   { to: '/manager/students', label: 'Ninjas', icon: 'roster' },
   { to: '/clubs', label: 'Clubs', icon: 'clubs' },
   { to: '/manager/staff', label: 'Staff', icon: 'senseis' },
+  // Rides on the MyStudio integration, so it shows where that does: behind the
+  // experimental toggle.
+  { to: '/manager/kiosk', label: 'Kiosk', Glyph: TabletSmartphoneIcon, experimental: true },
 ];
+
+// Drops the rows that only show with experimental features on.
+export function visibleLinks(links, experimental) {
+  return links.filter((l) => !l.experimental || experimental);
+}
 
 // The flyout's panel, shared by the sidebar and the top bar so the two navs
 // show the same thing. The caller owns positioning and hover state.
@@ -127,7 +136,8 @@ export default function Sidebar({ onOpenBug }) {
   };
 
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
-  const navLinks = isSenseiView ? senseiLinks : ['manager', 'admin'].includes(user?.role) ? managerLinks : user?.role === 'sensei' ? senseiLinks : [];
+  const { experimental } = useTheme();
+  const navLinks = visibleLinks(isSenseiView ? senseiLinks : ['manager', 'admin'].includes(user?.role) ? managerLinks : user?.role === 'sensei' ? senseiLinks : [], experimental);
 
   const initials = user?.displayName?.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?';
 

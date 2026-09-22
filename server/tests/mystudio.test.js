@@ -612,3 +612,71 @@ describe('credential expiry', () => {
     expect(ms.readCookieExpiry(curl)?.toISOString()).toBe('2027-01-15T08:00:00.000Z');
   });
 });
+
+describe('check-in kiosk', () => {
+  // Invented, like every fixture here. Shaped like a portal member row,
+  // including the fields that must never leave the boundary.
+  const cls = {
+    class_appointment_id: '11',
+    class_appointment_title: 'CREATE',
+    class_appointment_times_id: '22',
+    class_appointment_occurrence_id: '33',
+    class_appointment_date: '2026-01-05',
+    start_time: '04:00 PM',
+    end_time: '05:00 PM',
+  };
+  const row = {
+    participant_id: '9001',
+    participant_first_name: 'Testy',
+    participant_last_name: 'McExample',
+    real_pin: '1234',
+    date_of_birth: '2015-01-01',
+    student_email: 'kid@example.invalid',
+    student_mobile: '5550000000',
+    buyer_first_name: 'Parent',
+    buyer_postal_code: '90000',
+    class_reg_id: '44',
+    class_registration_detail_id: '55',
+    checkin_status: '',
+  };
+
+  it('keeps nothing personal on a booking', () => {
+    const b = ms.normalizeBooking(row, cls);
+    expect(b).toMatchObject({
+      participantId: '9001',
+      fullName: 'Testy McExample',
+      classKey: '11:22:33',
+      program: 'CREATE',
+      checkedIn: false,
+    });
+    const text = JSON.stringify(b);
+    for (const leak of ['1234', '2015-01-01', 'kid@example', '5550000000', 'Parent', '90000']) {
+      expect(text).not.toContain(leak);
+    }
+  });
+
+  it('opens an hour before a class and closes when it ends', () => {
+    const at = (h, m) => h * 60 + m;
+    expect(ms.inKioskWindow(cls, at(14, 59))).toBe(false);
+    expect(ms.inKioskWindow(cls, at(15, 0))).toBe(true);
+    expect(ms.inKioskWindow(cls, at(16, 30))).toBe(true);
+    expect(ms.inKioskWindow(cls, at(17, 0))).toBe(true);
+    expect(ms.inKioskWindow(cls, at(17, 1))).toBe(false);
+  });
+
+  it('never offers a drop-in', () => {
+    const dropIn = { ...cls, class_appointment_occurrence_id: '', start_time: 'Drop-in', end_time: '' };
+    expect(ms.inKioskWindow(dropIn, 16 * 60)).toBe(false);
+  });
+
+  it('escapes strings React would read as references', () => {
+    const body = ms.encodeActionArgs([{ a: '$K1', b: 'plain', c: { d: '$$x' } }]);
+    expect(JSON.parse(body)).toEqual([{ a: '$$K1', b: 'plain', c: { d: '$$$x' } }]);
+  });
+
+  it('refuses a token that could break out of the cookie header', () => {
+    expect(() => ms.cleanPortalToken('abc; other=1')).toThrow(ms.MyStudioAuthError);
+    expect(() => ms.cleanPortalToken('short')).toThrow(ms.MyStudioAuthError);
+    expect(ms.cleanPortalToken('A1b2C3d4E5f6G7h8/+==')).toBe('A1b2C3d4E5f6G7h8/+==');
+  });
+});

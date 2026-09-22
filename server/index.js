@@ -159,6 +159,21 @@ app.use('/api/event-listings', require('./routes/eventListings'));
 app.use('/api/releases', require('./routes/releases'));
 app.use('/api/storage', require('./routes/storage'));
 app.use('/api/onboarding', require('./routes/onboarding'));
+// The kiosk searches as a family types, so its reads are capped per IP like
+// the other MyStudio routes, on their own budget: a center's tablet and its
+// staff share one IP. Search answers from a short cache, so this bounds our
+// server, not the vendor's.
+const kioskLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 400,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many requests. Please wait a moment and try again.' },
+});
+// Leaving kiosk mode checks a staff password, so it gets the login cap.
+app.use('/api/kiosk/exit', loginLimiter);
+app.use('/api/kiosk', kioskLimiter, require('./routes/kiosk'));
 app.use('/api/mystudio/login', mystudioLoginLimiter);
 app.use('/api/mystudio', mystudioLimiter, require('./routes/mystudio'));
 // Bug reports — staff or parent session accepted; try staff first, fall back to parent

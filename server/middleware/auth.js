@@ -59,4 +59,11 @@ function requireParent(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireManager, requireSensei, requireOwnLocation, requireParent, requireAdmin };
+// A kiosk session carries a center and nothing else. See routes/kiosk.js.
+function requireKiosk(req, res, next) {
+  const kiosk = req.session && req.session.kiosk;
+  if (!kiosk || !kiosk.locationId) return res.status(401).json({ error: 'This device is not a kiosk' });
+  next();
+}
+
+module.exports = { requireKiosk, requireAuth, requireManager, requireSensei, requireOwnLocation, requireParent, requireAdmin };

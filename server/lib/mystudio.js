@@ -4,9 +4,11 @@
 // client authenticates with session cookies plus one custom header, so the only
 // way in is to hold a session the way a signed-in browser holds one. Everything
 // here is a GET against endpoints the vendor's own front end calls, with one
-// exception noted at verifySession(). Nothing is ever written upstream: it is
-// the franchise system of record, attendance there counts against a family's
-// membership limits, and its registration paths touch a payment processor.
+// exception noted at verifySession(). Nothing is written upstream except the
+// kiosk's check-in of an already booked child (see "The check-in portal" at the
+// bottom): it is the franchise system of record, attendance there counts
+// against a family's membership limits, and its registration paths touch a
+// payment processor.
 //
 // Two rules that are easy to get wrong and expensive to get wrong:
 //
@@ -1246,8 +1248,390 @@ async function getExpectedForDate(cookieOrSession, companyId, date) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The check-in portal (the kiosk)
+//
+// This is the one place DojoLink writes to MyStudio, and it writes one thing:
+// a check-in for a child who is already booked into a class today. The owner
+// chose to allow that write on 22 Sep 2026 so families can check in at a
+// DojoLink kiosk. Everything else in this file is still read-only, and every
+// other write path the portal has stays uncalled on purpose:
+//
+//   - registerParticipantAttendance registers a child who is NOT booked. It is
+//     what MyStudio's own kiosk does for a walk-in, and it is the path that
+//     reaches a membership's limits and a card. A child with no booking is sent
+//     to the front desk instead.
+//   - waivecheckformemortrial is the drop-in and trial path. Drop-in classes are
+//     never offered.
+//   - participantCancelCurrentAppointment can cancel a registration. Not used.
+//
+// The portal is its own app at /attendance-portal with its own sign-in. That
+// sign-in has no emailed code and hands back a per-center token the portal
+// keeps for a hundred years, so a kiosk does not lapse the way the director
+// connection does. The token rides in one cookie, ATTENDANCE_TOKEN, and needs
+// nothing else: measured, the class list answers with that cookie alone and
+// bounces to the portal's login page without it.
+//
+// The portal's participant list is every active member at the center with
+// `class_reg_id` set only on the ones booked into the class asked about. Same
+// trap as rule 1 at the top of this file, in a different shape: only a row
+// carrying class_reg_id is a booking. The rows also carry the PII listed in
+// rule 2, plus the child's check-in PIN, which MyStudio's own kiosk compares in
+// the browser. The raw row is held only for the length of one check-in call,
+// because the portal's action is sent the whole row back, and nothing of it
+// leaves this file except what normalizeBooking copies.
+// ---------------------------------------------------------------------------
+
+const PORTAL_LOGIN_PATH = '/attendance-portal/login';
+const PORTAL_CHECKIN_PATH = '/attendance-portal/classes/check-in';
+
+// A booking can be checked into from an hour before it starts until it ends.
+// Wide enough for a family that arrives early, narrow enough that the four
+// o'clock kid cannot be checked into the six o'clock class by mistake.
+const KIOSK_EARLY_MINUTES = 60;
+
+// Said to a family at the kiosk. The message is safe to put on screen.
+class MyStudioCheckInRefused extends MyStudioError {
+  constructor(message) {
+    super(message);
+    this.name = 'MyStudioCheckInRefused';
+    this.refused = true;
+  }
+}
+
+// The token goes into a cookie header, so it is held to the characters a token
+// is made of rather than trusted to be one.
+function cleanPortalToken(token) {
+  const value = String(token || '').trim();
+  // Base64 as it arrives: slashes, pluses and padding are all in real ones.
+  if (!/^[A-Za-z0-9+/=._~-]{16,512}$/.test(value)) throw new MyStudioAuthError();
+  return value;
+}
+
+function portalCookie(token) {
+  return `ATTENDANCE_TOKEN=${cleanPortalToken(token)}`;
+}
+
+async function portalGet(token, path, params = {}) {
+  const url = new URL(path, BASE);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  }
+
+  const cookie = portalCookie(token);
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+        cookie,
+        'user-agent': USER_AGENT,
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (err) {
+    throw new MyStudioError(
+      err && err.name === 'TimeoutError' ? 'MyStudio timed out' : 'Could not reach MyStudio'
+    );
+  }
+
+  // The portal answers a bad token with a redirect to its own login page.
+  if (res.status >= 300 && res.status < 400) throw new MyStudioAuthError();
+  if (res.status === 401 || res.status === 403) throw new MyStudioAuthError();
+  if (!res.ok) throw new MyStudioError(`MyStudio responded ${res.status}`);
+
+  try {
+    return await res.json();
+  } catch {
+    throw new MyStudioError('MyStudio returned an unexpected response');
+  }
+}
+
+// Action ids on the portal's pages, read the same way resolveLoginActions reads
+// the main login page's, and for the same reason: they are build artifacts.
+const portalActionCache = new Map();
+
+async function portalActionIds(pagePath, names, { token = null, force = false } = {}) {
+  const cacheKey = `${pagePath}|${names.join(',')}`;
+  if (!force && portalActionCache.has(cacheKey)) return portalActionCache.get(cacheKey);
+
+  let html;
+  try {
+    const res = await fetch(new URL(pagePath, BASE), {
+      headers: {
+        'user-agent': USER_AGENT,
+        accept: 'text/html',
+        ...(token ? { cookie: portalCookie(token) } : {}),
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(20000),
+    });
+    html = await res.text();
+  } catch {
+    throw new MyStudioError('Could not reach MyStudio');
+  }
+
+  const scripts = [...new Set(
+    [...html.matchAll(/src="(\/_next\/static\/chunks\/[^"]+\.js)"/g)].map((m) => m[1])
+  )];
+  if (!scripts.length) throw new MyStudioSignInUnavailable();
+
+  const found = {};
+  await mapPooled(scripts, 6, async (src) => {
+    if (names.every((n) => found[n])) return;
+    try {
+      const res = await fetch(new URL(src, BASE), {
+        headers: { 'user-agent': USER_AGENT },
+        signal: AbortSignal.timeout(20000),
+      });
+      const source = await res.text();
+      for (const name of names) {
+        if (found[name]) continue;
+        const hit = new RegExp(
+          `createServerReference\\)?\\(\\s*"([0-9a-f]{20,})"[^)]*"${name}"\\s*\\)`
+        ).exec(source);
+        if (hit) found[name] = hit[1];
+      }
+    } catch {
+      // One unreadable chunk is not fatal.
+    }
+  });
+
+  if (!names.every((n) => found[n])) throw new MyStudioSignInUnavailable();
+  portalActionCache.set(cacheKey, found);
+  return found;
+}
+
+// A Server Action called directly rather than through a form: React sends the
+// argument list as JSON text, with any string that starts with "$" escaped to
+// "$$" so it is not read as one of its own references.
+function encodeActionArgs(args) {
+  return JSON.stringify(args, (key, value) =>
+    typeof value === 'string' && value.startsWith('$') ? `$${value}` : value
+  );
+}
+
+// Posts one action. Returns null when the page answered with something other
+// than a flight stream, which is what a stale action id gets back, and which
+// also means the action did not run.
+async function callPortalAction(pagePath, actionId, body, { token = null, contentType = null } = {}) {
+  let res;
+  try {
+    res = await fetch(new URL(pagePath, BASE), {
+      method: 'POST',
+      headers: {
+        'Next-Action': actionId,
+        accept: ACTION_ACCEPT,
+        'user-agent': USER_AGENT,
+        ...(contentType ? { 'content-type': contentType } : {}),
+        ...(token ? { cookie: portalCookie(token) } : {}),
+      },
+      body,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (err) {
+    const timedOut = err && err.name === 'TimeoutError';
+    const error = new MyStudioError(timedOut ? 'MyStudio timed out' : 'Could not reach MyStudio');
+    // A timeout on a write is not a failure we can report as one: the request
+    // may have landed. The caller says so instead of offering a retry.
+    error.uncertain = timedOut;
+    throw error;
+  }
+
+  if (res.status >= 300 && res.status < 400) throw new MyStudioAuthError();
+  const text = await res.text();
+  if (!/^\s*\d+:/.test(text)) return null;
+  return parseFlightResult(text);
+}
+
+// Signs the portal in and returns one token per center the account can run a
+// kiosk for. There is no code step: the portal hands the tokens straight back.
+async function portalLogin({ email, password }) {
+  const run = async (force) => {
+    const ids = await portalActionIds(PORTAL_LOGIN_PATH, ['loginV2Action'], { force });
+    return callPortalAction(PORTAL_LOGIN_PATH, ids.loginV2Action, encodeActionForm({ email, password }));
+  };
+
+  let payload = await run(false);
+  if (payload === null) payload = await run(true);
+  if (payload === null) throw new MyStudioSignInUnavailable();
+
+  const branches = payload && payload.data && Array.isArray(payload.data.branches)
+    ? payload.data.branches
+    : null;
+
+  if (!branches) {
+    console.error('MyStudio portal sign-in rejected:', describePayload(payload));
+    const message = String((payload && payload.message) || '').trim();
+    throw new MyStudioAuthError(message || 'MyStudio did not accept that email and password.');
+  }
+
+  const out = branches
+    .filter((b) => b && b.token)
+    .map((b) => ({
+      token: String(b.token),
+      companyId: b.company_id != null ? String(b.company_id) : null,
+      companyName: String(b.company_name || b.name || '').trim() || null,
+    }));
+  if (!out.length) throw new MyStudioAuthError('That account cannot open a check-in portal.');
+  return out;
+}
+
+async function portalClassList(token, date) {
+  const data = await portalGet(token, '/api/attendance/getAllClassList', { date });
+  if (!data || !Array.isArray(data.class_details)) {
+    throw new MyStudioError('MyStudio returned an unexpected response');
+  }
+  return data.class_details;
+}
+
+function portalClassKey(cls) {
+  return [
+    cls.class_appointment_id,
+    cls.class_appointment_times_id,
+    cls.class_appointment_occurrence_id,
+  ].map((v) => String(v ?? '')).join(':');
+}
+
+// Drop-ins have no occurrence and are never offered: see the header above.
+function isDropInClass(cls) {
+  return !String(cls.class_appointment_occurrence_id || '');
+}
+
+// Every row the portal returns for one class, raw. Stays inside this file.
+async function portalParticipants(token, cls, participantId) {
+  const data = await portalGet(token, '/api/attendance/getAllParticipantsBasedOnSelectedClass', {
+    program_date: cls.class_appointment_date,
+    class_appointment_id: cls.class_appointment_id,
+    class_appointment_times_id: cls.class_appointment_times_id,
+    class_appointment_occurrence_id: cls.class_appointment_occurrence_id,
+    drop_in_flag: 'N',
+    participant_id: participantId || undefined,
+  });
+  const groups = data && data.student_detail;
+  if (!groups || typeof groups !== 'object') return [];
+  return Object.values(groups).flat().filter(Boolean);
+}
+
+function isCheckedInRow(row) {
+  return Boolean(String(row.checkin_status || '').trim() || row.att_checkin_datetime);
+}
+
+// What the kiosk is allowed to know about one booking.
+function normalizeBooking(row, cls) {
+  const first = String(row.participant_first_name || '').trim();
+  const last = String(row.participant_last_name || '').trim();
+  return {
+    participantId: String(row.participant_id || ''),
+    firstName: first,
+    lastName: last,
+    fullName: [first, last].filter(Boolean).join(' '),
+    classKey: portalClassKey(cls),
+    className: String(cls.class_appointment_title || '').trim(),
+    startTime: String(cls.start_time || '').trim(),
+    endTime: String(cls.end_time || '').trim(),
+    program: programForClass(cls.class_appointment_title),
+    isClub: isClubClass(cls.class_appointment_title),
+    checkedIn: isCheckedInRow(row),
+  };
+}
+
+function inKioskWindow(cls, nowMinutes) {
+  if (isDropInClass(cls)) return false;
+  const start = toMinutes(cls.start_time);
+  const end = toMinutes(cls.end_time);
+  if (start === Number.MAX_SAFE_INTEGER) return false;
+  const close = end === Number.MAX_SAFE_INTEGER ? start + 60 : end;
+  return nowMinutes >= start - KIOSK_EARLY_MINUTES && nowMinutes <= close;
+}
+
+// Everyone booked into a class that can be checked into right now.
+async function getKioskBookings(token, date, nowMinutes) {
+  const classes = (await portalClassList(token, date)).filter((c) => inKioskWindow(c, nowMinutes));
+  const perClass = await mapPooled(classes, 4, async (cls) => {
+    const rows = await portalParticipants(token, cls);
+    return rows.filter((r) => r.class_reg_id).map((r) => normalizeBooking(r, cls));
+  });
+  return perClass.flat().filter((b) => b.participantId);
+}
+
+// Checks one booked child in. Everything is re-read from MyStudio first rather
+// than trusted from the search a moment ago: the booking, that it is still
+// open, and that nobody checked them in at the desk in the meantime.
+async function kioskCheckIn(token, { date, classKey, participantId, nowMinutes }) {
+  const classes = await portalClassList(token, date);
+  const cls = classes.find((c) => portalClassKey(c) === classKey);
+  if (!cls) throw new MyStudioCheckInRefused("That class isn't on today's schedule. Please see the front desk.");
+  if (!inKioskWindow(cls, nowMinutes)) {
+    throw new MyStudioCheckInRefused("That class isn't open for check-in right now. Please see the front desk.");
+  }
+
+  const rows = await portalParticipants(token, cls, participantId);
+  const row = rows.find((r) => String(r.participant_id) === String(participantId));
+  if (!row || !row.class_reg_id) {
+    throw new MyStudioCheckInRefused("We couldn't find a booking for this class. Please see the front desk.");
+  }
+
+  const booking = normalizeBooking(row, cls);
+  if (booking.checkedIn) return { booking, already: true };
+
+  // Exactly what the portal sends for a booked child: the class it was opened
+  // on plus this booking's two ids, and the member row as MyStudio gave it.
+  const classDetails = {
+    ...cls,
+    class_reg_id: row.class_reg_id,
+    class_registration_detail_id: row.class_registration_detail_id,
+    att_attendance_status: '',
+  };
+  const body = encodeActionArgs([{ classDetails, membership: row }]);
+
+  const run = async (force) => {
+    const ids = await portalActionIds(PORTAL_CHECKIN_PATH, ['checkInParticipant'], { token, force });
+    return callPortalAction(PORTAL_CHECKIN_PATH, ids.checkInParticipant, body, {
+      token,
+      contentType: 'text/plain;charset=UTF-8',
+    });
+  };
+
+  // A null result means the action id was stale and nothing ran, so one retry
+  // with fresh ids cannot check anyone in twice.
+  let result = await run(false);
+  if (result === null) result = await run(true);
+  if (result === null) throw new MyStudioSignInUnavailable('MyStudio changed their check-in page.');
+
+  // Field names only. The error text can name the child.
+  const shape = result && typeof result === 'object' ? Object.keys(result).join(',') : typeof result;
+
+  if (result && result.success === true) return { booking, already: false };
+
+  if (result && result.error) {
+    console.error(`MyStudio kiosk check-in refused: keys=[${shape}]`);
+    const message = typeof result.error === 'string' ? result.error : (result.error.message || '');
+    throw new MyStudioCheckInRefused(
+      (message && `${String(message).trim()} Please see the front desk.`) ||
+        "MyStudio didn't accept this check-in. Please see the front desk."
+    );
+  }
+
+  // Anything else, including the portal asking for card details, is a
+  // conversation for the front desk and not for a tablet.
+  console.error(`MyStudio kiosk check-in unexpected result: keys=[${shape}]`);
+  throw new MyStudioCheckInRefused('Please see the front desk to finish checking in.');
+}
+
 module.exports = {
   MyStudioAuthError,
+  MyStudioCheckInRefused,
+  portalLogin,
+  portalClassList,
+  getKioskBookings,
+  kioskCheckIn,
+  encodeActionArgs,
+  inKioskWindow,
+  normalizeBooking,
+  cleanPortalToken,
   MyStudioError,
   MyStudioSignInUnavailable,
   parseFlightResult,

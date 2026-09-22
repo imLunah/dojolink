@@ -6,7 +6,8 @@ import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
 import { LogOutIcon, UserIcon, ChevronDownIcon } from 'lucide-react';
-import { managerLinks, senseiLinks, isLinkActive, QuickFlyoutPanel } from './Sidebar';
+import { managerLinks, senseiLinks, isLinkActive, QuickFlyoutPanel, visibleLinks } from './Sidebar';
+import { useTheme } from '../../context/ThemeContext';
 
 // Experimental desktop layout: the sidebar's contents rearranged into a
 // horizontal bar. Mobile keeps the floating capsule nav either way, so this
@@ -31,7 +32,8 @@ export default function TopNav({ onOpenBug }) {
   useEffect(() => { setFlyout(null); }, [location.pathname]);
 
   const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
-  const navLinks = isSenseiView ? senseiLinks : ['manager', 'admin'].includes(user?.role) ? managerLinks : user?.role === 'sensei' ? senseiLinks : [];
+  const { experimental } = useTheme();
+  const navLinks = visibleLinks(isSenseiView ? senseiLinks : ['manager', 'admin'].includes(user?.role) ? managerLinks : user?.role === 'sensei' ? senseiLinks : [], experimental);
 
   const initials = user?.displayName?.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?';
   const canSwitch = (['manager', 'admin'].includes(user?.role) || (user?.availableLocations?.length > 1)) && !isSenseiView;

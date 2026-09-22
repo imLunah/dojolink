@@ -1,0 +1,323 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CheckIcon, SearchIcon } from 'lucide-react';
+import Logo from '../components/ui/Logo';
+import Modal from '../components/ui/Modal';
+import { api } from '../api/client';
+import { useLightOnly } from '../context/ThemeContext';
+
+// The check-in kiosk: a tablet on the front counter where a family finds their
+// ninja among today's bookings and checks them in. Runs on a kiosk session,
+// which is a center and nothing else, so nothing behind this page is reachable
+// from it. Only booked children can be found; everyone else is sent to the
+// front desk, because checking in a child who is not booked would register
+// them, and that is a conversation, not a tap.
+
+const EASE = [0.23, 1, 0.32, 1];
+
+// How long a finished or failed screen stays up, and how long a half-typed
+// name waits for the next keystroke, before the kiosk clears itself for the
+// next family.
+const DONE_MS = 6000;
+const ERROR_MS = 12000;
+const IDLE_MS = 45000;
+
+// MyStudio sends "04:00 PM".
+const fmtTime = (t) => String(t || '').replace(/^0(\d)/, '$1');
+
+function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function StaffExit({ open, onClose }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) { setUsername(''); setPassword(''); setError(''); }
+  }, [open]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/kiosk/exit', { username, password });
+      window.location.assign('/login');
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2.5 font-ninja text-base text-ninja-navy focus:outline-none focus:border-ninja-blue';
+  return (
+    <Modal isOpen={open} onClose={onClose} title="Leave kiosk mode" width="max-w-sm">
+      <form onSubmit={submit} className="space-y-3">
+        <input aria-label="Staff username" placeholder="Staff username" autoComplete="off" autoCapitalize="none"
+          value={username} onChange={(e) => setUsername(e.target.value)} className={field} />
+        <input aria-label="Password" placeholder="Password" type="password" autoComplete="off"
+          value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
+        {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}
+        <button type="submit" disabled={busy || !username || !password}
+          className="w-full font-ninja text-sm font-bold px-4 py-2.5 rounded-lg bg-ninja-blue text-white disabled:opacity-50">
+          {busy ? 'Checking…' : 'Leave kiosk mode'}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function Screen({ children, k }) {
+  return (
+    <motion.div key={k} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.3, ease: EASE }} className="w-full">
+      {children}
+    </motion.div>
+  );
+}
+
+export default function KioskPage() {
+  useLightOnly();
+  const now = useClock();
+  const [me, setMe] = useState(undefined);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [picked, setPicked] = useState(null);
+  const [step, setStep] = useState('search'); // search | confirm | working | done | error
+  const [outcome, setOutcome] = useState(null);
+  const [staffOpen, setStaffOpen] = useState(false);
+  const inputRef = useRef(null);
+  const searchSeq = useRef(0);
+
+  useEffect(() => {
+    api.get('/kiosk/me').then(setMe).catch(() => setMe(null));
+  }, []);
+
+  const reset = useCallback(() => {
+    setQuery('');
+    setResults([]);
+    setPicked(null);
+    setOutcome(null);
+    setStep('search');
+  }, []);
+
+  // Search as the name is typed, a beat after the last keystroke.
+  useEffect(() => {
+    if (step !== 'search') return undefined;
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); setSearching(false); return undefined; }
+    setSearching(true);
+    const seq = ++searchSeq.current;
+    const id = setTimeout(async () => {
+      try {
+        const data = await api.get(`/kiosk/search?q=${encodeURIComponent(q)}`);
+        if (seq !== searchSeq.current) return;
+        setUnavailable(Boolean(data.unavailable));
+        setResults(data.results || []);
+      } catch (err) {
+        if (seq !== searchSeq.current) return;
+        setOutcome({ error: err.message });
+        setStep('error');
+      } finally {
+        if (seq === searchSeq.current) setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [query, step]);
+
+  // The next family should not find the last one's name in the box.
+  useEffect(() => {
+    if (step === 'done') { const id = setTimeout(reset, DONE_MS); return () => clearTimeout(id); }
+    if (step === 'error') { const id = setTimeout(reset, ERROR_MS); return () => clearTimeout(id); }
+    if (step === 'confirm' || (step === 'search' && query)) {
+      const id = setTimeout(reset, IDLE_MS);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [step, query, reset]);
+
+  useEffect(() => {
+    if (step === 'search' && me && !staffOpen) inputRef.current?.focus();
+  }, [step, me, staffOpen]);
+
+  const checkIn = async () => {
+    if (!picked) return;
+    setStep('working');
+    try {
+      const data = await api.post('/kiosk/checkin', { participantId: picked.participantId, classKey: picked.classKey });
+      setOutcome(data);
+      setStep('done');
+    } catch (err) {
+      setOutcome({ error: err.message });
+      setStep('error');
+    }
+  };
+
+  if (me === undefined) return <div className="min-h-[100dvh] bg-ninja-bg" />;
+
+  if (me === null) {
+    return (
+      <div className="min-h-[100dvh] bg-ninja-bg flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <Logo className="h-9" />
+        <p className="font-ninja text-base text-ninja-navy max-w-sm">
+          This device isn't set up as a check-in kiosk. A center director can start one from Kiosk in DojoLink.
+        </p>
+        <a href="/login" className="font-ninja text-sm font-bold text-ninja-blue-ink">Sign in to DojoLink</a>
+      </div>
+    );
+  }
+
+  const q = query.trim();
+  const closed = !me.ready || unavailable;
+
+  return (
+    <div className="min-h-[100dvh] bg-ninja-bg flex flex-col">
+      <header className="flex items-start justify-between gap-4 px-6 sm:px-10 pt-6">
+        <div>
+          <p className="font-ninja font-bold text-sm text-ninja-muted">
+            {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+          <p className="font-ninja font-extrabold text-2xl text-ninja-navy tabular-nums">
+            {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          </p>
+        </div>
+        <Logo className="h-8" />
+      </header>
+
+      <main className="flex-1 flex flex-col items-center px-6 sm:px-10 pt-10 sm:pt-16 pb-10">
+        <div className="w-full max-w-xl">
+          <AnimatePresence mode="wait" initial={false}>
+            {step === 'search' && (
+              <Screen k="search">
+                <h1 className="font-ninja font-extrabold text-3xl sm:text-4xl text-ninja-navy text-center">
+                  Welcome to {me.centerName}
+                </h1>
+                {closed ? (
+                  <p className="mt-6 font-ninja text-lg text-ninja-muted text-center">
+                    Check-in is unavailable right now. Please see the front desk.
+                  </p>
+                ) : (
+                  <>
+                    <label htmlFor="kiosk-search" className="block mt-8 mb-2 font-ninja font-bold text-base text-ninja-navy text-center">
+                      Type your ninja's name to check in
+                    </label>
+                    <div className="relative">
+                      <SearchIcon size={22} className="absolute left-4 top-1/2 -translate-y-1/2 text-ninja-muted" aria-hidden />
+                      <input
+                        id="kiosk-search" ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off" autoCorrect="off" autoCapitalize="words" spellCheck={false}
+                        className="w-full rounded-2xl border border-ninja-border bg-white pl-12 pr-4 py-4 font-ninja text-xl text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue"
+                        placeholder="First or last name"
+                      />
+                    </div>
+                    <div className="mt-4 space-y-2" aria-live="polite">
+                      {results.map((r) => (
+                        <button
+                          key={`${r.participantId}-${r.classKey}`} type="button" disabled={r.checkedIn}
+                          onClick={() => { setPicked(r); setStep('confirm'); }}
+                          className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98] disabled:active:scale-100"
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-ninja font-extrabold text-xl text-ninja-navy truncate">
+                              {r.firstName} {r.lastInitial}
+                            </span>
+                            <span className="block font-ninja text-sm text-ninja-muted">{r.className} · {fmtTime(r.startTime)}</span>
+                          </span>
+                          <span className={`flex-shrink-0 font-ninja text-sm font-bold ${r.checkedIn ? 'text-ninja-muted' : 'text-ninja-blue-ink'}`}>
+                            {r.checkedIn ? 'Checked in' : 'Check in'}
+                          </span>
+                        </button>
+                      ))}
+                      {q.length >= 2 && !searching && results.length === 0 && (
+                        <p className="pt-2 font-ninja text-base text-ninja-muted text-center">
+                          No booking found for "{q}". Please see the front desk.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </Screen>
+            )}
+
+            {step === 'confirm' && picked && (
+              <Screen k="confirm">
+                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center">
+                  <p className="font-ninja font-bold text-base text-ninja-muted">Check in</p>
+                  <p className="mt-1 font-ninja font-extrabold text-4xl text-ninja-navy">{picked.firstName} {picked.lastInitial}</p>
+                  <p className="mt-2 font-ninja text-lg text-ninja-muted">{picked.className} · {fmtTime(picked.startTime)}</p>
+                  <div className="mt-8 grid grid-cols-2 gap-3">
+                    <button type="button" onClick={reset}
+                      className="font-ninja text-lg font-bold py-4 rounded-2xl border border-ninja-border text-ninja-navy">
+                      Back
+                    </button>
+                    <button type="button" onClick={checkIn}
+                      className="font-ninja text-lg font-bold py-4 rounded-2xl bg-ninja-blue text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97]">
+                      Check in
+                    </button>
+                  </div>
+                </div>
+              </Screen>
+            )}
+
+            {step === 'working' && (
+              <Screen k="working">
+                <p className="font-ninja font-bold text-xl text-ninja-muted text-center" role="status">Checking in…</p>
+              </Screen>
+            )}
+
+            {step === 'done' && outcome && (
+              <Screen k="done">
+                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center" role="status">
+                  <span className="mx-auto w-16 h-16 rounded-full flex items-center justify-center bg-ninja-blue text-white">
+                    <CheckIcon size={34} strokeWidth={3} aria-hidden />
+                  </span>
+                  <p className="mt-5 font-ninja font-extrabold text-3xl text-ninja-navy">
+                    {outcome.already ? `${outcome.firstName} is already checked in` : `${outcome.firstName} is checked in`}
+                  </p>
+                  <p className="mt-2 font-ninja text-lg text-ninja-muted">{outcome.className} · {fmtTime(outcome.startTime)}</p>
+                  <button type="button" onClick={reset}
+                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl bg-ninja-blue text-white">
+                    Done
+                  </button>
+                </div>
+              </Screen>
+            )}
+
+            {step === 'error' && (
+              <Screen k="error">
+                <div className="bg-white border border-ninja-border rounded-3xl p-8 text-center" role="alert">
+                  <p className="font-ninja font-extrabold text-2xl text-ninja-navy">
+                    {outcome?.error || 'Something went wrong. Please see the front desk.'}
+                  </p>
+                  <button type="button" onClick={reset}
+                    className="mt-8 font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
+                    Back
+                  </button>
+                </div>
+              </Screen>
+            )}
+          </AnimatePresence>
+        </div>
+      </main>
+
+      <footer className="flex justify-end px-6 pb-5">
+        <button type="button" onClick={() => setStaffOpen(true)}
+          className="font-ninja text-xs font-bold text-ninja-muted px-3 py-2 rounded-lg hover:bg-white transition-colors">
+          Staff
+        </button>
+      </footer>
+
+      <StaffExit open={staffOpen} onClose={() => setStaffOpen(false)} />
+    </div>
+  );
+}
