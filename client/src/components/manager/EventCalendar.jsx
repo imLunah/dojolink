@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -7,7 +7,8 @@ import Modal from '../ui/Modal';
 import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import { CARD } from '../../lib/surfaces';
-import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR } from 'lucide-react';
+import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon } from 'lucide-react';
+import useRefuseNudge from '../../lib/useRefuseNudge';
 
 
 
@@ -44,7 +45,7 @@ const longDate = (dIso) => {
 
 /* ---------------------------------------------------------------- form --- */
 
-function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy }) {
+function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy, dirtyRef }) {
   const [title, setTitle] = useState(initial.title || '');
   const [date, setDate] = useState(initial.event_date || todayIso());
   const [time, setTime] = useState(initial.event_time || '');
@@ -55,6 +56,15 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy }) {
   const [confirmDel, setConfirmDel] = useState(false);
 
   const canSave = title.trim() && date && type;
+  // Read by the sheet around the form, which refuses a stray dismissal while
+  // anything here differs from what it opened with.
+  if (dirtyRef) {
+    dirtyRef.current = title !== (initial.title || '')
+      || description !== (initial.description || '')
+      || time !== (initial.event_time || '')
+      || date !== (initial.event_date || todayIso())
+      || (!!type && type !== (initial.id ? eventType(initial.type).label : ''));
+  }
   const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue transition-colors';
 
   return (
@@ -122,6 +132,127 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy }) {
   );
 }
 
+/* --------------------------------------------------------------- sheet --- */
+
+// The event form opens inside the calendar card, over the month, rather than
+// as a panel docked to the edge of the window. The month is what the event
+// belongs to, so the form stays on it, and the window edge has nothing to do
+// with a day on a calendar.
+//
+// It grows out of whatever was pressed: the day cell, the chip, or the
+// "+ New event" link. `origin` is that point measured from the centre of the
+// card, and the sheet is centred in the card, so starting the sheet translated
+// by `origin` and scaled down puts it on top of the thing that opened it. It
+// arrives opaque from the first frame and scales and travels only; the words
+// inside fade in behind it, since a surface fading in reads as a ghost and text
+// fading in costs nothing. Leaving is quicker and goes back where it came from.
+// A spring with no bounce, because nothing threw it.
+const SHEET_ENTER = { type: 'spring', bounce: 0, duration: 0.44 };
+const SHEET_LEAVE = { duration: 0.2, ease: [0.4, 0, 1, 1] };
+const SHEET_FROM = 0.2;
+
+function EventSheet({ open, origin, title, onClose, dirtyRef, children }) {
+  const reduce = useReducedMotion();
+  const sheetRef = useRef(null);
+  const { nudging, hinting, refuse } = useRefuseNudge();
+
+  // A stray press or Escape closes an untouched form and refuses one holding
+  // typed words. Its own buttons always close it.
+  const dismiss = useRef(null);
+  dismiss.current = () => { if (dirtyRef.current) refuse(); else onClose(); };
+
+  useEffect(() => {
+    if (!open) return;
+    const returnTo = document.activeElement;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); dismiss.current(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      if (returnTo && typeof returnTo.focus === 'function' && document.contains(returnTo)) returnTo.focus();
+    };
+  }, [open]);
+
+  const o = origin || { x: 0, y: 0 };
+  const away = reduce
+    ? { opacity: 0 }
+    : { x: o.x, y: o.y, scale: SHEET_FROM };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <div key="sheet" className="absolute inset-0 z-20">
+          {/* Dims the month so the sheet reads as on top of it. Tinted from the
+              page token rather than white at an opacity, which would escape the
+              dark overrides and stay light. */}
+          <motion.div
+            aria-hidden="true"
+            className="absolute inset-0 rounded-2xl bg-ninja-bg/60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: SHEET_LEAVE }}
+            transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+            onClick={() => dismiss.current()}
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4 pointer-events-none">
+            <motion.div
+              ref={sheetRef}
+              role="dialog"
+              aria-modal="false"
+              aria-label={title}
+              initial={away}
+              animate={reduce ? { opacity: 1 } : { x: 0, y: 0, scale: 1 }}
+              exit={reduce
+                ? { opacity: 0, transition: { duration: 0.15 } }
+                : { ...away, opacity: 0, transition: SHEET_LEAVE }}
+              transition={reduce ? { duration: 0.2 } : SHEET_ENTER}
+              className="pointer-events-auto w-full max-w-[26rem] max-h-full flex"
+            >
+              <div className={`${CARD} relative w-full flex flex-col min-h-0 shadow-xl ${nudging ? 'panel-refuse' : ''}`}>
+                <div className="flex-shrink-0 flex items-center justify-between gap-3 px-5 pt-4 pb-2">
+                  <h2 className="font-ninja text-lg font-bold text-ninja-navy truncate tracking-[-0.01em]">{title}</h2>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="w-8 h-8 -mr-1.5 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-navy hover:bg-ninja-bg transition-colors flex-shrink-0 active:scale-95"
+                  >
+                    <XIcon size={17} strokeWidth={2.25} />
+                  </button>
+                </div>
+                <motion.div
+                  initial={reduce ? false : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.24, delay: reduce ? 0 : 0.08, ease: [0.23, 1, 0.32, 1] }}
+                  className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 pt-1"
+                >
+                  {children}
+                </motion.div>
+
+                <AnimatePresence>
+                  {hinting && (
+                    <motion.p
+                      role="status"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                      className="absolute inset-x-3 bottom-3 rounded-xl bg-ninja-navy text-ninja-bg px-3 py-2 font-ninja text-xs font-bold text-center shadow-lg"
+                    >
+                      There are unsaved changes.
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 /* ------------------------------------------------------------ calendar --- */
 
 // `bare` drops the card surface and the title row, for callers that host the
@@ -137,6 +268,8 @@ export default function EventCalendar({ canManage = true, bare = false }) {
   const isDesktop = useIsDesktop();
   const [dayView, setDayView] = useState(null); // ISO date whose full list is open
   const [busy, setBusy] = useState(false);
+  const cardRef = useRef(null);
+  const dirtyRef = useRef(false);
   useEffect(() => {
     let alive = true;
     Promise.all([
@@ -189,10 +322,27 @@ export default function EventCalendar({ canManage = true, bare = false }) {
   });
   const goToday = () => { const n = new Date(); setCursor({ y: n.getFullYear(), m: n.getMonth() }); };
 
-  const openAdd = (dateIso) => { if (canManage) setModal({ event: { event_date: dateIso } }); };
+  // Where the pressed control sits, measured from the centre of the card, so
+  // the sheet can grow out of it. No press (opened from the day list) means it
+  // grows from the middle.
+  const originOf = (e) => {
+    const card = cardRef.current?.getBoundingClientRect();
+    const from = e?.currentTarget?.getBoundingClientRect?.();
+    if (!card || !from) return null;
+    return {
+      x: from.left + from.width / 2 - (card.left + card.width / 2),
+      y: from.top + from.height / 2 - (card.top + card.height / 2),
+    };
+  };
+
+  const openSheet = (event, e) => {
+    dirtyRef.current = false;
+    setModal({ event, origin: originOf(e) });
+  };
+  const openAdd = (dateIso, e) => { if (canManage) openSheet({ event_date: dateIso }, e); };
   // Read-only viewers get no editor: the server rejects their writes, so
   // opening the form would be a dead end.
-  const openEdit = (ev) => { if (canManage) setModal({ event: ev }); };
+  const openEdit = (ev, e) => { if (canManage) openSheet(ev, e); };
 
   const save = async (payload) => {
     setBusy(true);
@@ -222,10 +372,9 @@ export default function EventCalendar({ canManage = true, bare = false }) {
 
   const Shell = isDesktop ? FloatingPanel : Modal;
   const dayShell = isDesktop ? { width: 'max-w-[24rem]' } : { width: 'max-w-sm' };
-  const formShell = isDesktop ? { width: 'max-w-[28rem]' } : { width: 'max-w-md' };
 
   return (
-    <div className={bare ? '' : `${CARD} p-5`}>
+    <div ref={cardRef} className={`relative ${bare ? '' : `${CARD} p-5`}`}>
       {!bare && (
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -233,14 +382,14 @@ export default function EventCalendar({ canManage = true, bare = false }) {
             <p className="font-ninja text-xs text-ninja-muted">Events and ninja birthdays at this center</p>
           </div>
           {canManage && (
-            <button type="button" onClick={() => openAdd(tIso)}
+            <button type="button" onClick={(e) => openAdd(tIso, e)}
               className="flex-shrink-0 font-ninja text-sm font-bold text-ninja-blue hover:underline rounded">+ New event</button>
           )}
         </div>
       )}
       {bare && canManage && (
         <div className="flex justify-end mb-3">
-          <button type="button" onClick={() => openAdd(tIso)}
+          <button type="button" onClick={(e) => openAdd(tIso, e)}
             className="font-ninja text-sm font-bold text-ninja-blue hover:underline rounded">+ New event</button>
         </div>
       )}
@@ -291,7 +440,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
               {canManage && (
                 <button
                   type="button"
-                  onClick={() => openAdd(dIso)}
+                  onClick={(e) => openAdd(dIso, e)}
                   aria-label={`Add an event on ${longDate(dIso)}`}
                   className="absolute inset-0 w-full h-full rounded-lg cursor-pointer"
                 />
@@ -303,7 +452,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
                     <button
                       key={ev.id}
                       type="button"
-                      onClick={() => openEdit(ev)}
+                      onClick={(e) => openEdit(ev, e)}
                       title={ev.title}
                       className="pointer-events-auto block w-full truncate rounded px-1 py-0.5 text-left font-ninja text-[10px] font-semibold text-white leading-tight"
                       style={{ backgroundColor: colorFor(ev.type) }}
@@ -349,12 +498,10 @@ export default function EventCalendar({ canManage = true, bare = false }) {
         })}
       </div>
 
-      {/* A day, and an event, open beside the calendar rather than over it: the
-          month is the context for both, and covering it to show one day of it
-          is the dialog getting in the way of its own subject. Pressing anywhere
-          off the panel closes it, which is what a panel that is not blocking
-          the page ought to do. Below the desktop line there is no beside, so
-          both fall back to the full-screen dialog. */}
+      {/* A day's full list opens beside the calendar rather than over it.
+          Pressing anywhere off the panel closes it. Below the desktop line
+          there is no beside, so it falls back to the full-screen dialog. The
+          event form is different: it opens inside the card (EventSheet). */}
       <Shell isOpen={!!dayView} onClose={() => setDayView(null)} title={dayView ? longDate(dayView) : ''} {...dayShell}>
         <div className="space-y-1.5">
           {(byDay.get(dayView) || []).map((ev) => (
@@ -385,7 +532,13 @@ export default function EventCalendar({ canManage = true, bare = false }) {
         </div>
       </Shell>
 
-      <Shell isOpen={!!modal} onClose={() => setModal(null)} title={modal?.event?.id ? 'Edit event' : 'New event'} {...formShell}>
+      <EventSheet
+        open={!!modal}
+        origin={modal?.origin}
+        title={modal?.event?.id ? 'Edit event' : 'New event'}
+        onClose={() => setModal(null)}
+        dirtyRef={dirtyRef}
+      >
         {modal && (
           <EventForm
             initial={modal.event}
@@ -394,9 +547,10 @@ export default function EventCalendar({ canManage = true, bare = false }) {
             onDelete={remove}
             onCancel={() => setModal(null)}
             busy={busy}
+            dirtyRef={dirtyRef}
           />
         )}
-      </Shell>
+      </EventSheet>
     </div>
   );
 }
