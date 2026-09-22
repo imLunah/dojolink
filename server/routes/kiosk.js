@@ -11,7 +11,7 @@ const { addToBoard } = require('../lib/boardCheckIn');
 // A locked mode that swapped the device's session for a kiosk-only one was
 // built and then removed at the owner's request (22 Sep 2026), so nothing here
 // stops a family reaching DojoLink behind the kiosk except how the screen is
-// set up; the setup page says so. The kiosk signs itself in to MyStudio's
+// set up. The kiosk signs itself in to MyStudio's
 // check-in portal from the center's saved MyStudio login (ensureKiosk).
 //
 // A family searches for their ninja by name, picks one of today's classes and

@@ -216,13 +216,10 @@ export default function KioskSetupPage() {
             )}
 
             <section className={`${CARD} p-5 space-y-4 ${ready ? '' : 'opacity-60'}`}>
-              <div className="flex items-start gap-3">
-                <TabletSmartphoneIcon size={20} strokeWidth={1.9} className="mt-0.5 flex-shrink-0 text-ninja-muted" aria-hidden />
+              <div className="flex items-center gap-3">
+                <TabletSmartphoneIcon size={20} strokeWidth={1.9} className="flex-shrink-0 text-ninja-muted" aria-hidden />
                 <div className="min-w-0">
                   <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Open the kiosk</h2>
-                  <p className="font-ninja text-sm text-ninja-muted mt-0.5">
-                    It opens in a new tab and you stay signed in, so anyone at the screen can reach DojoLink as you. Use it where staff can see the screen, or with the tablet locked to that tab.
-                  </p>
                 </div>
               </div>
               <button type="button" disabled={!ready} onClick={() => window.open('/kiosk', '_blank', 'noopener')} className={primary}>
