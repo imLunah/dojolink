@@ -699,6 +699,8 @@ describe('check-in kiosk', () => {
   it('refuses a token that could break out of the cookie header', () => {
     expect(() => ms.cleanPortalToken('abc; other=1')).toThrow(ms.MyStudioAuthError);
     expect(() => ms.cleanPortalToken('short')).toThrow(ms.MyStudioAuthError);
-    expect(ms.cleanPortalToken('A1b2C3d4E5f6G7h8/+==')).toBe('A1b2C3d4E5f6G7h8/+==');
+    // Invented, and deliberately not random-looking: a secret scanner flagged
+    // the first version of this line.
+    expect(ms.cleanPortalToken('not-a-real-token/test+value==')).toBe('not-a-real-token/test+value==');
   });
 });
