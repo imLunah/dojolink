@@ -1538,8 +1538,8 @@ function isCheckedInRow(row) {
 // A CREATE membership is what Academies and Robotics Academy kids hold
 // (measured: a booked Robotics Academy child is on a CREATE membership), so it
 // covers every class except JR. A JR membership covers every class except
-// CREATE (the owner's rule, 22 Sep 2026). Clubs are sold separately and are
-// never booked here; anything else is a front desk conversation. The portal
+// CREATE, and clubs are open to both (the owner's rules, 22 Sep 2026).
+// Anything else is a front desk conversation. The portal
 // itself would register any child into any class, and this center's settings
 // let it past limits and full capacity, so this is the only check between a
 // mistaken tap and a wrong attendance on a family's membership.
@@ -1548,7 +1548,7 @@ function membershipProgram(member) {
 }
 
 function classFitsMembership(className, program) {
-  if (!program || isClubClass(className)) return false;
+  if (!program) return false;
   if (program === 'JR') return !/\bcreate\b/i.test(className);
   if (program === 'CREATE') return !/\bjr\b/i.test(className);
   return false;

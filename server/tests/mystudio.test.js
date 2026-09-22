@@ -682,12 +682,12 @@ describe('check-in kiosk', () => {
     expect(ms.classFitsMembership('Academies', 'CREATE')).toBe(true);
     expect(ms.classFitsMembership('Robotics Academy', 'CREATE')).toBe(true);
     expect(ms.classFitsMembership('JR', 'CREATE')).toBe(false);
-    expect(ms.classFitsMembership('Minecraft Club', 'CREATE')).toBe(false);
+    expect(ms.classFitsMembership('Minecraft Club', 'CREATE')).toBe(true);
     expect(ms.classFitsMembership('JR', 'JR')).toBe(true);
     expect(ms.classFitsMembership('Academies', 'JR')).toBe(true);
     expect(ms.classFitsMembership('Robotics Academy', 'JR')).toBe(true);
     expect(ms.classFitsMembership('CREATE', 'JR')).toBe(false);
-    expect(ms.classFitsMembership('Roblox Club', 'JR')).toBe(false);
+    expect(ms.classFitsMembership('Roblox Club', 'JR')).toBe(true);
     expect(ms.classFitsMembership('CREATE', null)).toBe(false);
   });
 
