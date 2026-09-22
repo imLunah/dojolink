@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
@@ -17,13 +17,18 @@ import MarkdownView from '../components/shared/MarkdownView';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatDate } from '../utils/dateUtils';
-import { getClubColors } from '../utils/clubUtils';
+import { getClubColors, clubField, COVER_SCRIM } from '../utils/clubUtils';
+import NinjaAvatar from '../components/ui/NinjaAvatar';
+import { ChevronLeftIcon, PencilIcon, PlusIcon } from 'lucide-react';
+import AttendeePicker from '../components/shared/AttendeePicker';
 import { SkeletonProfile } from '../components/ui/Skeleton';
+import { CARD } from '../lib/surfaces';
 
 export default function ClubSessionPage() {
   const { slug, id } = useParams();
   const navigate = useNavigate();
   const { user, isReadOnly } = useAuth();
+  const reduce = useReducedMotion();
 
   const [clubDef, setClubDef] = useState(null);
   const [session, setSession] = useState(null);
@@ -42,6 +47,7 @@ export default function ClubSessionPage() {
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [savingAttendees, setSavingAttendees] = useState(false);
   const [attendeeError, setAttendeeError] = useState('');
+  const [coverError, setCoverError] = useState(false);
 
   useEffect(() => {
     // Resolve slug → club definition
@@ -76,7 +82,7 @@ export default function ClubSessionPage() {
     setAttendeeError('');
     try {
       await api.patch(`/clubs/${id}/attendees`, { student_ids: [...selectedIds] });
-      const updated = allStudents.filter((s) => selectedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name }));
+      const updated = allStudents.filter((s) => selectedIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name, codeorg_sticker: s.codeorg_sticker }));
       setSession((prev) => ({ ...prev, attendees: updated }));
       setEditingAttendees(false);
     } catch {
@@ -98,111 +104,153 @@ export default function ClubSessionPage() {
   if (loading || !clubDef || !session) return <Layout><SkeletonProfile label="Loading session" /></Layout>;
 
   const c = getClubColors(clubDef);
-  const filteredStudents = allStudents.filter((s) =>
-    s.full_name.toLowerCase().includes(attendeeSearch.toLowerCase())
-  );
+  const attendeeCount = session.attendees?.length ?? 0;
+  const hasCover = Boolean(session.cover_image_url) && !coverError;
+  const meta = [
+    `${attendeeCount} ninja${attendeeCount !== 1 ? 's' : ''}`,
+    session.sensei_name && `Notes by ${session.sensei_name}`,
+  ].filter(Boolean);
 
   return (
     <Layout>
       <motion.div className="space-y-5 max-w-3xl mx-auto" variants={stagger} initial="hidden" animate="show">
-        <button
-          onClick={() => navigate(`/clubs/${slug}`)}
-          className="text-ninja-muted hover:text-ninja-blue font-ninja text-sm flex items-center gap-1 transition-colors"
-        >
-          ← Back to {clubDef.name}
-        </button>
-
-        {/* Header */}
-        <motion.div variants={fadeUp} className="bg-white border border-ninja-border rounded-xl p-5 shadow-sm">
-          <div className="flex flex-wrap items-center gap-3 mb-1">
-            <span className={`text-sm font-ninja font-bold px-3 py-1 rounded-md border border-ninja-border ${c.bg} ${c.text}`}>
-              {clubDef.name}
-            </span>
-            <h1 className="text-xl font-bold font-ninja text-ninja-navy">{formatDate(session.session_date)}</h1>
+        {/* Header.
+            The session used to open on a chip and a date sitting on a grey
+            slab, which said nothing about which club you were in. It now wears
+            the club's own cover or its colour, the same two surfaces the club
+            hero and the session cards are built from, so arriving here reads as
+            going further into the club rather than landing somewhere else.
+            The date is the heading because the club name is already the thing
+            you came from. */}
+        <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden">
+          <div className="absolute inset-0">
+            {hasCover ? (
+              <>
+                <img
+                  src={session.cover_image_url}
+                  alt=""
+                  onError={() => setCoverError(true)}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0" style={{ backgroundImage: COVER_SCRIM }} />
+              </>
+            ) : (
+              <div className="w-full h-full" style={clubField(c.solid)} />
+            )}
           </div>
-          {session.sensei_name && (
-            <p className="text-ninja-muted font-ninja text-sm mt-1">Notes by {session.sensei_name}</p>
-          )}
+
+          <div className="relative flex flex-col min-h-[10rem] sm:min-h-[11rem] p-5 sm:p-6">
+            <button
+              onClick={() => navigate(`/clubs/${slug}`)}
+              className="self-start font-ninja text-sm font-semibold text-white/70 hover:text-white transition-colors duration-150 flex items-center gap-1.5"
+            >
+              <ChevronLeftIcon size={16} strokeWidth={2.25} aria-hidden="true" />
+              {clubDef.name}
+            </button>
+
+            <div className="mt-auto pt-6">
+              <h1 className="font-ninja font-black text-white text-2xl sm:text-[2rem] leading-[1.05] tracking-[-0.02em]">
+                {formatDate(session.session_date)}
+              </h1>
+              <p className="mt-1.5 font-ninja text-sm text-white/70 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {meta.map((bit, i) => (
+                  <span key={bit} className="flex items-center gap-2">
+                    {i > 0 && <span aria-hidden="true" className="w-1 h-1 rounded-full bg-white/35" />}
+                    {bit}
+                  </span>
+                ))}
+              </p>
+            </div>
+          </div>
         </motion.div>
 
         {/* Attendees */}
-        <motion.div variants={fadeUp} className="bg-white border border-ninja-border rounded-xl p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-ninja-navy font-ninja font-bold text-lg">
-              Attendees <span className="text-ninja-muted font-normal text-base">({session.attendees?.length ?? 0})</span>
+        <motion.div variants={fadeUp} className={`${CARD} p-5`}>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-ninja-navy font-ninja font-bold text-lg flex items-baseline gap-2">
+              Attendees
+              <span className="font-ninja font-black text-ninja-muted text-base tabular-nums">{attendeeCount}</span>
             </h2>
             {!isReadOnly && !editingAttendees && (
-              <button onClick={loadStudents} className="text-ninja-blue font-ninja text-sm font-semibold hover:underline">
-                Edit
+              <button
+                onClick={loadStudents}
+                className="flex items-center gap-1.5 font-ninja text-sm font-bold text-ninja-blue rounded-lg px-2 py-1 -mr-2 hover:bg-ninja-blue/[0.08] transition duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none"
+              >
+                {attendeeCount > 0
+                  ? <><PencilIcon size={14} strokeWidth={2.5} aria-hidden="true" />Edit</>
+                  : <><PlusIcon size={15} strokeWidth={2.5} aria-hidden="true" />Add ninjas</>}
               </button>
             )}
           </div>
 
           {editingAttendees ? (
             <div className="space-y-3">
-              <input type="text" placeholder="Search ninjas..." value={attendeeSearch}
-                onChange={(e) => setAttendeeSearch(e.target.value)}
-                className="w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-lg px-3 py-2 font-ninja text-sm focus:outline-none focus:border-ninja-blue" />
-              <div className="space-y-1 max-h-56 overflow-y-auto border border-ninja-border rounded-lg p-2 bg-ninja-bg">
-                {filteredStudents.map((s) => {
-                  const checked = selectedIds.has(s.id);
-                  return (
-                    <button key={s.id} type="button"
-                      onClick={() => setSelectedIds((prev) => {
-                        const next = new Set(prev);
-                        next.has(s.id) ? next.delete(s.id) : next.add(s.id);
-                        return next;
-                      })}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                        checked ? 'bg-ninja-blue text-white' : 'bg-white text-ninja-navy hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05]'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-                        checked ? 'bg-[#ffffff] border-[#ffffff]' : 'border-ninja-border bg-ninja-bg'
-                      }`}>
-                        {checked && <span className="text-ninja-blue text-xs font-bold">✓</span>}
-                      </div>
-                      <span className="font-ninja font-semibold text-sm">{s.full_name}</span>
-                    </button>
-                  );
+              <AttendeePicker
+                students={allStudents}
+                selectedIds={selectedIds}
+                onToggle={(sid) => setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  next.has(sid) ? next.delete(sid) : next.add(sid);
+                  return next;
                 })}
-              </div>
-              <div className="flex gap-2">
+                search={attendeeSearch}
+                onSearchChange={setAttendeeSearch}
+              />
+
+              <div className="flex items-center gap-2 pt-3 border-t border-ninja-border">
                 <Button size="sm" onClick={handleSaveAttendees} disabled={savingAttendees}>
                   {savingAttendees ? 'Saving...' : 'Save'}
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => {
                   setEditingAttendees(false);
+                  setAttendeeSearch('');
                   setSelectedIds(new Set((session.attendees || []).map((a) => a.id)));
                 }}>Cancel</Button>
+                <span className="ml-auto font-ninja text-sm font-bold text-ninja-muted tabular-nums">
+                  {selectedIds.size} selected
+                </span>
               </div>
               {attendeeError && (
                 <p role="alert" className="font-ninja text-xs text-ninja-red">{attendeeError}</p>
               )}
             </div>
           ) : (
-            session.attendees?.length === 0 ? (
-              <p className="text-ninja-muted font-ninja text-sm italic">No attendees recorded.</p>
+            attendeeCount === 0 ? (
+              <p className="text-ninja-muted font-ninja text-sm">Nobody marked present yet.</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {session.attendees.map((a) => (
-                  <span key={a.id} className="bg-ninja-bg border border-ninja-border text-ninja-navy font-ninja text-sm px-3 py-1 rounded-md">
-                    {a.full_name}
-                  </span>
+              /* Faces, not a wall of bordered name tags. A register is a room
+                 of children, and it should be possible to tell at a glance who
+                 was in it without reading every word. */
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 -mx-2">
+                {session.attendees.map((a, i) => (
+                  <motion.li
+                    key={a.id}
+                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg min-w-0"
+                    initial={reduce ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1], delay: Math.min(i, 12) * 0.03 }}
+                  >
+                    <NinjaAvatar name={a.full_name} sticker={a.codeorg_sticker} className="w-8 h-8 text-[11px]" />
+                    <span className="font-ninja text-sm font-semibold text-ninja-navy truncate">{a.full_name}</span>
+                  </motion.li>
                 ))}
-              </div>
+              </ul>
             )
           )}
         </motion.div>
 
         {/* Session Notes */}
-        <motion.div variants={fadeUp} className="bg-white border border-ninja-border rounded-xl p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
+        <motion.div variants={fadeUp} className={`${CARD} p-5`}>
+          <div className="flex items-center justify-between gap-3 mb-3">
             <h2 className="text-ninja-navy font-ninja font-bold text-lg">Session Notes</h2>
             {!isReadOnly && !editingNotes && (
-              <button onClick={() => setEditingNotes(true)}
-                className="text-ninja-blue font-ninja text-sm font-semibold hover:underline">
-                {session.notes ? 'Edit' : '+ Add Notes'}
+              <button
+                onClick={() => setEditingNotes(true)}
+                className="flex items-center gap-1.5 font-ninja text-sm font-bold text-ninja-blue rounded-lg px-2 py-1 -mr-2 hover:bg-ninja-blue/[0.08] transition duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none"
+              >
+                {session.notes
+                  ? <><PencilIcon size={14} strokeWidth={2.5} aria-hidden="true" />Edit</>
+                  : <><PlusIcon size={15} strokeWidth={2.5} aria-hidden="true" />Add notes</>}
               </button>
             )}
           </div>
@@ -227,7 +275,7 @@ export default function ClubSessionPage() {
             session.notes ? (
               <MarkdownView className="font-ninja text-sm leading-relaxed text-ninja-navy">{session.notes}</MarkdownView>
             ) : (
-              <div className="font-ninja text-sm leading-relaxed text-ninja-muted italic">No notes added yet.</div>
+              <p className="font-ninja text-sm leading-relaxed text-ninja-muted">No notes yet.</p>
             )
           )}
         </motion.div>

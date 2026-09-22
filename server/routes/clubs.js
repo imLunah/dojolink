@@ -42,7 +42,7 @@ const sessionSelect = (userParam) => `
     u.display_name AS sensei_name,
     cd.color_key, cd.cover_image_url,
     COALESCE(
-      (SELECT json_agg(json_build_object('id', s.id, 'full_name', s.full_name) ORDER BY s.full_name)
+      (SELECT json_agg(json_build_object('id', s.id, 'full_name', s.full_name, 'codeorg_sticker', s.codeorg_sticker) ORDER BY s.full_name)
        FROM club_attendees ca JOIN students s ON ca.student_id = s.id
        WHERE ca.club_session_id = cs.id),
       '[]'::json

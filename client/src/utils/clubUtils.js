@@ -25,3 +25,28 @@ export function toSlug(name) {
 export function getClubColors(clubDef) {
   return COLOR_SETS[clubDef?.color_key] || COLOR_SETS.blue;
 }
+
+// The club's identity as a background, for surfaces that have no cover photo.
+// A wash of the club colour from the top left, a second bloom from the bottom
+// right, and a faint diagonal hatch so a large empty area has some grain in it
+// instead of reading as a flat panel.
+//
+// Inline, and in hex: these land on coloured surfaces, where the `.dark .bg-*`
+// overrides must not reach. Shared so the club hero and a session's header are
+// built from the same recipe rather than two that drift.
+export function clubField(solid) {
+  return {
+    backgroundColor: '#111a2e',
+    backgroundImage: [
+      `radial-gradient(115% 130% at 6% -10%, ${solid} 0%, ${solid}cc 38%, ${solid}33 68%, rgba(17,26,46,0) 100%)`,
+      `radial-gradient(80% 120% at 100% 120%, ${solid}55 0%, rgba(17,26,46,0) 70%)`,
+      'repeating-linear-gradient(115deg, rgba(255,255,255,0.045) 0px, rgba(255,255,255,0.045) 1px, rgba(255,255,255,0) 1px, rgba(255,255,255,0) 13px)',
+    ].join(', '),
+  };
+}
+
+// The scrim over a cover photo. Weighted to the bottom left, where the title
+// sits, so copy holds up over a bright image without flattening the whole thing.
+export const COVER_SCRIM =
+  'linear-gradient(to top, rgba(8,12,22,0.92) 0%, rgba(8,12,22,0.55) 38%, rgba(8,12,22,0.12) 70%, rgba(8,12,22,0.35) 100%),' +
+  'linear-gradient(to right, rgba(8,12,22,0.6) 0%, rgba(8,12,22,0) 55%)';

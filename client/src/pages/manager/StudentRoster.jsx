@@ -12,7 +12,7 @@ import Button from '../../components/ui/Button';
 import { api } from '../../api/client';
 import { PROGRAMS, getBelt } from '../../utils/beltConfig';
 import { formatDate } from '../../utils/dateUtils';
-import { stickerUrl } from '../../utils/stickers';
+import NinjaAvatar from '../../components/ui/NinjaAvatar';
 import { useAuth } from '../../context/AuthContext';
 import MyStudioImport from '../../components/manager/MyStudioImport';
 import { CARD } from '../../lib/surfaces';
@@ -29,37 +29,8 @@ function parseProgram(membership) {
   return null;
 }
 
-const AVATAR_COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6',
-  '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1', '#f59e0b',
-];
-
-function getAvatarColor(name) {
-  const sum = [...name].reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
-}
-
-function getInitials(name) {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-// Roster avatar — Code.AI sticker when assigned, colored initials otherwise
 function RosterAvatar({ student, className }) {
-  const sticker = stickerUrl(student.codeorg_sticker);
-  return (
-    <div
-      className={`rounded-full flex items-center justify-center flex-shrink-0 text-white font-ninja font-bold overflow-hidden ${className}`}
-      style={sticker
-        ? { backgroundColor: '#fff', border: '1px solid #e2e8f0' }
-        : { backgroundColor: getAvatarColor(student.full_name) }}
-    >
-      {sticker
-        ? <img src={sticker} alt="" className="w-full h-full object-contain p-0.5" />
-        : getInitials(student.full_name)}
-    </div>
-  );
+  return <NinjaAvatar name={student.full_name} sticker={student.codeorg_sticker} className={className} />;
 }
 
 const FILTER_CHIPS = [

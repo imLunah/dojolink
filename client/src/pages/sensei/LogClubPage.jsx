@@ -19,6 +19,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { today, formatDate } from '../../utils/dateUtils';
 import { SkeletonList } from '../../components/ui/Skeleton';
+import AttendeePicker from '../../components/shared/AttendeePicker';
 
 export default function LogClubPage() {
   const navigate = useNavigate();
@@ -58,10 +59,6 @@ export default function LogClubPage() {
       return next;
     });
   };
-
-  const filtered = students.filter((s) =>
-    s.full_name.toLowerCase().includes(search.toLowerCase())
-  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -181,41 +178,17 @@ export default function LogClubPage() {
                     <span className="text-ninja-blue font-ninja font-bold text-sm">{selectedIds.size} selected</span>
                   )}
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search ninjas..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-lg px-3 py-2 font-ninja text-sm focus:outline-none focus:border-ninja-blue mb-2"
-                />
                 {loadingStudents ? (
                   <SkeletonList rows={4} label="Loading" />
                 ) : (
-                  <div className="space-y-1 max-h-56 overflow-y-auto border border-ninja-border rounded-lg p-2 bg-ninja-bg">
-                    {filtered.map((s) => {
-                      const checked = selectedIds.has(s.id);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => toggleStudent(s.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                            checked ? 'bg-ninja-blue text-white' : 'bg-white text-ninja-navy hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-                            checked ? 'bg-[#ffffff] border-[#ffffff]' : 'border-ninja-border bg-ninja-bg'
-                          }`}>
-                            {checked && <span className="text-ninja-blue text-xs font-bold">✓</span>}
-                          </div>
-                          <span className="font-ninja font-semibold text-sm">{s.full_name}</span>
-                        </button>
-                      );
-                    })}
-                    {filtered.length === 0 && (
-                      <p className="text-ninja-muted font-ninja text-sm text-center py-4">No students found.</p>
-                    )}
-                  </div>
+                  <AttendeePicker
+                    students={students}
+                    selectedIds={selectedIds}
+                    onToggle={toggleStudent}
+                    search={search}
+                    onSearchChange={setSearch}
+                    maxHeight="max-h-64"
+                  />
                 )}
               </div>
 

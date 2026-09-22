@@ -23,7 +23,7 @@ import { Pin, MARKDOWN_COMPONENTS } from '../components/shared/PinnedNote';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, today } from '../utils/dateUtils';
-import { getClubColors } from '../utils/clubUtils';
+import { getClubColors, clubField, COVER_SCRIM } from '../utils/clubUtils';
 import { uploadToSigned } from '../lib/supabase';
 import { CARD } from '../lib/surfaces';
 import { SkeletonProfile } from '../components/ui/Skeleton';
@@ -627,17 +627,8 @@ function ClubHero({ clubDef, colors, memberCount, locationName, isManager, isRea
   };
 
   // With no photo the field is built from the club's own colour rather than a
-  // pastel tint with the initials ghosted across it. Inline hex on purpose:
-  // this surface is coloured, so the .dark bg-* overrides must not reach it.
-  const solid = colors.solid;
-  const colorField = {
-    backgroundColor: '#111a2e',
-    backgroundImage: [
-      `radial-gradient(115% 130% at 6% -10%, ${solid} 0%, ${solid}cc 38%, ${solid}33 68%, rgba(17,26,46,0) 100%)`,
-      `radial-gradient(80% 120% at 100% 120%, ${solid}55 0%, rgba(17,26,46,0) 70%)`,
-      'repeating-linear-gradient(115deg, rgba(255,255,255,0.045) 0px, rgba(255,255,255,0.045) 1px, rgba(255,255,255,0) 1px, rgba(255,255,255,0) 13px)',
-    ].join(', '),
-  };
+  // pastel tint with the initials ghosted across it.
+  const colorField = clubField(colors.solid);
 
   const meta = [
     locationName,
@@ -661,13 +652,7 @@ function ClubHero({ clubDef, colors, memberCount, locationName, isManager, isRea
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
             />
-            {/* Weighted to the bottom left, where the title sits, so the copy
-                holds up over a bright photo without flattening the whole image. */}
-            <div className="absolute inset-0" style={{
-              backgroundImage:
-                'linear-gradient(to top, rgba(8,12,22,0.92) 0%, rgba(8,12,22,0.55) 38%, rgba(8,12,22,0.12) 70%, rgba(8,12,22,0.35) 100%),' +
-                'linear-gradient(to right, rgba(8,12,22,0.6) 0%, rgba(8,12,22,0) 55%)',
-            }} />
+            <div className="absolute inset-0" style={{ backgroundImage: COVER_SCRIM }} />
           </>
         ) : (
           <div className="w-full h-full" style={colorField} />

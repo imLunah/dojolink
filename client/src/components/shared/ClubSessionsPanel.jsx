@@ -5,6 +5,7 @@ import { formatDate, today } from '../../utils/dateUtils';
 import { api } from '../../api/client';
 import Button from '../ui/Button';
 import { CLUB_COLORS, COLOR_SETS, toSlug } from '../../utils/clubUtils';
+import AttendeePicker from './AttendeePicker';
 import { CARD } from '../../lib/surfaces';
 import { Skeleton } from '../ui/Skeleton';
 import { CalendarIcon, UsersIcon } from 'lucide-react';
@@ -84,7 +85,7 @@ export default function ClubSessionsPanel({ sessions = [], onDeleted, onAttendee
       // Only derive display names from allStudents if it has actually loaded — otherwise
       // pass null so the parent re-fetches rather than showing an empty list.
       const updatedAttendees = allStudents.length > 0
-        ? allStudents.filter((s) => draftAttendeeIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name }))
+        ? allStudents.filter((s) => draftAttendeeIds.has(s.id)).map((s) => ({ id: s.id, full_name: s.full_name, codeorg_sticker: s.codeorg_sticker }))
         : null;
       if (updatedAttendees !== null) onAttendeesUpdated && onAttendeesUpdated(session.id, updatedAttendees);
       setEditingAttendeesId(null);
@@ -211,40 +212,18 @@ export default function ClubSessionsPanel({ sessions = [], onDeleted, onAttendee
                 {isOpen && (
                   isEditingAttendees ? (
                     <div className="space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Search ninjas..."
-                        value={attendeeSearch}
-                        onChange={(e) => setAttendeeSearch(e.target.value)}
-                        className="w-full bg-white border border-ninja-border text-ninja-navy rounded-lg px-3 py-1.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue"
-                      />
                       {loadingStudents ? (
                         <div role="status" aria-busy="true" aria-label="Loading ninjas" className="space-y-1.5"><Skeleton className="h-3 w-2/3" /><Skeleton className="h-3 w-1/2" /></div>
                       ) : (
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
-                          {allStudents
-                            .filter((st) => st.full_name.toLowerCase().includes(attendeeSearch.toLowerCase()))
-                            .map((st) => {
-                              const checked = draftAttendeeIds.has(st.id);
-                              return (
-                                <button
-                                  key={st.id}
-                                  type="button"
-                                  onClick={() => toggleAttendee(st.id)}
-                                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors ${
-                                    checked ? 'bg-ninja-blue text-white' : 'bg-ninja-bg text-ninja-navy hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05]'
-                                  }`}
-                                >
-                                  <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${
-                                    checked ? 'bg-[#ffffff] border-[#ffffff]' : 'border-ninja-border bg-white'
-                                  }`}>
-                                    {checked && <span className="text-ninja-blue text-xs font-bold leading-none">✓</span>}
-                                  </div>
-                                  <span className="font-ninja text-xs">{st.full_name}</span>
-                                </button>
-                              );
-                            })}
-                        </div>
+                        <AttendeePicker
+                          students={allStudents}
+                          selectedIds={draftAttendeeIds}
+                          onToggle={toggleAttendee}
+                          search={attendeeSearch}
+                          onSearchChange={setAttendeeSearch}
+                          dense
+                          maxHeight="max-h-48"
+                        />
                       )}
                       <div className="flex gap-2 pt-1">
                         <Button size="sm" onClick={() => saveAttendees(s)} disabled={savingAttendees || draftAttendeeIds.size === 0}>

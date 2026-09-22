@@ -12,6 +12,7 @@ import PinnedNote from '../../components/shared/PinnedNote';
 import EditStudentModal from '../../components/manager/EditStudentModal';
 import StickerPickerModal from '../../components/shared/StickerPickerModal';
 import { stickerUrl, stickerLabel } from '../../utils/stickers';
+import { getAvatarColor, getInitials } from '../../components/ui/NinjaAvatar';
 import { api } from '../../api/client';
 import { BELTS, getMaxLevel, getLevels, getBelt, PROGRAM_LOGOS } from '../../utils/beltConfig';
 import { SkeletonProfile, SkeletonCards } from '../../components/ui/Skeleton';
@@ -37,18 +38,6 @@ const stagger = {
 };
 
 // ── Avatar helpers ────────────────────────────────────────────────────────────
-const AVATAR_COLORS = [
-  '#ef4444','#f97316','#eab308','#22c55e','#3b82f6',
-  '#8b5cf6','#ec4899','#14b8a6','#6366f1','#f59e0b',
-];
-function getAvatarColor(name) {
-  const sum = [...name].reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
-}
-function getInitials(name) {
-  const parts = name.trim().split(/\s+/);
-  return parts.length === 1 ? parts[0].slice(0, 2).toUpperCase() : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 // Avatar circle — shows the ninja's Code.AI sticker when one is assigned,
 // otherwise colored initials. Tappable (with a + badge when empty) for
