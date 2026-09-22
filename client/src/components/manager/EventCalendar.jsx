@@ -7,13 +7,14 @@ import Modal from '../ui/Modal';
 import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import { CARD } from '../../lib/surfaces';
-import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon } from 'lucide-react';
+import { CakeIcon as Cake, ChevronLeftIcon as ChevL, ChevronRightIcon as ChevR, XIcon, PlusIcon, CheckIcon } from 'lucide-react';
 import useRefuseNudge from '../../lib/useRefuseNudge';
 
 
 
-// The type list and its colors live in lib/eventTypes.js, mirrored by the server.
-import { EVENT_TYPES, eventType, colorFor } from '../../lib/eventTypes';
+// Types are the center's own (/api/events/types); the palette and lookups
+// live in lib/eventTypes.js.
+import { TYPE_PALETTE, findType, colorFor } from '../../lib/eventTypes';
 
 // Birthdays sit on the same grid as events but must not read as one, so they get
 // a tinted chip + cake glyph instead of a solid bar. The ink comes from a custom
@@ -43,15 +44,178 @@ const longDate = (dIso) => {
 
 
 
+/* --------------------------------------------------------------- types --- */
+
+const LABEL = 'block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted';
+
+function Swatches({ value, onPick, label }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+      {TYPE_PALETTE.map((c) => (
+        <button
+          key={c}
+          type="button"
+          role="radio"
+          aria-checked={value === c}
+          aria-label={c}
+          onClick={() => onPick(c)}
+          className="w-6 h-6 rounded-full flex items-center justify-center transition-transform duration-150 ease-[var(--ease-out)] active:scale-90"
+          style={{ backgroundColor: c }}
+        >
+          {value === c && <CheckIcon size={13} strokeWidth={3} color="#fff" />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// The center's types as chips. The last chip makes a new one: a name and a
+// color from the palette. "Edit types" switches the chips to managing them:
+// pressing one shows its colors, and each carries a delete with a spoken
+// confirm, like every other destructive action here.
+function TypePicker({ types, value, onChange, onAddType, onRecolor, onDeleteType }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [color, setColor] = useState(TYPE_PALETTE[0]);
+  const [editing, setEditing] = useState(false);
+  const [focus, setFocus] = useState(null); // type id whose colors are open
+  const [confirmId, setConfirmId] = useState(null);
+  const [error, setError] = useState('');
+
+  const add = async () => {
+    if (!name.trim()) return;
+    setError('');
+    try {
+      const created = await onAddType({ label: name.trim(), color });
+      onChange(created.label);
+      setAdding(false);
+      setName('');
+    } catch (e) { setError(e.message || 'Could not add that type'); }
+  };
+
+  const focused = types.find((t) => t.id === focus);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className={LABEL}>Type</span>
+        <button
+          type="button"
+          onClick={() => { setEditing((v) => !v); setFocus(null); setConfirmId(null); setAdding(false); }}
+          className="font-ninja text-xs font-bold text-ninja-muted hover:text-ninja-navy rounded"
+        >
+          {editing ? 'Done' : 'Edit types'}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {types.map((t) => {
+          const selected = !editing && value === t.label;
+          const open = editing && focus === t.id;
+          return (
+            <div key={t.id} className="flex items-center">
+              <button
+                type="button"
+                aria-pressed={editing ? open : selected}
+                onClick={() => (editing ? setFocus(open ? null : t.id) : onChange(t.label))}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-ninja text-xs font-bold transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)] active:scale-95 ${
+                  selected ? 'text-white' : open ? 'bg-ninja-border text-ninja-navy' : 'bg-ninja-bg text-ninja-navy hover:bg-ninja-border'
+                }`}
+                style={selected ? { backgroundColor: t.color } : undefined}
+              >
+                {!selected && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />}
+                {t.label}
+              </button>
+              {editing && (
+                confirmId === t.id ? (
+                  <button
+                    type="button"
+                    onClick={async () => { await onDeleteType(t); setConfirmId(null); if (focus === t.id) setFocus(null); }}
+                    className="ml-1 font-ninja text-xs font-bold px-2 py-1.5 rounded-md bg-ninja-red text-white active:scale-95"
+                  >
+                    Delete
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(t.id)}
+                    aria-label={`Delete ${t.label}`}
+                    className="ml-0.5 w-6 h-6 rounded-full flex items-center justify-center text-ninja-muted hover:text-ninja-red"
+                  >
+                    <XIcon size={13} strokeWidth={2.5} />
+                  </button>
+                )
+              )}
+            </div>
+          );
+        })}
+
+        {!editing && !adding && (
+          <button
+            type="button"
+            onClick={() => { setAdding(true); setError(''); }}
+            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 font-ninja text-xs font-bold text-ninja-muted hover:text-ninja-navy hover:bg-ninja-bg transition-colors"
+          >
+            <PlusIcon size={13} strokeWidth={2.5} /> New type
+          </button>
+        )}
+      </div>
+
+      {editing && focused && (
+        <div className="mt-2.5">
+          <Swatches label={`Color for ${focused.label}`} value={focused.color} onPick={(c) => onRecolor(focused, c)} />
+        </div>
+      )}
+
+      {adding && !editing && (
+        <div className="mt-2.5 rounded-lg bg-ninja-bg p-2.5 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } if (e.key === 'Escape') { e.stopPropagation(); setAdding(false); } }}
+              maxLength={40}
+              autoFocus
+              aria-label="New type name"
+              placeholder="Type name"
+              className="flex-1 min-w-0 rounded-md border border-ninja-border bg-white px-2.5 py-1.5 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue"
+            />
+            <button
+              type="button"
+              onClick={() => setAdding(false)}
+              className="font-ninja text-xs font-bold text-ninja-muted hover:text-ninja-navy px-1.5 rounded"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={add}
+              disabled={!name.trim()}
+              className="font-ninja text-xs font-bold px-2.5 py-1.5 rounded-md bg-ninja-blue text-white disabled:opacity-50 active:scale-95"
+            >
+              Add
+            </button>
+          </div>
+          <Swatches label="New type color" value={color} onPick={setColor} />
+        </div>
+      )}
+
+      {error && <p className="mt-1.5 font-ninja text-xs font-bold text-ninja-red">{error}</p>}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- form --- */
 
-function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy, dirtyRef }) {
+function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy, dirtyRef, types, typeActions }) {
   const [title, setTitle] = useState(initial.title || '');
   const [date, setDate] = useState(initial.event_date || todayIso());
   const [time, setTime] = useState(initial.event_time || '');
   // A new event starts unpicked so nothing lands in Other by default. An old
-  // event opens on the type its stored text folds to.
-  const [type, setType] = useState(initial.id ? eventType(initial.type).label : '');
+  // event opens on its type, or unpicked if that type has since been deleted.
+  const initialType = initial.id ? findType(types, initial.type)?.label || '' : '';
+  const [type, setType] = useState(initialType);
   const [description, setDescription] = useState(initial.description || '');
   const [confirmDel, setConfirmDel] = useState(false);
 
@@ -63,7 +227,7 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy, dirty
       || description !== (initial.description || '')
       || time !== (initial.event_time || '')
       || date !== (initial.event_date || todayIso())
-      || (!!type && type !== (initial.id ? eventType(initial.type).label : ''));
+      || type !== initialType;
   }
   const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue transition-colors';
 
@@ -87,17 +251,7 @@ function EventForm({ initial, canDelete, onSave, onDelete, onCancel, busy, dirty
         </div>
       </div>
 
-      <div>
-        <label className="block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted mb-1.5">Type</label>
-        <div className="relative">
-          <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
-            style={{ backgroundColor: type ? colorFor(type) : 'transparent' }} />
-          <select value={type} onChange={(e) => setType(e.target.value)} className={`${field} pl-8`}>
-            <option value="" disabled>Choose a type</option>
-            {EVENT_TYPES.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
-          </select>
-        </div>
-      </div>
+      <TypePicker types={types} value={type} onChange={setType} {...typeActions} />
 
       <div>
         <label className="block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted mb-1.5">Notes <span className="opacity-60 normal-case font-semibold">(optional)</span></label>
@@ -262,6 +416,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [birthdays, setBirthdays] = useState([]);
+  const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cursor, setCursor] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
   const [modal, setModal] = useState(null); // { event } — add uses a bare {event_date}
@@ -275,10 +430,12 @@ export default function EventCalendar({ canManage = true, bare = false }) {
     Promise.all([
       api.get('/events').catch(() => []),
       api.get('/students/birthdays').catch(() => []),
-    ]).then(([evs, bdays]) => {
+      api.get('/events/types').catch(() => []),
+    ]).then(([evs, bdays, tys]) => {
       if (!alive) return;
       setEvents(evs || []);
       setBirthdays(bdays || []);
+      setTypes(tys || []);
       setLoading(false);
     });
     return () => { alive = false; };
@@ -370,6 +527,24 @@ export default function EventCalendar({ canManage = true, bare = false }) {
     } catch { /* ignore */ } finally { setBusy(false); }
   };
 
+  const typeActions = {
+    onAddType: async (body) => {
+      const created = await api.post('/events/types', body);
+      setTypes((prev) => [...prev, created]);
+      return created;
+    },
+    // Optimistic: the chip and every event of that type recolor at once.
+    onRecolor: async (t, color) => {
+      setTypes((prev) => prev.map((x) => (x.id === t.id ? { ...x, color } : x)));
+      try { await api.patch(`/events/types/${t.id}`, { color }); }
+      catch { setTypes((prev) => prev.map((x) => (x.id === t.id ? { ...x, color: t.color } : x))); }
+    },
+    onDeleteType: async (t) => {
+      await api.delete(`/events/types/${t.id}`);
+      setTypes((prev) => prev.filter((x) => x.id !== t.id));
+    },
+  };
+
   const Shell = isDesktop ? FloatingPanel : Modal;
   const dayShell = isDesktop ? { width: 'max-w-[24rem]' } : { width: 'max-w-sm' };
 
@@ -455,7 +630,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
                       onClick={(e) => openEdit(ev, e)}
                       title={ev.title}
                       className="pointer-events-auto block w-full truncate rounded px-1 py-0.5 text-left font-ninja text-[10px] font-semibold text-white leading-tight"
-                      style={{ backgroundColor: colorFor(ev.type) }}
+                      style={{ backgroundColor: colorFor(types, ev.type) }}
                     >
                       {ev.title}
                     </button>
@@ -464,7 +639,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
                       key={ev.id}
                       title={ev.title}
                       className="block truncate rounded px-1 py-0.5 font-ninja text-[10px] font-semibold text-white leading-tight"
-                      style={{ backgroundColor: colorFor(ev.type) }}
+                      style={{ backgroundColor: colorFor(types, ev.type) }}
                     >
                       {ev.title}
                     </span>
@@ -512,7 +687,7 @@ export default function EventCalendar({ canManage = true, bare = false }) {
               onClick={() => { setDayView(null); openEdit(ev); }}
               className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors ${canManage ? 'hover:bg-ninja-bg' : 'cursor-default'}`}
             >
-              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorFor(ev.type) }} />
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorFor(types, ev.type) }} />
               <span className="font-ninja text-sm text-ninja-navy truncate flex-1">{ev.title}</span>
               {ev.event_time && <span className="font-ninja text-xs font-bold text-ninja-muted flex-shrink-0">{ev.event_time}</span>}
             </button>
@@ -548,6 +723,8 @@ export default function EventCalendar({ canManage = true, bare = false }) {
             onCancel={() => setModal(null)}
             busy={busy}
             dirtyRef={dirtyRef}
+            types={types}
+            typeActions={typeActions}
           />
         )}
       </EventSheet>
