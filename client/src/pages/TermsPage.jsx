@@ -11,7 +11,7 @@ export default function TermsPage() {
         <div className="mb-8">
           <Logo variant="lockup" className="h-8 text-ninja-navy mb-6" />
           <h1 className="text-3xl font-bold font-ninja text-ninja-navy">Terms and Conditions</h1>
-          <p className="text-ninja-muted font-ninja text-sm mt-1">Last Updated: May 21, 2026</p>
+          <p className="text-ninja-muted font-ninja text-sm mt-1">Last Updated: September 22, 2026</p>
         </div>
 
         <div className={`${CARD} p-8 space-y-6 font-ninja text-ninja-navy`}>
@@ -32,7 +32,7 @@ export default function TermsPage() {
               By accessing or using DojoLink, you agree to be bound by these Terms and Conditions and all applicable laws and regulations. If you do not agree to these terms, you may not access or use the platform.
             </p>
             <p className="text-sm text-ninja-muted leading-relaxed">
-              Accounts are created and managed exclusively by authorized franchise staff. Public self-registration is not available.
+              Staff accounts are created by authorized franchise staff. Parent and guardian access is only available to an email address a participating center already has on file, and parents and guardians are asked to agree to these terms the first time they sign in. Public self-registration is not available.
             </p>
           </section>
 
@@ -48,7 +48,7 @@ export default function TermsPage() {
               <div>
                 <h3 className="text-sm font-bold text-ninja-navy mb-1">Parents and Guardians</h3>
                 <p className="text-sm text-ninja-muted leading-relaxed">
-                  Parents or legal guardians whose information is maintained by the participating franchise location may be granted access by center staff for the purpose of viewing student-related information.
+                  Parents or legal guardians whose information is maintained by the participating franchise location may sign in using their center's code and the email address the center has on file, for the purpose of viewing student-related information.
                 </p>
               </div>
             </div>
@@ -57,12 +57,13 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-bold mb-2">Permitted Use</h2>
             <p className="text-sm text-ninja-muted leading-relaxed mb-3">
-              DojoLink is intended solely for internal operational use by participating franchise locations, including student management, attendance tracking, curriculum progress, club participation, communication, and parent visibility.
+              DojoLink is intended solely for internal operational use by participating franchise locations, including student management, attendance tracking, curriculum progress, club participation, center events, staff tasks, communication, and parent visibility.
             </p>
             <p className="text-sm text-ninja-muted leading-relaxed mb-2">You agree not to:</p>
             <div className="text-sm text-ninja-muted leading-relaxed space-y-2">
               <p>Access information or accounts that do not belong to you.</p>
-              <p>Share login credentials with unauthorized individuals.</p>
+              <p>Share login credentials, or your center's code, with unauthorized individuals.</p>
+              <p>Connect a third-party account you are not authorized to use.</p>
               <p>Attempt to copy, modify, reverse-engineer, scrape, or redistribute any portion of the platform.</p>
               <p>Use the platform in violation of any applicable law or regulation.</p>
               <p>Interfere with the operation, security, or integrity of the platform.</p>
@@ -77,8 +78,31 @@ export default function TermsPage() {
             <p className="text-sm text-ninja-muted leading-relaxed mb-2">
               If you suspect unauthorized access or compromise of your account, you must notify your Center Director immediately.
             </p>
+            <p className="text-sm text-ninja-muted leading-relaxed mb-2">
+              "Keep me signed in on this device" keeps you signed in for up to 30 days. Do not use it on a shared or public device.
+            </p>
             <p className="text-sm text-ninja-muted leading-relaxed">
               DojoLink does not currently provide self-service password recovery. Password assistance must be handled directly through authorized center staff.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold mb-2">Content You Enter</h2>
+            <p className="text-sm text-ninja-muted leading-relaxed mb-2">
+              You are responsible for what you enter into DojoLink, including progress notes, special instructions, task comments, and bug reports. Keep it accurate and appropriate, and include only the personal information that is needed.
+            </p>
+            <p className="text-sm text-ninja-muted leading-relaxed">
+              A screenshot attached to a bug report can show whatever is on screen, including student information. Check a screenshot before you send it.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold mb-2">Third-Party Integrations</h2>
+            <p className="text-sm text-ninja-muted leading-relaxed mb-2">
+              A Center Director may connect their center's MyStudio account to DojoLink. By connecting it, you confirm that you are authorized to use that account on behalf of your center, and that your use complies with MyStudio's own terms.
+            </p>
+            <p className="text-sm text-ninja-muted leading-relaxed">
+              MyStudio is a separate service. DojoLink is not affiliated with it and is not responsible for its availability, or for the accuracy of information retrieved from it. Features that rely on it may stop working at any time.
             </p>
           </section>
 
@@ -114,6 +138,14 @@ export default function TermsPage() {
             </div>
             <p className="text-sm text-ninja-muted leading-relaxed">
               This limitation applies regardless of the legal theory asserted.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold mb-2">Deleting Your Account</h2>
+            <p className="text-sm text-ninja-muted leading-relaxed">
+              You can delete your own account at any time from your account settings. Deletion cannot be undone. Student records belong to the participating center and are not removed when a parent, guardian, or staff account is deleted. What is removed is described in the{' '}
+              <Link to="/privacy" className="text-ninja-blue hover:underline">Privacy Policy</Link>.
             </p>
           </section>
 

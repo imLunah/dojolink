@@ -11,7 +11,7 @@ export default function AccessibilityPage() {
         <div className="mb-8">
           <Logo variant="lockup" className="h-8 text-ninja-navy mb-6" />
           <h1 className="text-3xl font-bold font-ninja text-ninja-navy">Accessibility Statement</h1>
-          <p className="text-ninja-muted font-ninja text-sm mt-1">Last Updated: May 28, 2026</p>
+          <p className="text-ninja-muted font-ninja text-sm mt-1">Last Updated: September 22, 2026</p>
         </div>
 
         <div className={`${CARD} p-8 space-y-6 font-ninja text-ninja-navy`}>
@@ -52,6 +52,9 @@ export default function AccessibilityPage() {
               <p><strong>Semantic HTML:</strong> Pages use semantic markup to support assistive technologies such as screen readers.</p>
               <p><strong>Text resizing:</strong> The interface supports browser-level text resizing without loss of content or functionality.</p>
               <p><strong>Focus indicators:</strong> Interactive elements display visible focus indicators for keyboard users.</p>
+              <p><strong>Dialogs:</strong> Dialogs keep keyboard focus inside them while open, close with the Escape key, and return focus to where you were when they close.</p>
+              <p><strong>Increased contrast:</strong> When your operating system asks for more contrast, translucent panels become solid and gain stronger outlines.</p>
+              <p><strong>Dark mode:</strong> Signed-in users can switch to a dark theme from Appearance settings.</p>
             </div>
           </section>
 
@@ -61,8 +64,8 @@ export default function AccessibilityPage() {
               We are aware of the following areas where accessibility may be incomplete:
             </p>
             <div className="text-sm text-ninja-muted leading-relaxed space-y-2">
-              <p>Some interactive modals and dialogs may not fully manage focus trapping for screen reader users.</p>
-              <p>Certain data tables may lack complete ARIA labeling for row and column headers.</p>
+              <p>Panels that open beside the calendar are not modal: they take focus when they open and close with Escape, but Tab can move back out to the page behind them.</p>
+              <p>Some lists laid out in columns, such as the ninja roster, are built from layout grids rather than table markup, so screen readers may not announce their column headers.</p>
               <p>Image content (such as profile photos) may not always include descriptive alternative text.</p>
               <p>Some form validation error messages may not be announced automatically by all screen readers.</p>
             </div>
@@ -90,7 +93,7 @@ export default function AccessibilityPage() {
             </p>
             <div className="text-sm text-ninja-muted leading-relaxed space-y-1">
               <p>HTML5</p>
-              <p>CSS (including media queries for prefers-reduced-motion and prefers-color-scheme)</p>
+              <p>CSS (including media queries for prefers-reduced-motion and prefers-contrast)</p>
               <p>JavaScript (React 18)</p>
               <p>WAI-ARIA where applicable</p>
             </div>

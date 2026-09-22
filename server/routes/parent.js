@@ -30,7 +30,7 @@ const RELATIONSHIPS = ['Mom', 'Dad', 'Guardian', 'Grandparent', 'Other'];
 // they agreed to. A version posted by the browser would be a consent record
 // the consenting party wrote. Bump this when those pages change, and the old
 // value is what tells you who has not seen the new one.
-const TERMS_VERSION = '2026-05-21';
+const TERMS_VERSION = '2026-09-22';
 
 // What the client knows about the signed-in parent. A parent_profiles row is
 // what onboarding writes, and having one is what "onboarded" means; without
