@@ -233,11 +233,11 @@ export default function ClubSessionsPanel({ sessions = [], onDeleted, onAttendee
                                   type="button"
                                   onClick={() => toggleAttendee(st.id)}
                                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors ${
-                                    checked ? 'bg-ninja-blue text-white' : 'bg-ninja-bg text-ninja-navy hover:bg-blue-50'
+                                    checked ? 'bg-ninja-blue text-white' : 'bg-ninja-bg text-ninja-navy hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05]'
                                   }`}
                                 >
                                   <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${
-                                    checked ? 'bg-white border-white' : 'border-ninja-border bg-white'
+                                    checked ? 'bg-[#ffffff] border-[#ffffff]' : 'border-ninja-border bg-white'
                                   }`}>
                                     {checked && <span className="text-ninja-blue text-xs font-bold leading-none">✓</span>}
                                   </div>

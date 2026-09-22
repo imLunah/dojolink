@@ -200,11 +200,11 @@ export default function LogClubPage() {
                           type="button"
                           onClick={() => toggleStudent(s.id)}
                           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                            checked ? 'bg-ninja-blue text-white' : 'bg-white text-ninja-navy hover:bg-blue-50'
+                            checked ? 'bg-ninja-blue text-white' : 'bg-white text-ninja-navy hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05]'
                           }`}
                         >
                           <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-                            checked ? 'bg-white border-white' : 'border-ninja-border bg-white'
+                            checked ? 'bg-[#ffffff] border-[#ffffff]' : 'border-ninja-border bg-ninja-bg'
                           }`}>
                             {checked && <span className="text-ninja-blue text-xs font-bold">✓</span>}
                           </div>

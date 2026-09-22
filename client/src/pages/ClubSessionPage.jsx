@@ -115,7 +115,7 @@ export default function ClubSessionPage() {
         {/* Header */}
         <motion.div variants={fadeUp} className="bg-white border border-ninja-border rounded-xl p-5 shadow-sm">
           <div className="flex flex-wrap items-center gap-3 mb-1">
-            <span className={`text-sm font-ninja font-bold px-3 py-1 rounded-full border ${c.bg} ${c.text} ${c.border}`}>
+            <span className={`text-sm font-ninja font-bold px-3 py-1 rounded-md border ${c.bg} ${c.text} ${c.border}`}>
               {clubDef.name}
             </span>
             <h1 className="text-xl font-bold font-ninja text-ninja-navy">{formatDate(session.session_date)}</h1>
@@ -154,11 +154,11 @@ export default function ClubSessionPage() {
                         return next;
                       })}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                        checked ? 'bg-ninja-blue text-white' : 'bg-white text-ninja-navy hover:bg-blue-50'
+                        checked ? 'bg-ninja-blue text-white' : 'bg-white text-ninja-navy hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05]'
                       }`}
                     >
                       <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-                        checked ? 'bg-white border-white' : 'border-ninja-border bg-white'
+                        checked ? 'bg-[#ffffff] border-[#ffffff]' : 'border-ninja-border bg-ninja-bg'
                       }`}>
                         {checked && <span className="text-ninja-blue text-xs font-bold">✓</span>}
                       </div>
@@ -186,7 +186,7 @@ export default function ClubSessionPage() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {session.attendees.map((a) => (
-                  <span key={a.id} className="bg-ninja-bg border border-ninja-border text-ninja-navy font-ninja text-sm px-3 py-1 rounded-full">
+                  <span key={a.id} className="bg-ninja-bg border border-ninja-border text-ninja-navy font-ninja text-sm px-3 py-1 rounded-md">
                     {a.full_name}
                   </span>
                 ))}

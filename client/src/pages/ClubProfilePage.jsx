@@ -284,7 +284,7 @@ function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSess
             {rel && <p className="font-ninja text-xs text-ninja-muted mt-0.5">{rel}</p>}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="inline-flex items-center gap-1 rounded-full bg-ninja-bg border border-ninja-border px-2.5 py-1 font-ninja text-xs font-semibold text-ninja-navy">
+            <span className="inline-flex items-center gap-1 rounded-md bg-ninja-bg border border-ninja-border px-2.5 py-1 font-ninja text-xs font-semibold text-ninja-navy">
               <UsersIcon className="w-3.5 h-3.5 text-ninja-muted" />
               {present}{memberCount > 0 ? `/${memberCount}` : ''}
             </span>
@@ -459,7 +459,7 @@ function SessionsSection({ sessions, memberCount, slug, navigate, isManager, isR
                     )}
                     <span
                       title="Present"
-                      className="inline-flex items-center gap-1 rounded-full bg-white border border-ninja-border px-2 py-0.5 font-ninja text-xs font-semibold text-ninja-navy"
+                      className="inline-flex items-center gap-1 rounded-md bg-white border border-ninja-border px-2 py-0.5 font-ninja text-xs font-semibold text-ninja-navy"
                     >
                       <UsersIcon className="w-3 h-3 text-ninja-muted" />
                       {present}{memberCount > 0 ? `/${memberCount}` : ''}
