@@ -22,9 +22,9 @@ const secondary = 'inline-flex items-center justify-center font-ninja text-sm fo
 
 // How far from now a class's start can be and still show on the kiosk. The
 // number is typed and saved when the field is left or Enter is pressed, so a
-// half-typed "7" on the way to 70 is never saved.
+// half-typed "6" on the way to 60 is never saved.
 function ClassWindowSetting({ minutes, onSave }) {
-  const [draft, setDraft] = useState(String(minutes || 70));
+  const [draft, setDraft] = useState(String(minutes || 60));
   const [bad, setBad] = useState(false);
   useEffect(() => { if (minutes) setDraft(String(minutes)); }, [minutes]);
 
@@ -44,7 +44,7 @@ function ClassWindowSetting({ minutes, onSave }) {
         value={on ? 'near' : 'day'}
         onChange={(v) => {
           if (v === 'day' && on) onSave(null);
-          if (v === 'near' && !on) { const n = Number(draft); onSave(Number.isInteger(n) && n >= 5 && n <= 720 ? n : 70); }
+          if (v === 'near' && !on) { const n = Number(draft); onSave(Number.isInteger(n) && n >= 5 && n <= 720 ? n : 60); }
         }}
         options={[
           { value: 'day', label: 'All day' },
