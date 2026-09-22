@@ -319,6 +319,8 @@ export default function LandingPage() {
         <Link to="/terms" className="hover:text-ninja-blue transition-colors">Terms</Link>
         <span className="opacity-40">·</span>
         <Link to="/accessibility" className="hover:text-ninja-blue transition-colors">Accessibility</Link>
+        <span className="opacity-40">·</span>
+        <span>&copy; 2026 John Dang</span>
       </footer>
     </motion.div>
   );
