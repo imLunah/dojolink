@@ -394,8 +394,11 @@ export default function KioskPage() {
                         </button>
                       ))}
                       </div>
-                    </div>
-                    <div>
+                      {/* Inside the list box, so an empty list shows its message
+                          at the top rather than at the foot of the screen. */}
+                      {searching && results.length === 0 && (
+                        <p className="pt-2 font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding ninjas…</p>
+                      )}
                       {q && !searching && results.length === 0 && (me.showNames !== false || q.length >= HIDDEN_MIN_LETTERS) && (
                         <p className="pt-2 font-ninja text-base text-ninja-muted text-center">
                           No ninja found for "{q}". Please see the front desk.
@@ -458,7 +461,7 @@ export default function KioskPage() {
                 </div>
                 <div className="mt-4 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
                   {roster === null && (
-                    <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding the class…</p>
+                    <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding ninjas…</p>
                   )}
                   {(() => {
                     if (!roster) return null;
@@ -474,7 +477,7 @@ export default function KioskPage() {
                     if (!shown.length) {
                       return (
                         <p className="font-ninja text-lg text-ninja-muted text-center">
-                          {rq ? `No ninja found for "${rosterQuery.trim()}".` : 'Nobody can check in to this class here.'} Please see the front desk.
+                          {rq ? `No ninja found for "${rosterQuery.trim()}".` : 'No ninjas can check in to this class here.'} Please see the front desk.
                         </p>
                       );
                     }
@@ -524,7 +527,7 @@ export default function KioskPage() {
                 </h1>
                 <div ref={classesBox} className="relative mt-6 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
                   {classes === null && (
-                    <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding today's classes…</p>
+                    <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding {member.firstName}'s classes…</p>
                   )}
                   {classes?.length === 0 && (
                     <p className="font-ninja text-lg text-ninja-muted text-center">

@@ -1716,7 +1716,7 @@ async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
 
   const rows = await portalParticipants(token, cls, member.participantId);
   const row = rows.find((r) => String(r.participant_id) === String(member.participantId));
-  if (!row) throw new MyStudioCheckInRefused('Please see the front desk to check in.');
+  if (!row) throw new MyStudioCheckInRefused("This ninja isn't on that class's list. Please see the front desk.");
 
   const className = String(cls.class_appointment_title || '').trim();
   const booked = Boolean(row.class_reg_id);
@@ -1735,8 +1735,11 @@ async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
   if (booked && isCheckedInRow(row)) return { ...outcome, already: true, registered: false };
 
   if (!booked) {
-    if (row.more_reg === 'Y' || !classFitsMembership(className, membershipProgram(normalizeKioskMember(row)))) {
-      throw new MyStudioCheckInRefused('Please see the front desk to join this class.');
+    if (row.more_reg === 'Y') {
+      throw new MyStudioCheckInRefused('This ninja has more than one membership. Please see the front desk to check in.');
+    }
+    if (!classFitsMembership(className, membershipProgram(normalizeKioskMember(row)))) {
+      throw new MyStudioCheckInRefused("This class isn't part of this ninja's membership. Please see the front desk.");
     }
   }
 
