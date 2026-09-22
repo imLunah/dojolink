@@ -1534,23 +1534,23 @@ function isCheckedInRow(row) {
 
 // Which classes a membership may be registered into from the kiosk.
 //
-// The center's memberships are "CODE NINJAS: CREATE" and "CODE NINJAS: JR",
-// and a CREATE membership is what Academies and Robotics Academy kids hold
-// (measured: a booked Robotics Academy child is on a CREATE membership). So
-// JR covers JR classes, and CREATE covers every other class except clubs,
-// which are sold separately. Anything else is a front desk conversation. The
-// portal itself would register any child into any class, and this center's
-// settings let it past limits and full capacity, so this is the only check
-// between a mistaken tap and a wrong attendance on a family's membership.
+// The center's memberships are "CODE NINJAS: CREATE" and "CODE NINJAS: JR".
+// A CREATE membership is what Academies and Robotics Academy kids hold
+// (measured: a booked Robotics Academy child is on a CREATE membership), so it
+// covers every class except JR. A JR membership covers every class except
+// CREATE (the owner's rule, 22 Sep 2026). Clubs are sold separately and are
+// never booked here; anything else is a front desk conversation. The portal
+// itself would register any child into any class, and this center's settings
+// let it past limits and full capacity, so this is the only check between a
+// mistaken tap and a wrong attendance on a family's membership.
 function membershipProgram(member) {
   return programForMembership(member.categoryTitle, member.membershipTitle);
 }
 
 function classFitsMembership(className, program) {
   if (!program || isClubClass(className)) return false;
-  const isJr = /\bjr\b/i.test(className);
-  if (program === 'JR') return isJr;
-  if (program === 'CREATE') return !isJr;
+  if (program === 'JR') return !/\bcreate\b/i.test(className);
+  if (program === 'CREATE') return !/\bjr\b/i.test(className);
   return false;
 }
 
