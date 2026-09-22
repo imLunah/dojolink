@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Layout from '../components/layout/Layout';
 import { api } from '../api/client';
+import { getHomePath } from '../lib/navTabs';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { ONBOARDING_ENABLED } from '../lib/features';
@@ -160,9 +161,7 @@ export default function AccountPage() {
 
   const roleLabel = user?.role === 'manager' ? 'Center Director' : user?.role === 'admin' ? 'Admin' : 'Sensei';
 
-  const dashPath = user?.role === 'sensei' ? '/sensei/dashboard'
-    : user?.role === 'admin' ? '/admin/locations'
-    : '/manager/overview';
+  const dashPath = user?.role === 'admin' ? '/admin/locations' : getHomePath();
 
   const handleSave = async (e) => {
     e.preventDefault();

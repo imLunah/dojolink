@@ -1,12 +1,11 @@
 import { LayoutGridIcon } from 'lucide-react';
 
 // Where a signed-in user lands, and what "back to my dashboard" means from the
-// pages that sit outside the app shell. Directors land on the overview; the
-// check-in board is a destination they choose, not the front door.
-export function getHomePath(user, viewAs) {
-  const isSenseiView = user?.role === 'admin' && viewAs === 'sensei';
-  const isManager = ['manager', 'admin'].includes(user?.role) && !isSenseiView;
-  return isManager ? '/manager/overview' : '/sensei/dashboard';
+// pages that sit outside the app shell. Everyone on staff lands on the
+// overview; the check-in board is a destination they choose, not the front
+// door, and that now holds for senseis as well as directors.
+export function getHomePath() {
+  return '/manager/overview';
 }
 
 // Bottom nav pill — also drives swipe navigation (Layout cycles these).

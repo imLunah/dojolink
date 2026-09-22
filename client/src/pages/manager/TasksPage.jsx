@@ -14,6 +14,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, cardFields, reorderPayload } from '../../lib/taskBoard';
 import useLiveRefresh from '../../lib/useLiveRefresh';
+import { getHomePath } from '../../lib/navTabs';
 
 const EASE = [0.23, 1, 0.32, 1];
 
@@ -309,7 +310,7 @@ export default function TasksPage({ mode = 'manager' }) {
             </button>
           ) : (
             <Link
-              to={mineOnly ? '/sensei/dashboard' : '/manager/overview'}
+              to={getHomePath()}
               className="inline-flex items-center gap-1.5 font-ninja text-sm font-bold text-ninja-muted hover:text-ninja-navy transition-colors rounded"
             >
               <ArrowLeftIcon size={15} strokeWidth={2.25} />

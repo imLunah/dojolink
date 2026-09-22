@@ -15,6 +15,7 @@ import {
 import Lottie from 'lottie-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
+import { getHomePath } from '../lib/navTabs';
 
 // Screen glyphs, by the key each screen carries.
 const ICONS = {
@@ -100,7 +101,7 @@ export default function GettingStartedPage() {
 
   const isManager = ['manager', 'admin'].includes(user?.role);
   const screens = [WELCOME, ...SENSEI, ...(isManager ? MANAGER : []), FINISH];
-  const dashPath = isManager ? '/manager/overview' : '/sensei/dashboard';
+  const dashPath = getHomePath();
   const screen = screens[page];
   const isLast = page === screens.length - 1;
 

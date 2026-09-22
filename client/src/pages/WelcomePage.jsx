@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
+import { getHomePath } from '../lib/navTabs';
 import { PRESET_AVATARS } from '../lib/avatars';
 import StaffBadge from '../components/shared/StaffBadge';
 
@@ -115,9 +116,7 @@ export default function WelcomePage() {
         profilePicUrl: avatar || prev.profilePicUrl,
         mustResetPassword: false,
       }));
-      const dashPath = user?.role === 'sensei' ? '/sensei/dashboard'
-        : user?.role === 'admin' ? '/admin/locations'
-        : '/manager/overview';
+      const dashPath = user?.role === 'admin' ? '/admin/locations' : getHomePath();
       navigate(dashPath, { replace: true });
     } catch (err) {
       setError(err?.message || 'Something went wrong. Please try again.');
