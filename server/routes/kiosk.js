@@ -1,17 +1,24 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
-const { requireManager, requireOwnLocation, requireKiosk } = require('../middleware/auth');
+const { requireManager, requireOwnLocation, requireKiosk, kioskLocationId } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
 const { addToBoard } = require('../lib/boardCheckIn');
 
 // The check-in kiosk.
 //
-// A director signs this center into MyStudio's check-in portal once, then turns
-// a tablet into a kiosk. Starting the kiosk REPLACES the staff session on that
-// device with a kiosk session: it carries a center and nothing else, so every
-// staff route answers 401 and a family at the tablet cannot reach the app behind
-// it. Leaving takes any staff member's DojoLink username and password.
+// A director signs this center into MyStudio's check-in portal once, then runs
+// the kiosk one of two ways:
+//
+//   - Locked: starting the kiosk REPLACES the staff session on that device
+//     with a kiosk session. It carries a center and nothing else, so every
+//     staff route answers 401 and a family at the tablet cannot reach the app
+//     behind it. Leaving takes any staff member's DojoLink username and
+//     password.
+//   - In a tab, beside the director's own signed-in session (the owner's call,
+//     for a screen staff are watching or an iPad held to one tab by Guided
+//     Access). Nothing stops a family from reaching the app behind it in that
+//     mode except whoever set the screen up; the setup page says so.
 //
 // A family searches for their ninja by name, picks one of today's classes and
 // taps to check in. A child with no place in that class is booked into it
@@ -368,16 +375,19 @@ router.post('/start', requireManager, requireOwnLocation, async (req, res) => {
 // 200 with null when this device is not a kiosk, like /api/parent/me, so a
 // first visit never reads as an expired session.
 router.get('/me', async (req, res) => {
-  const k = req.session && req.session.kiosk;
-  if (!k || !k.locationId) return res.json(null);
+  const locationId = kioskLocationId(req);
+  if (!locationId) return res.json(null);
   const pool = req.app.get('db');
   try {
-    const { rows } = await pool.query('SELECT name FROM locations WHERE id = $1 AND active = true', [k.locationId]);
+    const { rows } = await pool.query('SELECT name FROM locations WHERE id = $1 AND active = true', [locationId]);
     if (!rows[0]) return res.json(null);
-    const kiosk = await loadKiosk(pool, k.locationId);
+    const kiosk = await loadKiosk(pool, locationId);
     res.json({
       centerName: rows[0].name,
       ready: Boolean(kiosk && kiosk.status === 'connected'),
+      // Running in a tab beside a signed-in director: there is no kiosk
+      // session to leave, closing the tab is the way out.
+      staffTab: !(req.session.kiosk && req.session.kiosk.locationId),
     });
   } catch (err) {
     console.error('Kiosk me failed:', err.message);
@@ -393,7 +403,7 @@ router.get('/me', async (req, res) => {
 // kiosk); names are first name and last initial either way.
 router.get('/search', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
-  const locationId = req.session.kiosk.locationId;
+  const locationId = req.kioskLocationId;
   const q = String(req.query.q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
 
   try {
@@ -441,7 +451,7 @@ router.get('/search', requireKiosk, async (req, res) => {
 // and the ones their membership covers.
 router.get('/classes', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
-  const locationId = req.session.kiosk.locationId;
+  const locationId = req.kioskLocationId;
   const participantId = String(req.query.participantId || '').trim();
   if (!/^\d{1,20}$/.test(participantId)) return res.status(400).json({ error: 'Something went wrong. Please try again.' });
 
@@ -480,7 +490,7 @@ router.get('/classes', requireKiosk, async (req, res) => {
 // POST /api/kiosk/checkin  { participantId, classKey }
 router.post('/checkin', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
-  const locationId = req.session.kiosk.locationId;
+  const locationId = req.kioskLocationId;
   const participantId = String((req.body && req.body.participantId) || '').trim();
   const classKey = String((req.body && req.body.classKey) || '').trim();
 
@@ -569,7 +579,7 @@ router.post('/checkin', requireKiosk, async (req, res) => {
 // session yet.
 router.post('/undo', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
-  const locationId = req.session.kiosk.locationId;
+  const locationId = req.kioskLocationId;
   const participantId = String((req.body && req.body.participantId) || '').trim();
   const classKey = String((req.body && req.body.classKey) || '').trim();
 
@@ -641,8 +651,9 @@ router.post('/undo', requireKiosk, async (req, res) => {
 // Any staff member at this center, or an admin. Ends the kiosk session so the
 // device is back at the sign-in page.
 router.post('/exit', requireKiosk, async (req, res) => {
+  if (!req.session.kiosk) return res.status(400).json({ error: 'This kiosk is running in a tab. Close the tab to leave.' });
   const pool = req.app.get('db');
-  const locationId = req.session.kiosk.locationId;
+  const locationId = req.kioskLocationId;
   const username = String((req.body && req.body.username) || '').trim();
   const password = String((req.body && req.body.password) || '');
   if (!username || !password) return res.status(400).json({ error: 'Enter a staff username and password.' });

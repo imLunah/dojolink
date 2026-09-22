@@ -445,11 +445,12 @@ export default function KioskPage() {
         </div>
       </main>
 
-      <footer className="flex justify-end px-6 pb-5">
-        <button type="button" onClick={() => setStaffOpen(true)}
+      <footer className="flex justify-end px-6 pb-5 min-h-[3.25rem]">
+        {/* A kiosk in a tab has no kiosk session to leave; closing the tab is the way out. */}
+        {!me.staffTab && <button type="button" onClick={() => setStaffOpen(true)}
           className="font-ninja text-xs font-bold text-ninja-muted px-3 py-2 rounded-lg hover:bg-white transition-colors">
           Staff
-        </button>
+        </button>}
       </footer>
 
       <StaffExit open={staffOpen} onClose={() => setStaffOpen(false)} />

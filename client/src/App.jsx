@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { Analytics } from '@vercel/analytics/react';
 import { ThemeProvider } from './context/ThemeContext';
@@ -68,6 +68,14 @@ const KioskSetupPage = lazy(() => import('./pages/manager/KioskSetupPage'));
 // Outside every staff and parent route on purpose: it runs on a kiosk session,
 // which is neither.
 const KioskPage = lazy(() => import('./pages/KioskPage'));
+
+// Staff chrome that must not appear on a kiosk tab a director opened beside
+// their own session: a family at the screen should see the kiosk and nothing
+// of the account behind it.
+function OutsideKiosk({ children }) {
+  const { pathname } = useLocation();
+  return pathname === '/kiosk' ? null : children;
+}
 
 export default function App() {
   return (
@@ -158,8 +166,10 @@ export default function App() {
           </Routes>
           </Suspense>
           <ThemeSync />
-          <AdminBar />
-          <WhatsNewModal />
+          <OutsideKiosk>
+            <AdminBar />
+            <WhatsNewModal />
+          </OutsideKiosk>
       </AuthProvider>
       </ParentPortalProvider>
       </ParentAuthProvider>

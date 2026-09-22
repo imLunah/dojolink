@@ -182,9 +182,12 @@ export default function KioskSetupPage() {
                   <TabletSmartphoneIcon size={20} strokeWidth={1.9} aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Start the kiosk on this device</h2>
+                  <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Start the kiosk</h2>
                   <p className="font-ninja text-sm text-ninja-muted mt-0.5">
-                    This device signs out of DojoLink and becomes the check-in screen. A staff username and password takes it back out.
+                    <span className="font-bold text-ninja-navy">Lock this device</span> signs it out of DojoLink and turns it into the check-in screen. A staff username and password takes it back out.
+                  </p>
+                  <p className="font-ninja text-sm text-ninja-muted mt-1.5">
+                    <span className="font-bold text-ninja-navy">Open in a new tab</span> keeps you signed in, so anyone at the screen can reach DojoLink as you. Use it where staff can see the screen, or with the tablet locked to that tab.
                   </p>
                 </div>
               </div>
@@ -196,9 +199,15 @@ export default function KioskSetupPage() {
                   <button type="button" onClick={() => setConfirmStart(false)} className={secondary}>Cancel</button>
                 </div>
               ) : (
-                <button type="button" disabled={!ready} onClick={() => setConfirmStart(true)} className={primary}>
-                  Start kiosk
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={!ready} onClick={() => setConfirmStart(true)} className={primary}>
+                    Lock this device
+                  </button>
+                  <button type="button" disabled={!ready} onClick={() => window.open('/kiosk', '_blank', 'noopener')}
+                    className={`${secondary} disabled:opacity-50`}>
+                    Open in a new tab
+                  </button>
+                </div>
               )}
             </section>
 

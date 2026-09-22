@@ -59,11 +59,25 @@ function requireParent(req, res, next) {
   next();
 }
 
-// A kiosk session carries a center and nothing else. See routes/kiosk.js.
+// The center a kiosk request acts for, or null. Two ways in (routes/kiosk.js):
+// a locked kiosk session, which carries a center and nothing else, or a
+// director signed in at their own center running the kiosk in a tab beside
+// the app. A director viewing another center read-only does not get to run
+// that center's kiosk; admin, as everywhere, may.
+function kioskLocationId(req) {
+  const s = req.session || {};
+  if (s.kiosk && s.kiosk.locationId) return s.kiosk.locationId;
+  if (!s.userId || !['manager', 'admin'].includes(s.role) || !s.activeLocationId) return null;
+  if (s.role === 'admin') return s.activeLocationId;
+  const memberIds = s.locationIds || [s.homeLocationId];
+  return memberIds.includes(s.activeLocationId) ? s.activeLocationId : null;
+}
+
 function requireKiosk(req, res, next) {
-  const kiosk = req.session && req.session.kiosk;
-  if (!kiosk || !kiosk.locationId) return res.status(401).json({ error: 'This device is not a kiosk' });
+  const locationId = kioskLocationId(req);
+  if (!locationId) return res.status(401).json({ error: 'This device is not a kiosk' });
+  req.kioskLocationId = locationId;
   next();
 }
 
-module.exports = { requireKiosk, requireAuth, requireManager, requireSensei, requireOwnLocation, requireParent, requireAdmin };
+module.exports = { requireKiosk, kioskLocationId, requireAuth, requireManager, requireSensei, requireOwnLocation, requireParent, requireAdmin };

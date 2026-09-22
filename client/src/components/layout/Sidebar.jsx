@@ -58,20 +58,22 @@ export const managerLinks = [
       { to: '/manager/reports', label: 'Reports', Glyph: ChartNoAxesColumnIncreasingIcon },
       { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
       { to: '/changelog', label: "What's New", Glyph: GiftIcon },
+      // Rides on the MyStudio integration, so it shows where that does: behind
+      // the experimental toggle.
+      { to: '/manager/kiosk', label: 'Kiosk', Glyph: TabletSmartphoneIcon, experimental: true },
     ],
   },
   { to: '/manager/dashboard', label: "Today's Board", icon: 'today' },
   { to: '/manager/students', label: 'Ninjas', icon: 'roster' },
   { to: '/clubs', label: 'Clubs', icon: 'clubs' },
   { to: '/manager/staff', label: 'Staff', icon: 'senseis' },
-  // Rides on the MyStudio integration, so it shows where that does: behind the
-  // experimental toggle.
-  { to: '/manager/kiosk', label: 'Kiosk', Glyph: TabletSmartphoneIcon, experimental: true },
 ];
 
-// Drops the rows that only show with experimental features on.
+// Drops the rows, and flyout entries, that only show with experimental
+// features on.
 export function visibleLinks(links, experimental) {
-  return links.filter((l) => !l.experimental || experimental);
+  const keep = (l) => !l.experimental || experimental;
+  return links.filter(keep).map((l) => (l.quick ? { ...l, quick: l.quick.filter(keep) } : l));
 }
 
 // The flyout's panel, shared by the sidebar and the top bar so the two navs
