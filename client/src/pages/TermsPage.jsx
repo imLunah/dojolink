@@ -109,7 +109,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-bold mb-2">Ownership and Copyright</h2>
             <p className="text-sm text-ninja-muted leading-relaxed mb-2">
-              The DojoLink software, its source code, its design and layout, and the DojoLink name and logo are &copy; 2026 John Dang. All rights reserved.
+              The DojoLink software, its source code, its design and layout, and the DojoLink name and logo are &copy; 2026 DojoLink. All rights reserved.
             </p>
             <p className="text-sm text-ninja-muted leading-relaxed mb-2">
               Code Ninjas names, logos, belt and program artwork, characters, and curriculum content belong to Code Ninjas and remain its property. They appear in DojoLink only for the internal use of participating franchise locations, and no rights in them are granted by these terms.

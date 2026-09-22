@@ -320,7 +320,7 @@ export default function LandingPage() {
         <span className="opacity-40">·</span>
         <Link to="/accessibility" className="hover:text-ninja-blue transition-colors">Accessibility</Link>
         <span className="opacity-40">·</span>
-        <span>&copy; 2026 John Dang</span>
+        <span>&copy; 2026 DojoLink</span>
       </footer>
     </motion.div>
   );
