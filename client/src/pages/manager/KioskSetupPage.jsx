@@ -10,81 +10,15 @@ import Segmented from '../../components/ui/Segmented';
 import ColorPalette from '../../components/theme/ColorPalette';
 import { api } from '../../api/client';
 
-// Setting up the check-in kiosk. A center that connected MyStudio with its
-// password needs nothing here: the kiosk signs itself in with that saved login.
-// Otherwise sign in to MyStudio's check-in portal once, then turn a tablet
-// into the kiosk. The kiosk opens in a tab beside this session. See
-// server/routes/kiosk.js.
+// Setting up the check-in kiosk. The kiosk signs itself in to MyStudio's
+// check-in portal with the center's saved MyStudio login, so there is no
+// password to type here: when that fails, the repair is the same emailed-code
+// reconnect the Daily schedule card uses. The kiosk opens in a tab beside this
+// session. See server/routes/kiosk.js.
 
 const EASE = [0.23, 1, 0.32, 1];
-const field = 'w-full rounded-lg border border-ninja-border bg-white px-3 py-2 font-ninja text-sm text-ninja-navy placeholder:text-ninja-muted focus:outline-none focus:border-ninja-blue transition-colors';
-const label = 'block font-ninja text-xs font-bold uppercase tracking-wide text-ninja-muted mb-1.5';
 const primary = 'inline-flex items-center justify-center gap-1.5 font-ninja text-sm font-bold px-3.5 py-2 rounded-lg bg-ninja-blue text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:opacity-50';
 const secondary = 'inline-flex items-center justify-center font-ninja text-sm font-bold px-3.5 py-2 rounded-lg border border-ninja-border text-ninja-navy hover:bg-ninja-bg transition-colors';
-
-function SignInForm({ onDone, expired }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [branches, setBranches] = useState(null);
-  const [companyId, setCompanyId] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      const data = await api.post('/kiosk/setup', { email, password, companyId: companyId || undefined });
-      setPassword('');
-      onDone(data);
-    } catch (err) {
-      if (err.status === 409 && err.data?.branches) {
-        setBranches(err.data.branches);
-        setCompanyId(err.data.branches[0]?.companyId || '');
-      }
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form onSubmit={submit} className="space-y-4">
-      <p className="font-ninja text-sm text-ninja-muted">
-        {expired
-          ? 'The check-in portal sign-in has expired. Sign in again to bring the kiosk back.'
-          : 'Sign in with the MyStudio account you use for the check-in portal.'}
-      </p>
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="kiosk-email" className={label}>MyStudio email</label>
-          <input id="kiosk-email" type="email" autoComplete="username" value={email}
-            onChange={(e) => setEmail(e.target.value)} className={field} required />
-        </div>
-        <div>
-          <label htmlFor="kiosk-password" className={label}>Password</label>
-          <input id="kiosk-password" type="password" autoComplete="current-password" value={password}
-            onChange={(e) => setPassword(e.target.value)} className={field} required />
-        </div>
-      </div>
-      {branches && (
-        <div>
-          <label htmlFor="kiosk-branch" className={label}>Center</label>
-          <select id="kiosk-branch" value={companyId} onChange={(e) => setCompanyId(e.target.value)} className={field}>
-            {branches.map((b) => (
-              <option key={b.companyId} value={b.companyId}>{b.companyName || b.companyId}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}
-      <button type="submit" disabled={busy || !email || !password} className={primary}>
-        {busy ? 'Signing in…' : 'Sign in'}
-      </button>
-    </form>
-  );
-}
 
 export default function KioskSetupPage() {
   const [setup, setSetup] = useState(null);
@@ -227,21 +161,28 @@ export default function KioskSetupPage() {
                   )}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {setup.off && (
-                    <p className="font-ninja text-sm text-ninja-navy">The kiosk is turned off.</p>
+                <div className="space-y-3">
+                  {setup.off && setup.canUseSavedLogin ? (
+                    <>
+                      <p className="font-ninja text-sm text-ninja-navy">The kiosk is turned off.</p>
+                      <button type="button" onClick={turnOn} disabled={busy} className={primary}>
+                        {busy ? 'Turning on…' : 'Turn on'}
+                      </button>
+                    </>
+                  ) : (
+                    // The kiosk signs in with the center's MyStudio login, so
+                    // the fix is always to sign MyStudio in again, never a
+                    // second password form. Once the code is in, turn the
+                    // kiosk on with the login that was just saved.
+                    <div className={`${PANEL} p-3.5`}>
+                      <p className="font-ninja text-sm font-bold text-ninja-navy">
+                        {setup.off ? 'The kiosk is turned off' : "The kiosk couldn't sign in to MyStudio"}
+                      </p>
+                      <div className="mt-2">
+                        <MyStudioReconnect onConnected={turnOn} />
+                      </div>
+                    </div>
                   )}
-                  {setup.canUseSavedLogin && (
-                    <button type="button" onClick={turnOn} disabled={busy} className={primary}>
-                      {busy ? 'Turning on…' : 'Turn on with your MyStudio connection'}
-                    </button>
-                  )}
-                  {setup.canUseSavedLogin && !setup.off && (
-                    <p className="font-ninja text-sm text-ninja-muted">
-                      Signing in with your saved MyStudio login didn't work. Try again, or sign in below.
-                    </p>
-                  )}
-                  <SignInForm expired={setup.connected && setup.status === 'expired'} onDone={setSetup} />
                 </div>
               )}
             </section>
