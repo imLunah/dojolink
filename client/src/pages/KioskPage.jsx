@@ -23,6 +23,9 @@ const AUTO_BACK_S = 10;
 const IDLE_MS = 30000;
 const AUTO_BACK_STEPS = new Set(['done', 'undone', 'error']);
 const RESULT_STEPS = new Set(['confirm', 'working', 'done', 'undone', 'error']);
+// With names hidden (a Kiosk page setting), nobody is listed until a search
+// has this many letters. The server holds the same line.
+const HIDDEN_MIN_LETTERS = 2;
 
 // DojoLink blue, for a center that has not picked a kiosk color.
 const DEFAULT_KIOSK_COLOR = '#006add';
@@ -123,6 +126,12 @@ export default function KioskPage() {
   useEffect(() => {
     if (step !== 'search' || !me?.ready) return undefined;
     const q = query.trim();
+    if (me.showNames === false && q.length < HIDDEN_MIN_LETTERS) {
+      searchSeq.current += 1;
+      setResults([]);
+      setSearching(false);
+      return undefined;
+    }
     setSearching(true);
     const seq = ++searchSeq.current;
     const id = setTimeout(async () => {
@@ -189,6 +198,25 @@ export default function KioskPage() {
       setStep('error');
     }
   };
+
+  // Names hidden: a class's roster is fetched per search, since the server
+  // only ever sends the matches. Shown names load once, in pickClass.
+  const rosterSeq = useRef(0);
+  useEffect(() => {
+    if (step !== 'roster' || !picked || me?.showNames !== false) return undefined;
+    const rq = rosterQuery.trim();
+    const seq = ++rosterSeq.current;
+    if (rq.length < HIDDEN_MIN_LETTERS) { setRoster([]); return undefined; }
+    const id = setTimeout(async () => {
+      try {
+        const data = await api.get(`/kiosk/roster?classKey=${encodeURIComponent(picked.classKey)}&q=${encodeURIComponent(rq)}`);
+        if (seq === rosterSeq.current) setRoster(data.roster || []);
+      } catch (err) {
+        if (seq === rosterSeq.current) { setOutcome({ error: err.message }); setStep('error'); }
+      }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [rosterQuery, step, picked, me]);
 
   const pickFromRoster = (kid, action) => {
     setMember(kid);
@@ -324,7 +352,7 @@ export default function KioskPage() {
                       </div>
                     </div>
                     <div>
-                      {q && !searching && results.length === 0 && (
+                      {q && !searching && results.length === 0 && (me.showNames !== false || q.length >= HIDDEN_MIN_LETTERS) && (
                         <p className="pt-2 font-ninja text-base text-ninja-muted text-center">
                           No ninja found for "{q}". Please see the front desk.
                         </p>
@@ -394,6 +422,7 @@ export default function KioskPage() {
                   {(() => {
                     if (!roster) return null;
                     const rq = rosterQuery.trim().toLowerCase();
+                    if (me.showNames === false && rq.length < HIDDEN_MIN_LETTERS) return null;
                     const shown = rq
                       ? roster.filter((k) => {
                           const first = k.firstName.toLowerCase();

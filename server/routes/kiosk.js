@@ -41,7 +41,7 @@ function nowMinutes() {
 async function loadKiosk(pool, locationId) {
   const { rows } = await pool.query(
     `SELECT k.id, k.location_id, k.company_id, k.company_name, k.login_email,
-            k.portal_token, k.status, k.connected_at, k.last_used_at, k.flow, k.color,
+            k.portal_token, k.status, k.connected_at, k.last_used_at, k.flow, k.color, k.show_names,
             u.display_name AS connected_by_name
        FROM mystudio_kiosks k
        LEFT JOIN users u ON u.id = k.connected_by
@@ -66,6 +66,7 @@ function publicShape(kiosk) {
     lastUsedAt: kiosk.last_used_at,
     flow: kiosk.flow === 'class' ? 'class' : 'name',
     color: kiosk.color || null,
+    showNames: kiosk.show_names !== false,
   };
 }
 
@@ -225,7 +226,24 @@ async function undoableCheckIn(pool, locationId, participantId, classKey) {
   return rows[0] || null;
 }
 
+// A name matches a search when the first name, the last name, or "first
+// last" starts with it.
+function nameMatches(first, last, q) {
+  const f = String(first || '').toLowerCase();
+  const l = String(last || '').toLowerCase();
+  return f.startsWith(q) || l.startsWith(q) || `${f} ${l}`.startsWith(q);
+}
+
+// With names hidden, nobody is listed until a search has this many letters.
+const HIDDEN_MIN_LETTERS = 2;
+
+// A class's roster, briefly remembered: with names hidden the kiosk asks again
+// on every search, and MyStudio should be asked once in a while.
+const ROSTER_TTL_MS = 45 * 1000;
+const rosterCache = new Map();
+
 function forgetMembers(locationId) {
+  for (const k of rosterCache.keys()) if (k.startsWith(`${locationId}:`)) rosterCache.delete(k);
   for (const k of membersCache.keys()) if (k.startsWith(`${locationId}:`)) membersCache.delete(k);
 }
 
@@ -413,7 +431,7 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
   }
 });
 
-// PATCH /api/kiosk/setup  { flow?: 'name' | 'class', color?: '#rrggbb' | null }
+// PATCH /api/kiosk/setup  { flow?: 'name' | 'class', color?: '#rrggbb' | null, showNames?: boolean }
 //
 // The kiosk's settings: how it starts (find your ninja then pick a class, or
 // pick the class then find your ninja in it) and its color (null is
@@ -428,6 +446,11 @@ router.patch('/setup', requireManager, requireOwnLocation, async (req, res) => {
     if (!['name', 'class'].includes(body.flow)) return res.status(400).json({ error: 'Pick how the kiosk starts.' });
     params.push(body.flow);
     sets.push(`flow = $${params.length}`);
+  }
+  if (body.showNames !== undefined) {
+    if (typeof body.showNames !== 'boolean') return res.status(400).json({ error: 'Pick whether names show.' });
+    params.push(body.showNames);
+    sets.push(`show_names = $${params.length}`);
   }
   if (body.color !== undefined) {
     const color = body.color === null ? null : String(body.color).toLowerCase();
@@ -493,6 +516,7 @@ router.get('/me', async (req, res) => {
       // Whether families start from their ninja's name or from the class.
       flow: kiosk && kiosk.flow === 'class' ? 'class' : 'name',
       color: (kiosk && kiosk.color) || null,
+      showNames: !kiosk || kiosk.show_names !== false,
     });
   } catch (err) {
     console.error('Kiosk me failed:', err.message);
@@ -527,15 +551,12 @@ router.get('/search', requireKiosk, async (req, res) => {
       return res.status(502).json({ error: 'Check-in is having trouble right now. Please see the front desk.' });
     }
 
-    const words = q.split(' ');
+    // Names hidden: nothing until a real search. Refused here rather than
+    // only on screen, so the list never reaches the tablet.
+    if (kiosk.show_names === false && q.length < HIDDEN_MIN_LETTERS) return res.json({ results: [] });
+
     const results = members
-      .filter((m) => {
-        if (!q) return true;
-        const first = m.firstName.toLowerCase();
-        const last = m.lastName.toLowerCase();
-        if (words.length > 1) return `${first} ${last}`.startsWith(q);
-        return first.startsWith(q) || last.startsWith(q);
-      })
+      .filter((m) => !q || nameMatches(m.firstName, m.lastName, q))
       .sort((a, b) => a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName))
       .map((m) => ({
         participantId: m.participantId,
@@ -639,16 +660,32 @@ router.get('/roster', requireKiosk, async (req, res) => {
     if (!kiosk || kiosk.status !== 'connected') {
       return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
     }
-    const found = await ms.getKioskRosterFor(ms.decryptCookie(kiosk.portal_token), {
-      date: todayDate(),
-      classKey,
-      nowMinutes: nowMinutes(),
-    });
+    const q = String(req.query.q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
+    const cacheKey = `${locationId}:${todayDate()}:${classKey}`;
+    let found = null;
+    const hit = rosterCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      found = hit.found;
+    } else {
+      found = await ms.getKioskRosterFor(ms.decryptCookie(kiosk.portal_token), {
+        date: todayDate(),
+        classKey,
+        nowMinutes: nowMinutes(),
+      });
+      if (found) rosterCache.set(cacheKey, { found, expiresAt: Date.now() + ROSTER_TTL_MS });
+    }
     if (!found) return res.status(409).json({ error: "That class isn't open for check-in. Please see the front desk." });
+
+    // Names hidden: the roster is only ever the matches for a real search.
+    const hidden = kiosk.show_names === false;
+    if (hidden && q.length < HIDDEN_MIN_LETTERS) return res.json({ class: found.class, roster: [], hidden: true });
+    const kids = q ? found.roster.filter((r) => nameMatches(r.firstName, r.lastName, q)) : found.roster;
+
     const undoable = await undoableKeys(pool, locationId, { classKey });
     res.json({
       class: found.class,
-      roster: found.roster.map((r) => ({
+      hidden,
+      roster: kids.map((r) => ({
         ...r,
         undoable: r.checkedIn && undoable.has(`${r.participantId}|${classKey}`),
       })),
@@ -717,6 +754,8 @@ router.post('/checkin', requireKiosk, async (req, res) => {
     });
   }
 
+  // The cached roster and name list now say the wrong thing about this kid.
+  forgetMembers(locationId);
   const { already, registered } = outcome;
   const base = { ...log, className: outcome.className, startTime: outcome.startTime };
 
@@ -799,6 +838,7 @@ router.post('/undo', requireKiosk, async (req, res) => {
     }
 
     await pool.query('UPDATE mystudio_kiosk_checkins SET undone_at = now() WHERE id = $1', [entry.id]);
+    forgetMembers(locationId);
     if (entry.assignment_id) {
       // Only an untouched row: a session a sensei has logged is not the
       // kiosk's to remove.

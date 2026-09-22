@@ -202,6 +202,27 @@ export default function KioskSetupPage() {
             )}
 
             {ready && (
+              <section className={`${CARD} p-5 space-y-3`}>
+                <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Names</h2>
+                <Segmented
+                  label="Names"
+                  layoutId="kiosk-names"
+                  value={setup.showNames === false ? 'search' : 'all'}
+                  onChange={(v) => { const showNames = v === 'all'; if (showNames !== (setup.showNames !== false)) saveSetting({ showNames }); }}
+                  options={[
+                    { value: 'all', label: 'Show all' },
+                    { value: 'search', label: 'Only when searched' },
+                  ]}
+                />
+                <p className="font-ninja text-sm text-ninja-muted">
+                  {setup.showNames === false
+                    ? 'Nobody is listed until a family types at least two letters of a name.'
+                    : "Everyone who can check in is listed before anyone types."}
+                </p>
+              </section>
+            )}
+
+            {ready && (
               <section className={`${CARD} p-5 space-y-4`}>
                 <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Color</h2>
                 <div className="flex flex-wrap items-center gap-4">
