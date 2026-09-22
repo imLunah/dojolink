@@ -42,6 +42,7 @@ async function loadKiosk(pool, locationId) {
   const { rows } = await pool.query(
     `SELECT k.id, k.location_id, k.company_id, k.company_name, k.login_email,
             k.portal_token, k.status, k.connected_at, k.last_used_at, k.flow, k.color, k.show_names,
+            k.class_window_minutes,
             u.display_name AS connected_by_name
        FROM mystudio_kiosks k
        LEFT JOIN users u ON u.id = k.connected_by
@@ -67,6 +68,7 @@ function publicShape(kiosk) {
     flow: kiosk.flow === 'class' ? 'class' : 'name',
     color: kiosk.color || null,
     showNames: kiosk.show_names !== false,
+    classWindowMinutes: kiosk.class_window_minutes || null,
   };
 }
 
@@ -431,7 +433,7 @@ router.post('/setup', requireManager, requireOwnLocation, async (req, res) => {
   }
 });
 
-// PATCH /api/kiosk/setup  { flow?: 'name' | 'class', color?: '#rrggbb' | null, showNames?: boolean }
+// PATCH /api/kiosk/setup  { flow?, color?, showNames?, classWindowMinutes?: number | null }
 //
 // The kiosk's settings: how it starts (find your ninja then pick a class, or
 // pick the class then find your ninja in it) and its color (null is
@@ -446,6 +448,14 @@ router.patch('/setup', requireManager, requireOwnLocation, async (req, res) => {
     if (!['name', 'class'].includes(body.flow)) return res.status(400).json({ error: 'Pick how the kiosk starts.' });
     params.push(body.flow);
     sets.push(`flow = $${params.length}`);
+  }
+  if (body.classWindowMinutes !== undefined) {
+    const w = body.classWindowMinutes;
+    if (w !== null && !(Number.isInteger(w) && w >= 5 && w <= 720)) {
+      return res.status(400).json({ error: 'Pick a window between 5 and 720 minutes.' });
+    }
+    params.push(w);
+    sets.push(`class_window_minutes = $${params.length}`);
   }
   if (body.showNames !== undefined) {
     if (typeof body.showNames !== 'boolean') return res.status(400).json({ error: 'Pick whether names show.' });
@@ -593,7 +603,8 @@ router.get('/classes', requireKiosk, async (req, res) => {
       ms.decryptCookie(kiosk.portal_token),
       member,
       todayDate(),
-      nowMinutes()
+      nowMinutes(),
+      kiosk.class_window_minutes || null
     );
     const { rows: recent } = await pool.query(
       `SELECT DISTINCT class_key FROM mystudio_kiosk_checkins
@@ -629,14 +640,15 @@ async function undoableKeys(pool, locationId, { participantId = null, classKey =
 
 // GET /api/kiosk/schedule
 //
-// Today's classes that have not ended, for a kiosk that starts from the class.
+// Today's classes that have not ended (and, when the center set one, that
+// start within its window of now), for a kiosk that starts from the class.
 router.get('/schedule', requireKiosk, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.kioskLocationId;
   try {
     const kiosk = await ensureKiosk(pool, locationId);
     if (!kiosk || kiosk.status !== 'connected') return res.json({ unavailable: true, classes: [] });
-    const classes = await ms.getKioskSchedule(ms.decryptCookie(kiosk.portal_token), todayDate(), nowMinutes());
+    const classes = await ms.getKioskSchedule(ms.decryptCookie(kiosk.portal_token), todayDate(), nowMinutes(), kiosk.class_window_minutes || null);
     res.json({ classes });
   } catch (err) {
     if (err instanceof ms.MyStudioAuthError) return res.json({ unavailable: true, classes: [] });
@@ -661,7 +673,7 @@ router.get('/roster', requireKiosk, async (req, res) => {
       return res.status(503).json({ error: 'Check-in is unavailable right now. Please see the front desk.' });
     }
     const q = String(req.query.q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
-    const cacheKey = `${locationId}:${todayDate()}:${classKey}`;
+    const cacheKey = `${locationId}:${todayDate()}:${classKey}:${kiosk.class_window_minutes || 'day'}`;
     let found = null;
     const hit = rosterCache.get(cacheKey);
     if (hit && hit.expiresAt > Date.now()) {
@@ -671,6 +683,7 @@ router.get('/roster', requireKiosk, async (req, res) => {
         date: todayDate(),
         classKey,
         nowMinutes: nowMinutes(),
+        windowMinutes: kiosk.class_window_minutes || null,
       });
       if (found) rosterCache.set(cacheKey, { found, expiresAt: Date.now() + ROSTER_TTL_MS });
     }
@@ -732,6 +745,7 @@ router.post('/checkin', requireKiosk, async (req, res) => {
       classKey,
       member,
       nowMinutes: nowMinutes(),
+      windowMinutes: kiosk.class_window_minutes || null,
     });
   } catch (err) {
     if (err instanceof ms.MyStudioCheckInRefused) {

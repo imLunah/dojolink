@@ -670,6 +670,19 @@ describe('check-in kiosk', () => {
     expect(ms.classOpen(cls, at(17, 1))).toBe(false);
   });
 
+  it('narrows to classes starting within the window of now, either side', () => {
+    const at = (h, m) => h * 60 + m;
+    const four = { ...cls, start_time: '04:00 PM', end_time: '05:00 PM' };
+    const six = { ...cls, start_time: '06:00 PM', end_time: '07:00 PM' };
+    const three = { ...cls, start_time: '03:00 PM', end_time: '04:30 PM' };
+    expect(ms.classOpen(four, at(16, 0), 70)).toBe(true);
+    expect(ms.classOpen(six, at(16, 0), 70)).toBe(false);
+    expect(ms.classOpen(six, at(16, 50), 70)).toBe(true);
+    expect(ms.classOpen(three, at(16, 10), 70)).toBe(true);
+    expect(ms.classOpen(three, at(16, 20), 70)).toBe(false);
+    expect(ms.classOpen(six, at(16, 0), null)).toBe(true);
+  });
+
   it('never offers a drop-in', () => {
     const dropIn = { ...cls, class_appointment_occurrence_id: '', start_time: 'Drop-in', end_time: '' };
     expect(ms.classOpen(dropIn, 16 * 60)).toBe(false);

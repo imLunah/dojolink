@@ -1613,20 +1613,24 @@ async function getKioskMembers(token, date) {
   return out;
 }
 
-// A class is on offer all day until it ends. The family picks the time, so
-// there is no reason to hide the six o'clock class at four.
-function classOpen(cls, nowMinutes) {
+// A class is on offer until it ends, and by default all day: the family picks
+// the time. A center can narrow that to a window around now (Kiosk page).
+function classOpen(cls, nowMinutes, windowMinutes = null) {
   if (isDropInClass(cls)) return false;
   const start = toMinutes(cls.start_time);
   const end = toMinutes(cls.end_time);
   if (start === Number.MAX_SAFE_INTEGER) return false;
   const close = end === Number.MAX_SAFE_INTEGER ? start + 60 : end;
-  return nowMinutes <= close;
+  if (nowMinutes > close) return false;
+  // A center can narrow the kiosk to classes starting near now, either side
+  // (70 at 4:00 PM shows 2:50 to 5:10). Null is the whole day.
+  if (windowMinutes && Math.abs(start - nowMinutes) > windowMinutes) return false;
+  return true;
 }
 
 // Today's classes for one member, in the shape the kiosk shows. `booked` means
 // they already have a place; `canRegister` means the kiosk may book them in.
-async function getKioskClassesFor(token, member, date, nowMinutes) {
+async function getKioskClassesFor(token, member, date, nowMinutes, windowMinutes = null) {
   const regType = member.type === 'membership' ? 'M' : member.type === 'trial' ? 'T' : '';
   const data = await portalGet(token, '/api/attendance/getAvailableClassDetails', {
     participant_id: member.participantId,
@@ -1638,7 +1642,7 @@ async function getKioskClassesFor(token, member, date, nowMinutes) {
   const program = membershipProgram(member);
 
   return list
-    .filter((cls) => classOpen(cls, nowMinutes))
+    .filter((cls) => classOpen(cls, nowMinutes, windowMinutes))
     .filter((cls) => !classClosedToMembership(String(cls.class_appointment_title || ''), program))
     .map((cls) => {
       const className = String(cls.class_appointment_title || '').trim();
@@ -1659,10 +1663,10 @@ async function getKioskClassesFor(token, member, date, nowMinutes) {
 
 // Today's classes a family can still pick, for a kiosk that starts from the
 // class. Drop-ins and classes that have ended are left out.
-async function getKioskSchedule(token, date, nowMinutes) {
+async function getKioskSchedule(token, date, nowMinutes, windowMinutes = null) {
   const classes = await portalClassList(token, date);
   return classes
-    .filter((cls) => classOpen(cls, nowMinutes))
+    .filter((cls) => classOpen(cls, nowMinutes, windowMinutes))
     .map((cls) => ({
       classKey: portalClassKey(cls),
       className: String(cls.class_appointment_title || '').trim(),
@@ -1675,10 +1679,10 @@ async function getKioskSchedule(token, date, nowMinutes) {
 // Who can be checked into one class: everyone booked into it, and everyone
 // whose membership covers it (classFitsMembership). Booked first, then by
 // name. Nothing personal beyond the name leaves this function.
-async function getKioskRosterFor(token, { date, classKey, nowMinutes }) {
+async function getKioskRosterFor(token, { date, classKey, nowMinutes, windowMinutes = null }) {
   const classes = await portalClassList(token, date);
   const cls = classes.find((c) => portalClassKey(c) === classKey);
-  if (!cls || !classOpen(cls, nowMinutes)) return null;
+  if (!cls || !classOpen(cls, nowMinutes, windowMinutes)) return null;
 
   const className = String(cls.class_appointment_title || '').trim();
   const seen = new Set();
@@ -1716,12 +1720,12 @@ async function getKioskRosterFor(token, { date, classKey, nowMinutes }) {
 // Checks one child in, booking them into the class first when they have no
 // place in it, the way MyStudio's own kiosk does. Everything is re-read from
 // MyStudio rather than trusted from what the kiosk showed a moment ago.
-async function kioskCheckIn(token, { date, classKey, member, nowMinutes }) {
+async function kioskCheckIn(token, { date, classKey, member, nowMinutes, windowMinutes = null }) {
   const classes = await portalClassList(token, date);
   const cls = classes.find((c) => portalClassKey(c) === classKey);
   if (!cls) throw new MyStudioCheckInRefused("That class isn't on today's schedule. Please see the front desk.");
-  if (!classOpen(cls, nowMinutes)) {
-    throw new MyStudioCheckInRefused('That class has already ended. Please see the front desk.');
+  if (!classOpen(cls, nowMinutes, windowMinutes)) {
+    throw new MyStudioCheckInRefused("That class isn't open for check-in right now. Please see the front desk.");
   }
 
   const rows = await portalParticipants(token, cls, member.participantId);

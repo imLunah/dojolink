@@ -20,6 +20,59 @@ const EASE = [0.23, 1, 0.32, 1];
 const primary = 'inline-flex items-center justify-center gap-1.5 font-ninja text-sm font-bold px-3.5 py-2 rounded-lg bg-ninja-blue text-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:opacity-50';
 const secondary = 'inline-flex items-center justify-center font-ninja text-sm font-bold px-3.5 py-2 rounded-lg border border-ninja-border text-ninja-navy hover:bg-ninja-bg transition-colors';
 
+// How far from now a class's start can be and still show on the kiosk. The
+// number is typed and saved when the field is left or Enter is pressed, so a
+// half-typed "7" on the way to 70 is never saved.
+function ClassWindowSetting({ minutes, onSave }) {
+  const [draft, setDraft] = useState(String(minutes || 70));
+  const [bad, setBad] = useState(false);
+  useEffect(() => { if (minutes) setDraft(String(minutes)); }, [minutes]);
+
+  const on = Boolean(minutes);
+  const commit = () => {
+    const n = Number(draft);
+    if (!Number.isInteger(n) || n < 5 || n > 720) { setBad(true); return; }
+    setBad(false);
+    if (n !== minutes) onSave(n);
+  };
+
+  return (
+    <div className="space-y-3">
+      <Segmented
+        label="Classes shown"
+        layoutId="kiosk-window"
+        value={on ? 'near' : 'day'}
+        onChange={(v) => {
+          if (v === 'day' && on) onSave(null);
+          if (v === 'near' && !on) { const n = Number(draft); onSave(Number.isInteger(n) && n >= 5 && n <= 720 ? n : 70); }
+        }}
+        options={[
+          { value: 'day', label: 'All day' },
+          { value: 'near', label: 'Near now' },
+        ]}
+      />
+      {on ? (
+        <div className="flex flex-wrap items-center gap-2 font-ninja text-sm text-ninja-navy">
+          <span>Classes starting within</span>
+          <input
+            type="number" inputMode="numeric" min={5} max={720} step={5}
+            aria-label="Minutes before and after now"
+            value={draft}
+            onChange={(e) => { setDraft(e.target.value); setBad(false); }}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            className="w-20 rounded-lg border border-ninja-border bg-white px-2.5 py-1.5 font-ninja text-sm text-ninja-navy tabular-nums focus:outline-none focus:border-ninja-blue"
+          />
+          <span>minutes of now, before or after.</span>
+          {bad && <span role="alert" className="w-full font-semibold text-ninja-red">Use a number from 5 to 720.</span>}
+        </div>
+      ) : (
+        <p className="font-ninja text-sm text-ninja-muted">Every class left today is shown.</p>
+      )}
+    </div>
+  );
+}
+
 export default function KioskSetupPage() {
   const [setup, setSetup] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -219,6 +272,16 @@ export default function KioskSetupPage() {
                     ? 'Nobody is listed until a family types at least two letters of a name.'
                     : "Everyone who can check in is listed before anyone types."}
                 </p>
+              </section>
+            )}
+
+            {ready && (
+              <section className={`${CARD} p-5 space-y-3`}>
+                <h2 className="font-ninja font-extrabold text-base text-ninja-navy">Classes shown</h2>
+                <ClassWindowSetting
+                  minutes={setup.classWindowMinutes || null}
+                  onSave={(classWindowMinutes) => saveSetting({ classWindowMinutes })}
+                />
               </section>
             )}
 
