@@ -20,13 +20,14 @@ const BELT_HEX = {
   blue: '#3b82f6', purple: '#8b5cf6', brown: '#92400e', black: '#1f2937',
 };
 
+// Curriculum has no row of its own any more; it opens from the dashboard's
+// quick links, as it does in the app.
 const NAV = [
   { id: 'dashboard',  label: 'Dashboard',     Glyph: LayoutGridIcon },
   { id: 'today',      label: "Today's Board", icon: '/icons/today.png' },
   { id: 'ninjas',     label: 'Ninjas',        icon: '/icons/roster.png' },
   { id: 'clubs',      label: 'Clubs',         icon: '/icons/clubs.png' },
   { id: 'staff',      label: 'Staff',         icon: '/icons/staff.png' },
-  { id: 'curriculum', label: 'Curriculum',    Glyph: BookOpenIcon },
 ];
 
 const STATS = [
@@ -136,8 +137,8 @@ const LEVEL_PROJECTS = [
 // set; the schedule, calendar and check-ins are invented like everything else.
 const QUICK = [
   { label: 'My Tasks',      Icon: ListTodoIcon },
-  { label: "Today's Board", Icon: ClipboardCheckIcon },
-  { label: 'Curriculum',    Icon: BookOpenIcon },
+  { label: "Today's Board", Icon: ClipboardCheckIcon, tab: 'today' },
+  { label: 'Curriculum',    Icon: BookOpenIcon,       tab: 'curriculum' },
   { label: "What's New",    Icon: GiftIcon },
 ];
 
@@ -281,7 +282,7 @@ function CheckInCard() {
   );
 }
 
-function DashboardView() {
+function DashboardView({ onOpen }) {
   return (
     <>
       <div className="mb-5">
@@ -296,12 +297,22 @@ function DashboardView() {
           <div className={MINI_CARD}>
             <div className="text-sm font-bold text-ninja-navy mb-3">Quick links</div>
             <div className="grid grid-cols-1 gap-1.5">
-              {QUICK.map(({ label, Icon }) => (
-                <span key={label} className="flex items-center gap-1.5 rounded-lg border border-ninja-border px-2 py-2 min-w-0">
-                  <Icon className="w-3.5 h-3.5 shrink-0 text-ninja-muted" aria-hidden="true" />
-                  <span className="text-[11px] font-bold text-ninja-navy truncate">{label}</span>
-                </span>
-              ))}
+              {QUICK.map(({ label, Icon, tab }) => {
+                const inner = (
+                  <>
+                    <Icon className="w-3.5 h-3.5 shrink-0 text-ninja-muted group-hover:text-ninja-blue transition-colors" aria-hidden="true" />
+                    <span className="text-[11px] font-bold text-ninja-navy group-hover:text-ninja-blue truncate transition-colors">{label}</span>
+                  </>
+                );
+                const box = 'group flex items-center gap-1.5 rounded-lg border border-ninja-border px-2 py-2 min-w-0 text-left';
+                return tab ? (
+                  <button key={label} type="button" onClick={() => onOpen(tab)} className={`${box} hover:border-ninja-blue/50 transition-colors`}>
+                    {inner}
+                  </button>
+                ) : (
+                  <span key={label} className={box}>{inner}</span>
+                );
+              })}
             </div>
           </div>
 
@@ -876,7 +887,7 @@ export function DeskMockup() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            <View />
+            <View onOpen={setTab} />
           </motion.div>
         </div>
       </div>
