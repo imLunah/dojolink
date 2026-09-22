@@ -79,7 +79,7 @@ function StaffExit({ open, onClose }) {
 function Screen({ children, k }) {
   return (
     <motion.div key={k} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.3, ease: EASE }} className="w-full">
+      transition={{ duration: 0.3, ease: EASE }} className="w-full flex-1 min-h-0 flex flex-col">
       {children}
     </motion.div>
   );
@@ -222,7 +222,9 @@ export default function KioskPage() {
   const closed = !me.ready || unavailable;
 
   return (
-    <div className="min-h-[100dvh] bg-ninja-bg flex flex-col">
+    // The page is exactly one screen and never scrolls; long lists scroll in
+    // their own box, so the clock, the search and the back button stay put.
+    <div className="h-[100dvh] overflow-hidden bg-ninja-bg flex flex-col">
       <header className="flex items-start justify-between gap-4 px-6 sm:px-10 pt-6">
         <div>
           <p className="font-ninja font-bold text-sm text-ninja-muted">
@@ -235,8 +237,8 @@ export default function KioskPage() {
         <Logo className="h-8" />
       </header>
 
-      <main className="flex-1 flex flex-col items-center px-6 sm:px-10 pt-10 sm:pt-16 pb-10">
-        <div className={`w-full ${step === 'search' ? 'max-w-4xl' : 'max-w-xl'}`}>
+      <main className="flex-1 min-h-0 flex flex-col items-center px-6 sm:px-10 pt-8 sm:pt-12 pb-6">
+        <div className="w-full max-w-xl flex-1 min-h-0 flex flex-col">
           <AnimatePresence mode="wait" initial={false}>
             {step === 'search' && (
               <Screen k="search">
@@ -261,16 +263,14 @@ export default function KioskPage() {
                         placeholder="First or last name"
                       />
                     </div>
-                    {/* The list scrolls in its own box sized to the screen, so the
-                        search stays in view however long the roster is. */}
-                    <div className="mt-4 max-h-[calc(100dvh-26rem)] overflow-y-auto overscroll-contain rounded-2xl" aria-live="polite">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    <div className="mt-4 flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-2xl" aria-live="polite">
+                      <div className="space-y-2">
                       {results.map((r) => (
                         <button
                           key={r.participantId} type="button" onClick={() => pickMember(r)}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-ninja-border bg-white px-3.5 py-2.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                          className="w-full flex items-center justify-between gap-2 rounded-xl border border-ninja-border bg-white px-5 py-3.5 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
                         >
-                          <span className="font-ninja font-bold text-base text-ninja-navy truncate">
+                          <span className="font-ninja font-bold text-lg text-ninja-navy truncate">
                             {r.firstName} {r.lastInitial}
                           </span>
                           <ChevronRightIcon size={18} className="flex-shrink-0 text-ninja-muted" aria-hidden />
@@ -295,7 +295,7 @@ export default function KioskPage() {
                 <h1 className="font-ninja font-extrabold text-3xl text-ninja-navy text-center">
                   Which class is {member.firstName} here for?
                 </h1>
-                <div className="mt-6 space-y-2">
+                <div className="mt-6 flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 rounded-2xl">
                   {classes === null && (
                     <p className="font-ninja font-bold text-lg text-ninja-muted text-center" role="status">Finding today's classes…</p>
                   )}
@@ -340,7 +340,7 @@ export default function KioskPage() {
                     )
                   ))}
                 </div>
-                <div className="mt-6 text-center">
+                <div className="mt-6 flex-shrink-0 text-center">
                   <button type="button" onClick={reset}
                     className="font-ninja text-lg font-bold px-10 py-3.5 rounded-2xl border border-ninja-border text-ninja-navy">
                     Back
