@@ -661,6 +661,8 @@ describe('check-in kiosk', () => {
     expect(ms.kioskClassState({ ...base, checkin_status: 'Check in' }).checkedIn).toBe(false);
     expect(ms.kioskClassState({ ...base, checkin_status: 'Cancel check in', att_checkin_datetime: '2026-01-05 16:01:00' }).checkedIn).toBe(true);
     expect(ms.kioskClassState({ ...base, checkin_status: '' }).checkedIn).toBe(false);
+    // A class booked ahead carries a timestamp before anyone checks in.
+    expect(ms.kioskClassState({ ...base, checkin_status: 'Check in', att_checkin_datetime: '2026-01-05 16:00:00' }).checkedIn).toBe(false);
   });
 
   it('offers a class until it ends', () => {
