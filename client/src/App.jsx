@@ -27,7 +27,11 @@ const StudentRoster = lazy(() => import('./pages/manager/StudentRoster'));
 const AddStudentPage = lazy(() => import('./pages/manager/AddStudentPage'));
 const StudentProfile = lazy(() => import('./pages/manager/StudentProfile'));
 const StaffPage = lazy(() => import('./pages/manager/StaffPage'));
-const ReportsPage = lazy(() => import('./pages/manager/ReportsPage'));
+const ReportsLayout = lazy(() => import('./pages/manager/reports/ReportsLayout'));
+const ReportsOverview = lazy(() => import('./pages/manager/reports/ReportsOverview'));
+const ReportsAttendance = lazy(() => import('./pages/manager/reports/ReportsAttendance'));
+const ReportsStudents = lazy(() => import('./pages/manager/reports/ReportsStudents'));
+const ReportsProgress = lazy(() => import('./pages/manager/reports/ReportsProgress'));
 const TasksPage = lazy(() => import('./pages/manager/TasksPage'));
 const EventsPage = lazy(() => import('./pages/manager/EventsPage'));
 const EventListingEditorPage = lazy(() => import('./pages/manager/EventListingEditorPage'));
@@ -99,7 +103,14 @@ export default function App() {
             <Route path="/manager/overview" element={<ProtectedRoute role="sensei"><DirectorDashboard /></ProtectedRoute>} />
             <Route path="/manager/students"  element={<ProtectedRoute role="sensei"><StudentRoster /></ProtectedRoute>} />
             <Route path="/manager/staff"     element={<ProtectedRoute role="sensei"><StaffPage /></ProtectedRoute>} />
-            <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsPage /></ProtectedRoute>} />
+            {/* Reports is a section with its own rail; the tabs are children
+                so the rail and filters stay mounted between them. */}
+            <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsLayout /></ProtectedRoute>}>
+              <Route index element={<ReportsOverview />} />
+              <Route path="attendance" element={<ReportsAttendance />} />
+              <Route path="students" element={<ReportsStudents />} />
+              <Route path="progress" element={<ReportsProgress />} />
+            </Route>
             <Route path="/manager/tasks"    element={<ProtectedRoute role="manager"><TasksPage /></ProtectedRoute>} />
             <Route path="/manager/events"   element={<ProtectedRoute role="manager"><EventsPage /></ProtectedRoute>} />
             <Route path="/manager/events/new" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />

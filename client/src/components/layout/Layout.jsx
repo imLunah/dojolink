@@ -42,7 +42,7 @@ const TAB_LAZY_MAP = {
   '/manager/students': lazy(() => import('../../pages/manager/StudentRoster')),
   '/clubs': lazy(() => import('../../pages/ClubsPage')),
   '/manager/staff': lazy(() => import('../../pages/manager/StaffPage')),
-  '/manager/reports': lazy(() => import('../../pages/manager/ReportsPage')),
+  '/manager/reports': lazy(() => import('../../pages/manager/reports/ReportsLayout')),
   '/curriculum-roadmap': lazy(() => import('../../pages/CurriculumRoadmapPage')),
   '/account': lazy(() => import('../../pages/AccountPage')),
 };
@@ -108,7 +108,10 @@ function AdjacentPanel({ tab, panelRef, side }) {
   );
 }
 
-export default function Layout({ children }) {
+// `motionKey` replaces the route as the page's enter animation key. A section
+// with its own tabs (Reports) passes a constant so switching tab does not
+// remount and re-fade its navigation and filters; it animates its own content.
+export default function Layout({ children, motionKey }) {
   const isPreview = useContext(LayoutPreviewContext);
   const { user, viewAs } = useAuth();
   // Desktop-only display setting: nav runs along the top instead of the sidebar.
@@ -391,7 +394,7 @@ export default function Layout({ children }) {
             <div ref={dragRef} className="relative bg-ninja-bg touch-pan-y lg:touch-auto">
               <AnimatePresence mode="popLayout">
                 <motion.div
-                  key={location.key}
+                  key={motionKey ?? location.key}
                   initial={{ x: enterX, opacity: fromSwipe ? 1 : 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   transition={fromSwipe ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}

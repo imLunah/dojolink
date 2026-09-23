@@ -115,7 +115,14 @@ export default function Sidebar({ onOpenBug }) {
   const { user, logout, switchLocation, viewAs } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1');
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1');
+  // Reports carries its own navigation rail, so the sidebar folds to icons
+  // while it is open and gives the page the width. Expanding it there is a
+  // choice for this visit only: the saved preference is untouched and applies
+  // again the moment Reports is left.
+  const inReports = location.pathname.startsWith('/manager/reports');
+  const [reportsExpanded, setReportsExpanded] = useState(false);
+  const collapsed = inReports ? !reportsExpanded : pinnedCollapsed;
   // Which row's quick flyout is open, and where it anchors. Fixed-position
   // because the nav is a scroll container and clips absolute children.
   const [flyout, setFlyout] = useState(null);
@@ -128,7 +135,11 @@ export default function Sidebar({ onOpenBug }) {
   useEffect(() => { setFlyout(null); }, [location.pathname]);
 
   const toggleCollapsed = () => {
-    setCollapsed((c) => {
+    if (inReports) {
+      setReportsExpanded((e) => !e);
+      return;
+    }
+    setPinnedCollapsed((c) => {
       localStorage.setItem('sidebar-collapsed', c ? '0' : '1');
       return !c;
     });
