@@ -259,7 +259,7 @@ export default function LoginPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{    opacity: 0, height: 0 }}
-                className="bg-red-50 border border-ninja-border text-ninja-red rounded-xl px-4 py-3 font-ninja text-sm"
+                className="bg-red-50 text-ninja-red rounded-xl px-4 py-3 font-ninja text-sm"
               >
                 {error}
               </motion.div>
