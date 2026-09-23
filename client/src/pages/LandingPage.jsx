@@ -161,7 +161,11 @@ export default function LandingPage() {
     }
   }, [user, loading, navigate]);
 
-  const handleSignIn = () => setLeaving(true);
+  // Where the fade-out lands: Sign in goes to the login form, Get Started to
+  // the guided walk-through. The chunk is fetched on the press so it has
+  // the length of the fade to arrive.
+  const handleSignIn = () => setLeaving('/login');
+  const handleGetStarted = () => { import('./GetStartedPage'); setLeaving('/start'); };
 
   // ── Scroll-linked 3D ─────────────────────────────────────────────────
   // The product window loads leaning back in perspective and stands up as
@@ -184,7 +188,7 @@ export default function LandingPage() {
       className="theme-locked min-h-[100dvh] bg-ninja-bg text-ninja-navy font-ninja"
       animate={{ opacity: leaving ? 0 : 1 }}
       transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-      onAnimationComplete={() => { if (leaving) navigate('/login', { state: { fromLanding: true } }); }}
+      onAnimationComplete={() => { if (leaving) navigate(leaving, { state: { fromLanding: true } }); }}
     >
       {/* ── Hero: a full-bleed brand-blue block the product rises out of ── */}
       <div>
@@ -217,7 +221,7 @@ export default function LandingPage() {
                 Sign in
               </button>
               <button
-                onClick={handleSignIn}
+                onClick={handleGetStarted}
                 className="hidden sm:block bg-white text-ninja-blue font-ninja font-bold text-sm px-5 py-2 rounded-full hover:bg-blue-50 transition-colors"
               >
                 Get Started
@@ -247,7 +251,7 @@ export default function LandingPage() {
               Link check-ins, student progress, and operations tracker all together.
             </motion.p>
             <motion.div variants={fadeUp} className="hidden sm:flex justify-center">
-              <GetStarted onClick={handleSignIn} />
+              <GetStarted onClick={handleGetStarted} />
             </motion.div>
           </motion.div>
 
@@ -275,7 +279,7 @@ export default function LandingPage() {
             viewport={{ once: true, margin: '-40px' }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
-            <GetStarted onClick={handleSignIn} tone="solid" />
+            <GetStarted onClick={handleGetStarted} tone="solid" />
           </motion.div>
         </section>
       </div>

@@ -67,6 +67,8 @@ const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 // Lazy — pulls in lottie; keep it out of the main bundle (only new accounts / revisits load it).
 const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'));
 const AppearancePage = lazy(() => import('./pages/AppearancePage'));
+// The guided first visit behind the landing page's Get Started.
+const GetStartedPage = lazy(() => import('./pages/GetStartedPage'));
 const WelcomePage = lazy(() => import('./pages/WelcomePage'));
 const KioskSetupPage = lazy(() => import('./pages/manager/KioskSetupPage'));
 // Outside every staff and parent route on purpose: it runs on a kiosk session,
@@ -94,6 +96,7 @@ export default function App() {
           <Suspense fallback={null}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/start" element={<GetStartedPage />} />
             <Route path="/" element={<LandingPage />} />
 
             {/* Manager routes */}
