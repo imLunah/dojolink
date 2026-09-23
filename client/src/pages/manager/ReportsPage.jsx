@@ -331,79 +331,210 @@ function hourLabel(h) {
     : `${fmt(h)} ${suffix(h)}-${fmt(end)} ${suffix(end)}`;
 }
 
-// Arrivals per clock hour for one day, for staffing. Every hour between the
-// first and the last arrival gets a row, empty ones included, so a quiet hour
-// in the middle of the day shows as a zero instead of disappearing.
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEK_OPTIONS = [4, 8, 12];
+const HOUR_BLUE = '#006ADD';
+
+function median(values) {
+  if (!values.length) return 0;
+  const v = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(v.length / 2);
+  return Math.round(v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2);
+}
+
+// Two buttons sharing one track, the pressed one lifted onto a tile.
+function Segmented({ options, value, onChange, label }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex rounded-lg border border-ninja-border bg-ninja-bg p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={`h-7 rounded-md px-2.5 font-ninja text-[13px] transition-colors ${
+            value === o.value ? 'bg-white text-ninja-navy font-semibold shadow-sm' : 'text-ninja-muted hover:text-ninja-navy'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// One hour. The headline is how many ninjas were in the room at once, because
+// that is what a sensei has to cover; arrivals sit underneath. Over a range of
+// weeks the bar is solid to the typical day and pale out to the busiest, so the
+// gap between the two is the part a schedule has to absorb.
+function HourRow({ hour, peak, peakMax, arrivals, arrivalsMax, scale, pattern, index }) {
+  const pctOf = (n) => (scale > 0 ? `${Math.max((n / scale) * 100, n > 0 ? 2 : 0)}%` : '0%');
+  const ease = { duration: 0.6, delay: Math.min(index * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] };
+  return (
+    <motion.li
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3), ease: 'easeOut' }}
+      className={`${TILE} px-3 py-2.5`}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="min-w-0 flex-1 truncate font-ninja text-[13px] font-semibold text-ninja-navy">{hourLabel(hour)}</span>
+        <span className="shrink-0 font-ninja text-[13px] text-ninja-muted">
+          <span className="font-semibold text-ninja-navy tabular-nums">{peak}</span>
+          {pattern ? <> at once, up to <span className="font-semibold text-ninja-navy tabular-nums">{peakMax}</span></> : ' at once'}
+        </span>
+      </div>
+      <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ninja-border/60">
+        {pattern && (
+          <motion.span
+            className="absolute inset-y-0 left-0 rounded-full"
+            style={{ backgroundColor: HOUR_BLUE, opacity: 0.3 }}
+            initial={{ width: 0 }}
+            animate={{ width: pctOf(peakMax) }}
+            transition={ease}
+          />
+        )}
+        <motion.span
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ backgroundColor: HOUR_BLUE }}
+          initial={{ width: 0 }}
+          animate={{ width: pctOf(peak) }}
+          transition={ease}
+        />
+      </span>
+      <p className="mt-1 font-ninja text-xs text-ninja-muted tabular-nums">
+        {pattern ? `${arrivals} arrived, up to ${arrivalsMax}` : `${arrivals} arrived`}
+      </p>
+    </motion.li>
+  );
+}
+
+// The load on the floor hour by hour, for staffing. "Typical day" is one
+// weekday across several weeks, median and busiest, because walk-ins make any
+// single day a poor guide to the next one. "One day" is a single date.
+// Every hour between the first and last one with anybody in the room gets a
+// row, empty ones included, and a day the center had no check-ins at all is a
+// closed day, not a zero.
 function CheckinsByHour({ className }) {
   const today = centerToday();
+  const [mode, setMode] = useState('typical');
+  const [weekday, setWeekday] = useState(() => localDate(today).getDay());
+  const [weeks, setWeeks] = useState(8);
   const [date, setDate] = useState(today);
-  const [hours, setHours] = useState(null);
+  const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
+  const query = mode === 'typical' ? `weekday=${weekday}&weeks=${weeks}` : `date=${date}`;
   useEffect(() => {
     let live = true;
-    setHours(null);
+    setData(null);
     setError('');
-    api.get(`/reports/checkins-by-hour?date=${date}`)
-      .then((d) => { if (live) setHours(d.hours); })
+    api.get(`/reports/checkins-by-hour?${query}`)
+      .then((d) => { if (live) setData(d); })
       .catch((e) => { if (live) setError(e?.message || 'Failed to load check-ins'); });
     return () => { live = false; };
-  }, [date]);
+  }, [query]);
 
-  const byHour = new Map((hours || []).map((r) => [r.hour, r.count]));
-  const span = hours?.length ? [hours[0].hour, hours[hours.length - 1].hour] : null;
+  const pattern = mode === 'typical';
+  const days = data?.days || [];
+  const cells = new Map((data?.hours || []).map((r) => [`${r.day} ${r.hour}`, r]));
+  const hourNums = (data?.hours || []).map((r) => r.hour);
+  const span = hourNums.length ? [Math.min(...hourNums), Math.max(...hourNums)] : null;
   const rows = span
-    ? Array.from({ length: span[1] - span[0] + 1 }, (_, i) => span[0] + i).map((h) => ({ hour: h, count: byHour.get(h) || 0 }))
+    ? Array.from({ length: span[1] - span[0] + 1 }, (_, i) => span[0] + i).map((hour) => {
+        const peaks = days.map((d) => cells.get(`${d} ${hour}`)?.peak || 0);
+        const arrivals = days.map((d) => cells.get(`${d} ${hour}`)?.arrivals || 0);
+        return {
+          hour,
+          peak: median(peaks),
+          peakMax: Math.max(0, ...peaks),
+          arrivals: median(arrivals),
+          arrivalsMax: Math.max(0, ...arrivals),
+        };
+      })
     : [];
-  const total = rows.reduce((s, r) => s + r.count, 0);
-  const max = Math.max(0, ...rows.map((r) => r.count));
+  const dayTotals = days.map((d) => (data?.hours || []).filter((r) => r.day === d).reduce((s, r) => s + r.arrivals, 0));
+  const typicalTotal = median(dayTotals);
+  const busiestTotal = Math.max(0, ...dayTotals);
+  const scale = Math.max(0, ...rows.map((r) => r.peakMax));
+
   const dayName = localDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const title = pattern ? `Check-ins by hour · ${WEEKDAY_NAMES[weekday]}s, last ${weeks} weeks` : `Check-ins by hour · ${dayName}`;
+  const unit = !data ? undefined
+    : pattern
+      ? (days.length ? `ninjas on a typical ${WEEKDAY_NAMES[weekday]}, up to ${busiestTotal} · ${plural(days.length, 'day')}` : undefined)
+      : `ninja${typicalTotal === 1 ? '' : 's'} checked in`;
 
   const stepBtn = 'flex h-8 w-8 items-center justify-center rounded-lg border border-ninja-border text-ninja-navy transition-colors hover:bg-ninja-bg disabled:opacity-40 disabled:hover:bg-transparent';
 
   return (
     <Section
-      title={`Check-ins by hour · ${dayName}`}
-      value={hours ? total : null}
-      unit={hours ? `ninja${total === 1 ? '' : 's'} checked in` : undefined}
+      title={title}
+      value={data && days.length ? typicalTotal : data && !pattern ? 0 : null}
+      unit={unit}
       className={className}
       footer={
-        <div className="mt-3 flex items-center gap-2">
-          <button type="button" className={stepBtn} onClick={() => setDate(shiftDay(date, -1))} aria-label="Previous day">
-            <ChevronLeftIcon className="h-4 w-4" />
-          </button>
-          <input
-            type="date"
-            value={date}
-            max={today}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-            aria-label="Day"
-            className="h-8 rounded-lg border border-ninja-border bg-white px-2 font-ninja text-[13px] text-ninja-navy"
-          />
-          <button type="button" className={stepBtn} onClick={() => setDate(shiftDay(date, 1))} disabled={date >= today} aria-label="Next day">
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
-        </div>
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Segmented
+              label="View"
+              value={mode}
+              onChange={setMode}
+              options={[{ value: 'typical', label: 'Typical day' }, { value: 'day', label: 'One day' }]}
+            />
+            {pattern ? (
+              <>
+                <Segmented
+                  label="Weekday"
+                  value={weekday}
+                  onChange={setWeekday}
+                  options={WEEKDAYS.map((w, i) => ({ value: i, label: w }))}
+                />
+                <Segmented
+                  label="Weeks"
+                  value={weeks}
+                  onChange={setWeeks}
+                  options={WEEK_OPTIONS.map((n) => ({ value: n, label: `${n} wks` }))}
+                />
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button type="button" className={stepBtn} onClick={() => setDate(shiftDay(date, -1))} aria-label="Previous day">
+                  <ChevronLeftIcon className="h-4 w-4" />
+                </button>
+                <input
+                  type="date"
+                  value={date}
+                  max={today}
+                  onChange={(e) => e.target.value && setDate(e.target.value)}
+                  aria-label="Day"
+                  className="h-8 rounded-lg border border-ninja-border bg-white px-2 font-ninja text-[13px] text-ninja-navy"
+                />
+                <button type="button" className={stepBtn} onClick={() => setDate(shiftDay(date, 1))} disabled={date >= today} aria-label="Next day">
+                  <ChevronRightIcon className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+          <p className="mt-2 font-ninja text-xs text-ninja-muted">
+            At once assumes each class runs an hour, since check-outs aren&apos;t recorded.
+          </p>
+        </>
       }
     >
       {error ? (
         <p className="px-3 py-4 text-ninja-red font-ninja text-sm">{error}</p>
-      ) : !hours ? (
-        <SkeletonCards count={3} height={52} label="Loading check-ins" />
+      ) : !data ? (
+        <SkeletonCards count={3} height={68} label="Loading check-ins" />
       ) : rows.length === 0 ? (
-        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">No check-ins on this day.</p>
+        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">
+          {pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in the last ${weeks} weeks.` : 'No check-ins on this day.'}
+        </p>
       ) : (
         <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((r, i) => (
-            <BarRow
-              key={r.hour}
-              index={i}
-              name={hourLabel(r.hour)}
-              count={r.count}
-              pct={total > 0 ? Math.round((r.count / total) * 100) : 0}
-              color="#006ADD"
-              max={max}
-            />
+            <HourRow key={r.hour} index={i} scale={scale} pattern={pattern} {...r} />
           ))}
         </ul>
       )}

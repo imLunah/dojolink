@@ -119,36 +119,99 @@ router.get('/attendance', requireSensei, async (req, res) => {
   }
 });
 
-// GET /api/reports/checkins-by-hour?date=YYYY-MM-DD — how many ninjas arrived
-// in each clock hour of one day, for staffing. A 5:35 arrival counts in 5-6 PM.
-// A ninja counts once, at their first check-in of the day: two classes back to
-// back are two board rows but one arrival. Rows whose check-in happened on a
-// different day than their session (a session added after the fact) are left
-// out, because their timestamp says when someone typed, not when a kid walked in.
+// GET /api/reports/checkins-by-hour — the hour-by-hour load on the floor, for
+// staffing. Two shapes off one query:
+//   ?date=YYYY-MM-DD           one day
+//   ?weekday=0-6&weeks=N       that weekday over the last N weeks, today excluded
+//                              because it is not over yet
+//
+// Per ninja per day there is one VISIT: from their first check-in until an hour
+// after their last, stretched to an hour per class when they checked into
+// several at once (two classes back to back is two hours in the room). There is
+// no check-out, so the hour is an assumption, and the page says so.
+//
+// Per hour the answer is two numbers:
+//   arrivals — visits that began in that clock hour. A 5:35 arrival is 5-6 PM.
+//   peak     — the most ninjas in the room at once during the hour, read off
+//              five-minute slots. This is the staffing number: a 3:40 arrival
+//              is still at a table at 4:30 and arrivals alone never show it.
+//
+// Rows whose check-in happened on a different day than their session (added
+// after the fact) are left out: that timestamp says when someone typed.
+//
+// The response is per-day rows plus the list of days the center had any
+// check-in. The client fills the zero hours and takes median and max; a day
+// with no check-ins at all is a closed day and is not counted as a zero.
 const CENTER_TZ = 'America/Los_Angeles';
+const VALID_WEEKS = [4, 8, 12];
 router.get('/checkins-by-hour', requireManager, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.activeLocationId;
-  const date = String(req.query.date || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
-    return res.status(400).json({ error: 'Invalid date' });
+
+  let range;
+  if (req.query.date != null) {
+    const date = String(req.query.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+      return res.status(400).json({ error: 'Invalid date' });
+    }
+    range = { where: 'da.session_date = $3::date', params: [date] };
+  } else {
+    const weekday = Number(req.query.weekday);
+    const weeks = Number(req.query.weeks);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || !VALID_WEEKS.includes(weeks)) {
+      return res.status(400).json({ error: 'Invalid weekday or weeks' });
+    }
+    range = {
+      where: `da.session_date >= (now() AT TIME ZONE $2)::date - ($3::int * 7)
+              AND da.session_date < (now() AT TIME ZONE $2)::date
+              AND EXTRACT(DOW FROM da.session_date) = $4`,
+      params: [weeks, weekday],
+    };
   }
+
   try {
     const { rows } = await pool.query(`
-      WITH firsts AS (
-        SELECT da.student_id, MIN(da.checked_in_at AT TIME ZONE $3) AS arrived
+      WITH checkins AS (
+        SELECT da.student_id, da.session_date, da.checked_in_at AT TIME ZONE $2 AS t
         FROM daily_assignments da
-        WHERE da.session_date = $2::date
-          AND (da.checked_in_at AT TIME ZONE $3)::date = da.session_date
+        WHERE ${range.where}
+          AND (da.checked_in_at AT TIME ZONE $2)::date = da.session_date
           AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = da.student_id AND sl.location_id = $1)
-        GROUP BY da.student_id
+      ),
+      visits AS (
+        SELECT session_date, MIN(t) AS arrived,
+               GREATEST(MAX(t), MIN(t) + (COUNT(*) - 1) * INTERVAL '1 hour') + INTERVAL '1 hour' AS left_at
+        FROM checkins
+        GROUP BY student_id, session_date
+      ),
+      slots AS (
+        SELECT v.session_date, slot
+        FROM visits v,
+             generate_series(
+               date_trunc('hour', v.arrived) + FLOOR(EXTRACT(MINUTE FROM v.arrived) / 5) * INTERVAL '5 minutes',
+               v.left_at - INTERVAL '1 second',
+               INTERVAL '5 minutes'
+             ) AS slot
+      ),
+      peaks AS (
+        SELECT session_date, EXTRACT(HOUR FROM slot)::int AS hour, MAX(n)::int AS peak
+        FROM (SELECT session_date, slot, COUNT(*) AS n FROM slots GROUP BY 1, 2) c
+        GROUP BY 1, 2
+      ),
+      arrivals AS (
+        SELECT session_date, EXTRACT(HOUR FROM arrived)::int AS hour, COUNT(*)::int AS arrivals
+        FROM visits
+        GROUP BY 1, 2
       )
-      SELECT EXTRACT(HOUR FROM arrived)::int AS hour, COUNT(*)::int AS count
-      FROM firsts
-      GROUP BY 1
-      ORDER BY 1
-    `, [locationId, date, CENTER_TZ]);
-    res.json({ date, hours: rows });
+      SELECT to_char(p.session_date, 'YYYY-MM-DD') AS day, p.hour,
+             COALESCE(a.arrivals, 0) AS arrivals, p.peak
+      FROM peaks p
+      LEFT JOIN arrivals a ON a.session_date = p.session_date AND a.hour = p.hour
+      ORDER BY 1, 2
+    `, [locationId, CENTER_TZ, ...range.params]);
+
+    const days = [...new Set(rows.map((r) => r.day))];
+    res.json({ days, hours: rows });
   } catch (err) {
     console.error('Error fetching check-ins by hour:', err);
     res.status(500).json({ error: 'Failed to fetch check-ins by hour' });
