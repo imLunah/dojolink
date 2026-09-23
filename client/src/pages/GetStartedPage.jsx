@@ -48,16 +48,15 @@ function Heading({ children, sub }) {
   );
 }
 
-function Choice({ icon: Icon, title, detail, onClick, autoFocus }) {
+function Choice({ icon: Icon, title, detail, onClick }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      autoFocus={autoFocus}
       whileTap={{ scale: 0.985 }}
-      className="group w-full text-left bg-white border border-ninja-border hover:border-ninja-blue rounded-2xl p-4 sm:p-5 flex items-center gap-4 transition-colors shadow-sm"
+      className="group w-full text-left bg-white border border-ninja-border rounded-2xl p-4 sm:p-5 flex items-center gap-4 transition-shadow shadow-sm hover:shadow-md"
     >
-      <span className="w-12 h-12 rounded-xl bg-ninja-blue/10 text-ninja-blue flex items-center justify-center flex-shrink-0">
+      <span className="w-12 h-12 rounded-xl bg-ninja-blue/10 text-ninja-blue group-hover:bg-ninja-blue group-hover:text-white transition-colors flex items-center justify-center flex-shrink-0">
         <Icon className="w-6 h-6" aria-hidden="true" />
       </span>
       <span className="flex-1 min-w-0">
@@ -158,7 +157,6 @@ export default function GetStartedPage() {
             title="I'm a parent"
             detail="Follow your ninja's belts, badges and progress"
             onClick={() => go('code')}
-            autoFocus
           />
           <Choice
             icon={IdCard}
@@ -177,7 +175,6 @@ export default function GetStartedPage() {
         </Heading>
         <motion.button
           type="button"
-          autoFocus
           whileTap={{ scale: 0.985 }}
           onClick={() => navigate('/login')}
           className={PRIMARY}
