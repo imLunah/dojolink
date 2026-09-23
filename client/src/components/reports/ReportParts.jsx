@@ -7,6 +7,7 @@ import { ChartContainer } from '../ui/chart';
 import { Skeleton } from '../ui/Skeleton';
 import { api } from '../../api/client';
 import { REPORT_CARD } from '../../lib/surfaces';
+import CountUp from '../reactbits/CountUp';
 
 // The pieces every Reports tab is built from. Reports is styled as an analytics
 // tool rather than as the rest of DojoLink: system type instead of Nunito, flat
@@ -189,7 +190,11 @@ export function Metric({ label, value, delta, compare, tone, spark, footer }) {
       <div className="flex flex-1 gap-3 px-5 pb-5 pt-4">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ninja-muted">{label}</p>
-          <p className={`mt-2 text-[32px] font-semibold leading-none tracking-tight tabular-nums ${tone || 'text-ninja-navy'}`}>{value}</p>
+          {/* A number counts up to itself once, as the card comes into view, so
+              the eye lands on the figures rather than on the labels. */}
+          <p className={`mt-2 text-[32px] font-semibold leading-none tracking-tight tabular-nums ${tone || 'text-ninja-navy'}`}>
+            {typeof value === 'number' ? <CountUp to={value} duration={0.9} /> : value}
+          </p>
           {(delta || compare) && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-ninja-muted">
               {delta}

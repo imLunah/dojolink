@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 import { useAuth, hadSession } from '../context/AuthContext';
@@ -6,6 +6,16 @@ import { getHomePath } from '../lib/navTabs';
 import { useLightOnly } from '../context/ThemeContext';
 import Logo from '../components/ui/Logo';
 import { DeskMockup, PhoneMockup } from '../components/landing/ProductMockups';
+
+// The hero's moving liquid. Lazy, because the landing page is in the eager
+// bundle and WebGL (ogl) is not something the first paint should wait for: the
+// brand blue is already there, and the liquid fades in over it once loaded.
+const LiquidChrome = lazy(() => import('../components/reactbits/LiquidChrome'));
+
+// Brand blue with most of the light taken out. The shader divides this by a
+// wave, so the darkest water is this colour and the crests brighten from it;
+// any lighter and the crests saturate to cyan-white behind the white headline.
+const HERO_LIQUID = [0.0, 0.12, 0.33];
 
 const stagger = {
   hidden: {},
@@ -191,6 +201,29 @@ export default function LandingPage() {
         <section className="relative rounded-b-3xl sm:rounded-b-[40px]">
           {/* Background layer clips to the rounded shape; content may overflow it */}
           <div className="absolute inset-x-0 top-0 bottom-56 sm:bottom-0 rounded-[inherit] overflow-hidden bg-ninja-blue">
+            <Suspense fallback={null}>
+              <motion.div
+                className="absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <LiquidChrome
+                  className="h-full w-full"
+                  baseColor={HERO_LIQUID}
+                  speed={0.12}
+                  amplitude={0.28}
+                  frequencyX={2.6}
+                  frequencyY={2.2}
+                />
+              </motion.div>
+              {/* A darker wash behind the headline, so white type stays
+                  readable whatever the liquid is doing under it. */}
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{ background: 'radial-gradient(ellipse 55% 42% at 50% 26%, rgba(0,32,92,0.45) 0%, transparent 75%)' }}
+              />
+            </Suspense>
             <div
               className="absolute inset-0"
               style={{
