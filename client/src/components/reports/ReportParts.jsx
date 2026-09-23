@@ -116,7 +116,7 @@ export function comparable(period, dataSince) {
   return !!period && !!dataSince && period.prevFrom >= dataSince;
 }
 
-// Change against the previous period. `goodWhenDown` flips the colour for
+// Change against the previous period, as coloured text. `goodWhenDown` flips the colour for
 // counts nobody wants to grow. Null when there is nothing honest to show.
 export function DeltaChip({ cur, prev, show = true, goodWhenDown = false }) {
   if (!show || prev == null || prev === 0) return null;
@@ -125,13 +125,10 @@ export function DeltaChip({ cur, prev, show = true, goodWhenDown = false }) {
   const flat = pct === 0;
   const good = up !== goodWhenDown;
   const Icon = up ? ArrowUpRightIcon : ArrowDownRightIcon;
-  const tone = flat
-    ? { color: 'rgb(var(--ninja-muted))', backgroundColor: 'rgb(var(--ninja-border) / 0.6)' }
-    : good
-      ? { color: 'rgb(5 150 105)', backgroundColor: 'rgb(16 185 129 / 0.12)' }
-      : { color: 'rgb(220 38 38)', backgroundColor: 'rgb(239 68 68 / 0.12)' };
+  // Plain coloured text and an arrow: no chip, no tinted box, no outline.
+  const tone = flat ? 'text-ninja-muted' : good ? 'text-emerald-600 dark:text-emerald-400' : 'text-ninja-red';
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums" style={tone}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums ${tone}`}>
       {!flat && <Icon className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />}
       {flat ? '0%' : `${Math.abs(pct)}%`}
       <span className="sr-only">{flat ? 'no change' : `${up ? 'up' : 'down'} from ${prev}`}</span>
