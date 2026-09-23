@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, IdCard, ChevronRight, ArrowRight } from 'lucide-react';
+import { ChevronRight, ArrowRight } from 'lucide-react';
 import { useParentAuth } from '../context/ParentAuthContext';
 import { useLightOnly } from '../context/ThemeContext';
 import Logo from '../components/ui/Logo';
@@ -48,23 +48,20 @@ function Heading({ children, sub }) {
   );
 }
 
-function Choice({ icon: Icon, title, detail, onClick }) {
+function Choice({ title, detail, onClick }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
       whileTap={{ scale: 0.985 }}
-      className="group w-full text-left bg-white border border-ninja-border rounded-2xl p-4 sm:p-5 flex items-center gap-4 transition-shadow shadow-sm hover:shadow-md"
+      className="group w-full text-left bg-white rounded-2xl px-5 py-4 sm:px-6 sm:py-5 flex items-center gap-4 transition-shadow shadow-sm hover:shadow-md"
     >
-      <span className="w-12 h-12 rounded-xl bg-ninja-blue/10 text-ninja-blue group-hover:bg-ninja-blue group-hover:text-white transition-colors flex items-center justify-center flex-shrink-0">
-        <Icon className="w-6 h-6" aria-hidden="true" />
-      </span>
       <span className="flex-1 min-w-0">
         <span className="block font-ninja font-extrabold text-ninja-navy text-lg leading-snug">{title}</span>
         <span className="block font-ninja text-sm text-ninja-muted leading-snug mt-0.5">{detail}</span>
       </span>
       <ChevronRight
-        className="w-5 h-5 text-ninja-muted group-hover:text-ninja-blue group-hover:translate-x-0.5 transition-all flex-shrink-0"
+        className="w-5 h-5 text-ninja-muted group-hover:text-ninja-navy group-hover:translate-x-0.5 transition-all flex-shrink-0"
         aria-hidden="true"
       />
     </motion.button>
@@ -153,13 +150,11 @@ export default function GetStartedPage() {
         </Heading>
         <div className="space-y-3">
           <Choice
-            icon={Users}
             title="I'm a parent"
             detail="Follow your ninja's belts, badges and progress"
             onClick={() => go('code')}
           />
           <Choice
-            icon={IdCard}
             title="I work at a center"
             detail="Sensei or Center Director"
             onClick={() => go('staff')}
