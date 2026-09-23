@@ -332,6 +332,10 @@ function hourLabel(h) {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Sunday is closed at every center, so it is not offered. The opening hours
+// themselves come back from the server with the data (CENTER_HOURS in
+// routes/reports.js), so there is one copy of them.
+const OPEN_WEEKDAYS = [1, 2, 3, 4, 5, 6];
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEK_OPTIONS = [4, 8, 12];
 const HOUR_BLUE = '#006ADD';
@@ -413,13 +417,12 @@ function HourRow({ hour, peak, peakMax, arrivals, arrivalsMax, scale, pattern, i
 // The load on the floor hour by hour, for staffing. "Typical day" is one
 // weekday across several weeks, median and busiest, because walk-ins make any
 // single day a poor guide to the next one. "One day" is a single date.
-// Every hour between the first and last one with anybody in the room gets a
-// row, empty ones included, and a day the center had no check-ins at all is a
-// closed day, not a zero.
+// Every hour the center is open gets a row, empty ones included, and a day the
+// center had no check-ins at all is a closed day, not a zero.
 function CheckinsByHour({ className }) {
   const today = centerToday();
   const [mode, setMode] = useState('typical');
-  const [weekday, setWeekday] = useState(() => localDate(today).getDay());
+  const [weekday, setWeekday] = useState(() => localDate(today).getDay() || 1);
   const [weeks, setWeeks] = useState(8);
   const [date, setDate] = useState(today);
   const [data, setData] = useState(null);
@@ -439,10 +442,9 @@ function CheckinsByHour({ className }) {
   const pattern = mode === 'typical';
   const days = data?.days || [];
   const cells = new Map((data?.hours || []).map((r) => [`${r.day} ${r.hour}`, r]));
-  const hourNums = (data?.hours || []).map((r) => r.hour);
-  const span = hourNums.length ? [Math.min(...hourNums), Math.max(...hourNums)] : null;
-  const rows = span
-    ? Array.from({ length: span[1] - span[0] + 1 }, (_, i) => span[0] + i).map((hour) => {
+  const open = data?.open || null;
+  const rows = open && days.length
+    ? Array.from({ length: open[1] - open[0] }, (_, i) => open[0] + i).map((hour) => {
         const peaks = days.map((d) => cells.get(`${d} ${hour}`)?.peak || 0);
         const arrivals = days.map((d) => cells.get(`${d} ${hour}`)?.arrivals || 0);
         return {
@@ -489,7 +491,7 @@ function CheckinsByHour({ className }) {
                   label="Weekday"
                   value={weekday}
                   onChange={setWeekday}
-                  options={WEEKDAYS.map((w, i) => ({ value: i, label: w }))}
+                  options={OPEN_WEEKDAYS.map((i) => ({ value: i, label: WEEKDAYS[i] }))}
                 />
                 <Segmented
                   label="Weeks"
@@ -529,7 +531,8 @@ function CheckinsByHour({ className }) {
         <SkeletonCards count={3} height={68} label="Loading check-ins" />
       ) : rows.length === 0 ? (
         <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">
-          {pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in the last ${weeks} weeks.` : 'No check-ins on this day.'}
+          {!open ? 'The center is closed on Sundays.'
+            : pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in the last ${weeks} weeks.` : 'No check-ins on this day.'}
         </p>
       ) : (
         <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">

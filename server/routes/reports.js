@@ -144,6 +144,17 @@ router.get('/attendance', requireSensei, async (req, res) => {
 // with no check-ins at all is a closed day and is not counted as a zero.
 const CENTER_TZ = 'America/Los_Angeles';
 const VALID_WEEKS = [4, 8, 12];
+
+// Opening hours, the same at every center: 3-7 PM on weekdays, 10 AM-2 PM on
+// Saturday, closed Sunday. Keyed by getDay()/EXTRACT(DOW), [open, close) in
+// whole hours. A visit is clipped to these, so a 6:30 check-in does not put a
+// ninja in the room at 7:15, and an early 2:50 arrival counts in the first hour
+// rather than an hour the center is not open. A check-in after close (typed
+// late) still counts as an arrival in the last open hour.
+const CENTER_HOURS = { 0: null, 1: [15, 19], 2: [15, 19], 3: [15, 19], 4: [15, 19], 5: [15, 19], 6: [10, 14] };
+const openHourSql = (col, i) => `CASE EXTRACT(DOW FROM ${col})::int ${
+  Object.entries(CENTER_HOURS).filter(([, h]) => h).map(([d, h]) => `WHEN ${d} THEN ${h[i]}`).join(' ')
+} END`;
 router.get('/checkins-by-hour', requireManager, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.activeLocationId;
@@ -154,7 +165,7 @@ router.get('/checkins-by-hour', requireManager, async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
       return res.status(400).json({ error: 'Invalid date' });
     }
-    range = { where: 'da.session_date = $3::date', params: [date] };
+    range = { where: 'da.session_date = $3::date', params: [date], weekday: new Date(`${date}T12:00:00Z`).getUTCDay() };
   } else {
     const weekday = Number(req.query.weekday);
     const weeks = Number(req.query.weeks);
@@ -166,6 +177,7 @@ router.get('/checkins-by-hour', requireManager, async (req, res) => {
               AND da.session_date < (now() AT TIME ZONE $2)::date
               AND EXTRACT(DOW FROM da.session_date) = $4`,
       params: [weeks, weekday],
+      weekday,
     };
   }
 
@@ -178,20 +190,29 @@ router.get('/checkins-by-hour', requireManager, async (req, res) => {
           AND (da.checked_in_at AT TIME ZONE $2)::date = da.session_date
           AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = da.student_id AND sl.location_id = $1)
       ),
-      visits AS (
+      raw AS (
         SELECT session_date, MIN(t) AS arrived,
-               GREATEST(MAX(t), MIN(t) + (COUNT(*) - 1) * INTERVAL '1 hour') + INTERVAL '1 hour' AS left_at
+               GREATEST(MAX(t), MIN(t) + (COUNT(*) - 1) * INTERVAL '1 hour') + INTERVAL '1 hour' AS left_at,
+               session_date + ${openHourSql('session_date', 0)} * INTERVAL '1 hour' AS opens,
+               session_date + ${openHourSql('session_date', 1)} * INTERVAL '1 hour' AS closes
         FROM checkins
         GROUP BY student_id, session_date
+      ),
+      visits AS (
+        SELECT session_date, arrived, opens, closes,
+               GREATEST(arrived, opens) AS from_t, LEAST(left_at, closes) AS to_t
+        FROM raw
+        WHERE opens IS NOT NULL
       ),
       slots AS (
         SELECT v.session_date, slot
         FROM visits v,
              generate_series(
-               date_trunc('hour', v.arrived) + FLOOR(EXTRACT(MINUTE FROM v.arrived) / 5) * INTERVAL '5 minutes',
-               v.left_at - INTERVAL '1 second',
+               date_trunc('hour', v.from_t) + FLOOR(EXTRACT(MINUTE FROM v.from_t) / 5) * INTERVAL '5 minutes',
+               v.to_t - INTERVAL '1 second',
                INTERVAL '5 minutes'
              ) AS slot
+        WHERE v.to_t > v.from_t
       ),
       peaks AS (
         SELECT session_date, EXTRACT(HOUR FROM slot)::int AS hour, MAX(n)::int AS peak
@@ -199,19 +220,23 @@ router.get('/checkins-by-hour', requireManager, async (req, res) => {
         GROUP BY 1, 2
       ),
       arrivals AS (
-        SELECT session_date, EXTRACT(HOUR FROM arrived)::int AS hour, COUNT(*)::int AS arrivals
+        SELECT session_date,
+               LEAST(GREATEST(EXTRACT(HOUR FROM arrived)::int, EXTRACT(HOUR FROM opens)::int),
+                     EXTRACT(HOUR FROM closes)::int - 1) AS hour,
+               COUNT(*)::int AS arrivals
         FROM visits
         GROUP BY 1, 2
       )
-      SELECT to_char(p.session_date, 'YYYY-MM-DD') AS day, p.hour,
-             COALESCE(a.arrivals, 0) AS arrivals, p.peak
+      SELECT to_char(COALESCE(p.session_date, a.session_date), 'YYYY-MM-DD') AS day,
+             COALESCE(p.hour, a.hour) AS hour,
+             COALESCE(a.arrivals, 0) AS arrivals, COALESCE(p.peak, 0) AS peak
       FROM peaks p
-      LEFT JOIN arrivals a ON a.session_date = p.session_date AND a.hour = p.hour
+      FULL JOIN arrivals a ON a.session_date = p.session_date AND a.hour = p.hour
       ORDER BY 1, 2
     `, [locationId, CENTER_TZ, ...range.params]);
 
     const days = [...new Set(rows.map((r) => r.day))];
-    res.json({ days, hours: rows });
+    res.json({ days, hours: rows, open: CENTER_HOURS[range.weekday] });
   } catch (err) {
     console.error('Error fetching check-ins by hour:', err);
     res.status(500).json({ error: 'Failed to fetch check-ins by hour' });
