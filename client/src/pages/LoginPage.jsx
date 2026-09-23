@@ -7,6 +7,9 @@ import { EyeIcon as LucideEye, EyeOffIcon as LucideEyeOff } from 'lucide-react';
 import { useParentAuth } from '../context/ParentAuthContext';
 import { useLightOnly } from '../context/ThemeContext';
 import Logo from '../components/ui/Logo';
+import Modal from '../components/ui/Modal';
+import KeepSignedIn from '../components/auth/KeepSignedIn';
+import { STAFF_HELP, PARENT_HELP } from '../components/auth/signInHelp';
 
 const stagger = {
   hidden: {},
@@ -33,6 +36,7 @@ export default function LoginPage() {
   const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const { login } = useAuth();
   const { login: parentLogin } = useParentAuth();
   const navigate = useNavigate();
@@ -247,42 +251,7 @@ export default function LoginPage() {
           {/* Keep me signed in. Outside the tabs: a parent on the family iPad
               has the same reason to want it as a sensei on the front desk, and
               the control is the same control. */}
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className="relative flex-shrink-0">
-              <input
-                id="keep-signed-in"
-                name="keepSignedIn"
-                type="checkbox"
-                checked={keepSignedIn}
-                onChange={(e) => setKeepSignedIn(e.target.checked)}
-                className="sr-only"
-              />
-              <motion.div
-                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                  keepSignedIn ? 'bg-ninja-blue border-ninja-blue' : 'border-ninja-border bg-white'
-                }`}
-                whileTap={{ scale: 0.85 }}
-              >
-                <AnimatePresence>
-                  {keepSignedIn && (
-                    <motion.svg
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{   scale: 0, opacity: 0 }}
-                      transition={{ type: 'spring', damping: 16, stiffness: 400 }}
-                      className="w-3 h-3 text-white"
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
-                    </motion.svg>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            </div>
-            <span className="font-ninja text-sm text-ninja-navy group-hover:text-ninja-blue transition-colors">
-              Keep me signed in on this device
-            </span>
-          </label>
+          <KeepSignedIn checked={keepSignedIn} onChange={setKeepSignedIn} />
 
           <AnimatePresence>
             {error && (
@@ -328,8 +297,40 @@ export default function LoginPage() {
               )}
             </span>
           </motion.button>
+
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="font-ninja font-bold text-sm text-ninja-muted hover:text-ninja-blue transition-colors"
+            >
+              Need help signing in?
+            </button>
+          </div>
         </form>
       </motion.div>
+
+      <Modal
+        isOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title={tab === 'parent' ? 'Parent sign-in help' : 'Staff sign-in help'}
+        width="max-w-md"
+      >
+        <dl className="space-y-4">
+          {(tab === 'parent' ? PARENT_HELP : STAFF_HELP).map(({ q, a }) => (
+            <div key={q}>
+              <dt className="font-ninja font-extrabold text-ninja-navy text-sm mb-1">{q}</dt>
+              <dd className="font-ninja text-sm text-ninja-muted leading-relaxed">{a}</dd>
+            </div>
+          ))}
+        </dl>
+        <Link
+          to="/start"
+          className="mt-6 flex items-center justify-center w-full py-3 rounded-xl bg-ninja-bg text-ninja-blue font-ninja font-bold text-sm hover:bg-ninja-blue/10 transition-colors"
+        >
+          Walk me through it step by step
+        </Link>
+      </Modal>
       <p className="text-center mt-6 text-ninja-muted font-ninja text-xs flex items-center justify-center gap-2">
         <Link to="/privacy" className="hover:text-ninja-blue transition-colors">Privacy Policy</Link>
         <span>·</span>
