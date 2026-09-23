@@ -351,7 +351,7 @@ export default function KioskPage() {
           <div className="w-full max-w-md rounded-3xl px-5 md:px-8 py-10 lg:py-20 text-center shadow-sm" style={{ backgroundColor: 'rgb(255 255 255 / 0.88)' }}>
             <Logo className="h-7 lg:h-9 mx-auto" />
             <h1 className="mt-6 lg:mt-8 font-ninja font-extrabold text-3xl md:text-4xl lg:text-5xl text-ninja-navy text-balance">
-              Welcome to {me.centerName}
+              Welcome to {/^code ninjas/i.test(me.centerName) ? me.centerName : `Code Ninjas ${me.centerName}`}
             </h1>
           </div>
         </div>
