@@ -119,4 +119,40 @@ router.get('/attendance', requireSensei, async (req, res) => {
   }
 });
 
+// GET /api/reports/checkins-by-hour?date=YYYY-MM-DD — how many ninjas arrived
+// in each clock hour of one day, for staffing. A 5:35 arrival counts in 5-6 PM.
+// A ninja counts once, at their first check-in of the day: two classes back to
+// back are two board rows but one arrival. Rows whose check-in happened on a
+// different day than their session (a session added after the fact) are left
+// out, because their timestamp says when someone typed, not when a kid walked in.
+const CENTER_TZ = 'America/Los_Angeles';
+router.get('/checkins-by-hour', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = req.session.activeLocationId;
+  const date = String(req.query.date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+    return res.status(400).json({ error: 'Invalid date' });
+  }
+  try {
+    const { rows } = await pool.query(`
+      WITH firsts AS (
+        SELECT da.student_id, MIN(da.checked_in_at AT TIME ZONE $3) AS arrived
+        FROM daily_assignments da
+        WHERE da.session_date = $2::date
+          AND (da.checked_in_at AT TIME ZONE $3)::date = da.session_date
+          AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = da.student_id AND sl.location_id = $1)
+        GROUP BY da.student_id
+      )
+      SELECT EXTRACT(HOUR FROM arrived)::int AS hour, COUNT(*)::int AS count
+      FROM firsts
+      GROUP BY 1
+      ORDER BY 1
+    `, [locationId, date, CENTER_TZ]);
+    res.json({ date, hours: rows });
+  } catch (err) {
+    console.error('Error fetching check-ins by hour:', err);
+    res.status(500).json({ error: 'Failed to fetch check-ins by hour' });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import { api } from '../../api/client';
@@ -124,7 +125,7 @@ function BarRow({ rank, art, name, count, pct, color, max, index }) {
       className={`${TILE} flex items-center gap-3 px-3 py-2.5`}
     >
       {rank != null && <span className="w-3 shrink-0 text-right font-ninja text-[13px] text-ninja-muted tabular-nums">{rank}</span>}
-      <span className="shrink-0">{art}</span>
+      {art && <span className="shrink-0">{art}</span>}
       {/* Name and numbers on one line, the bar on its own line under them:
           sharing one line with a name squeezed the bar to a stub in a
           third-width card. */}
@@ -310,6 +311,106 @@ function BeltLog({ data, className }) {
   );
 }
 
+// The centers are all in California; "today" is theirs, not the browser's.
+function centerToday() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+}
+
+function shiftDay(dateStr, by) {
+  const d = localDate(dateStr);
+  d.setDate(d.getDate() + by);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function hourLabel(h) {
+  const fmt = (x) => `${x % 12 === 0 ? 12 : x % 12}`;
+  const suffix = (x) => (x % 24 < 12 ? 'AM' : 'PM');
+  const end = h + 1;
+  return suffix(h) === suffix(end)
+    ? `${fmt(h)}-${fmt(end)} ${suffix(end)}`
+    : `${fmt(h)} ${suffix(h)}-${fmt(end)} ${suffix(end)}`;
+}
+
+// Arrivals per clock hour for one day, for staffing. Every hour between the
+// first and the last arrival gets a row, empty ones included, so a quiet hour
+// in the middle of the day shows as a zero instead of disappearing.
+function CheckinsByHour({ className }) {
+  const today = centerToday();
+  const [date, setDate] = useState(today);
+  const [hours, setHours] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    setHours(null);
+    setError('');
+    api.get(`/reports/checkins-by-hour?date=${date}`)
+      .then((d) => { if (live) setHours(d.hours); })
+      .catch((e) => { if (live) setError(e?.message || 'Failed to load check-ins'); });
+    return () => { live = false; };
+  }, [date]);
+
+  const byHour = new Map((hours || []).map((r) => [r.hour, r.count]));
+  const span = hours?.length ? [hours[0].hour, hours[hours.length - 1].hour] : null;
+  const rows = span
+    ? Array.from({ length: span[1] - span[0] + 1 }, (_, i) => span[0] + i).map((h) => ({ hour: h, count: byHour.get(h) || 0 }))
+    : [];
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  const max = Math.max(0, ...rows.map((r) => r.count));
+  const dayName = localDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+  const stepBtn = 'flex h-8 w-8 items-center justify-center rounded-lg border border-ninja-border text-ninja-navy transition-colors hover:bg-ninja-bg disabled:opacity-40 disabled:hover:bg-transparent';
+
+  return (
+    <Section
+      title={`Check-ins by hour · ${dayName}`}
+      value={hours ? total : null}
+      unit={hours ? `ninja${total === 1 ? '' : 's'} checked in` : undefined}
+      className={className}
+      footer={
+        <div className="mt-3 flex items-center gap-2">
+          <button type="button" className={stepBtn} onClick={() => setDate(shiftDay(date, -1))} aria-label="Previous day">
+            <ChevronLeftIcon className="h-4 w-4" />
+          </button>
+          <input
+            type="date"
+            value={date}
+            max={today}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+            aria-label="Day"
+            className="h-8 rounded-lg border border-ninja-border bg-white px-2 font-ninja text-[13px] text-ninja-navy"
+          />
+          <button type="button" className={stepBtn} onClick={() => setDate(shiftDay(date, 1))} disabled={date >= today} aria-label="Next day">
+            <ChevronRightIcon className="h-4 w-4" />
+          </button>
+        </div>
+      }
+    >
+      {error ? (
+        <p className="px-3 py-4 text-ninja-red font-ninja text-sm">{error}</p>
+      ) : !hours ? (
+        <SkeletonCards count={3} height={52} label="Loading check-ins" />
+      ) : rows.length === 0 ? (
+        <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">No check-ins on this day.</p>
+      ) : (
+        <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((r, i) => (
+            <BarRow
+              key={r.hour}
+              index={i}
+              name={hourLabel(r.hour)}
+              count={r.count}
+              pct={total > 0 ? Math.round((r.count / total) * 100) : 0}
+              color="#006ADD"
+              max={max}
+            />
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 export default function ReportsPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -365,6 +466,7 @@ export default function ReportsPage() {
                 data={data.beltLog}
                 className="xl:col-start-3 xl:row-start-1 xl:row-span-2 xl:[contain:size]"
               />
+              <CheckinsByHour className="lg:col-span-2 xl:col-span-3" />
             </div>
           </>
         )}
