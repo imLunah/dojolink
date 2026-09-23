@@ -24,7 +24,7 @@ export const PARENT_HELP = [
   },
   {
     q: 'Which email do I use?',
-    a: 'The one you gave the center when you signed your ninja up. It has to match the email they have on file.',
+    a: 'Please contact your Center Director. They can tell you which email your center has on file.',
   },
   {
     q: 'It says my code and email do not match',
