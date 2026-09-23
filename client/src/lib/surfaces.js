@@ -39,3 +39,12 @@ export const CHROME = 'glass-chrome glass-edge';
 // lists), and a shadow or a pane under those reads as a second material
 // competing with the first. Decided on the design canvas; keep it flat.
 export const FLAT = 'bg-white border border-ninja-border rounded-[22px]';
+
+// The Reports section's card, and deliberately not CARD. Reports reads as an
+// analytics tool rather than as the rest of the app: a flat white sheet, one
+// neutral hairline, a lift you only notice in the dark, no tinted tiles nested
+// inside it. Header, body and an optional "See details" footer are laid out by
+// the Card component in components/reports/ReportParts.jsx.
+export const REPORT_CARD =
+  'bg-white border border-ninja-border rounded-2xl shadow-[0_1px_2px_rgb(16_24_40/0.04)] ' +
+  'dark:shadow-[0_10px_34px_rgb(0_0_0/0.28)] ring-1 ring-transparent dark:ring-white/[0.04]';

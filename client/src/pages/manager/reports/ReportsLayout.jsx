@@ -2,21 +2,23 @@ import { Suspense, useMemo } from 'react';
 import { NavLink, useLocation, useOutlet, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  LayoutDashboardIcon,
+  ChevronDownIcon,
   ClockIcon,
-  UsersIcon,
+  LayoutDashboardIcon,
   TrendingUpIcon,
+  UsersIcon,
 } from 'lucide-react';
 import Layout from '../../../components/layout/Layout';
 import { useAuth } from '../../../context/AuthContext';
 import { PROGRAMS } from '../../../utils/beltConfig';
-import { CARD } from '../../../lib/surfaces';
-import { SkeletonCards } from '../../../components/ui/Skeleton';
-import { addDays, centerToday, localDate, isoDate, rangeLabel } from '../../../components/reports/ReportParts';
+import {
+  Loading, REPORT_FONT, addDays, centerToday, isoDate, localDate, rangeLabel,
+} from '../../../components/reports/ReportParts';
 
-// Reports is its own section: a rail of tabs, and one filter bar that every
-// tab reads. The filters live in the URL, so a refresh keeps them, the back
-// button walks through them, and a link sent to someone opens the same view.
+// Reports is its own section, laid out like an analytics tool: a title with
+// the filters beside it, a row of tabs under it, and the tab's cards below.
+// The filters live in the URL, so a refresh keeps them, the back button walks
+// through them, and a link sent to someone opens the same view.
 
 const TABS = [
   { to: '/manager/reports', end: true, label: 'Overview', Icon: LayoutDashboardIcon },
@@ -48,13 +50,23 @@ function periodRange(value, today) {
   };
 }
 
-const SELECT = 'h-9 w-full rounded-lg border border-ninja-border bg-white pl-3 pr-8 font-ninja text-[13px] font-semibold text-ninja-navy';
-
-function Filter({ label, children, className = '' }) {
+// A filter reads as a button: its name in grey, its value in ink, a chevron.
+// It is a native select underneath, so the menu, the keyboard and the phone
+// picker are the platform's own. The select is a ghost on the field, and a
+// ghost field needs its transparency held on hover too, or the dark theme's
+// blanket field rule paints a box behind it.
+function Filter({ label, value, onChange, children, className = '' }) {
   return (
-    <label className={`flex min-w-0 flex-col gap-1 ${className}`}>
-      <span className="font-ninja text-xs text-ninja-muted">{label}</span>
-      {children}
+    <label className={`relative flex h-9 min-w-0 items-center gap-2 rounded-lg border border-ninja-border bg-white pl-3 text-[13px] ${className}`}>
+      <span className="shrink-0 text-ninja-muted">{label}</span>
+      <select
+        value={value}
+        onChange={onChange}
+        className="h-full min-w-0 flex-1 cursor-pointer appearance-none bg-transparent pr-8 font-semibold text-ninja-navy outline-none dark:hover:bg-transparent"
+      >
+        {children}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute right-2.5 h-4 w-4 text-ninja-muted" aria-hidden="true" />
     </label>
   );
 }
@@ -99,93 +111,74 @@ export default function ReportsLayout() {
 
   const outlet = useOutlet(context);
   const search = params.toString() ? `?${params.toString()}` : '';
-  const tabLink = (t) => ({ pathname: t.to, search });
-  const tabClass = (isActive) => (isActive
-    ? 'bg-ninja-blue/10 text-ninja-blue'
-    : 'text-ninja-muted hover:bg-ninja-bg hover:text-ninja-navy');
 
   return (
     <Layout motionKey="reports">
-      <div className="lg:flex lg:gap-6">
-        {/* The rail. Its own card, sticky beside the page; the tab it is on is
-            a tint and a colour, never a bar down the edge. */}
-        <aside className="hidden lg:block w-[92px] shrink-0">
-          <nav aria-label="Reports" className={`${CARD} sticky top-8 flex flex-col gap-1 p-2`}>
-            {TABS.map((t) => (
-              <NavLink
-                key={t.to}
-                to={tabLink(t)}
-                end={t.end}
-                className={({ isActive }) => `flex flex-col items-center gap-1 rounded-xl px-1 py-3 font-ninja text-[11px] font-semibold transition-colors ${tabClass(isActive)}`}
-              >
-                <t.Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
-                {t.label}
-              </NavLink>
-            ))}
-          </nav>
-        </aside>
-
-        <div className="min-w-0 flex-1 space-y-5">
-          <header>
-            <h1 className="text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight">Reports</h1>
-            <p className="text-ninja-muted font-ninja text-sm mt-1">
+      <div className="space-y-6" style={{ fontFamily: REPORT_FONT }}>
+        <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-ninja-navy">Reports</h1>
+            <p className="mt-1 text-sm text-ninja-muted">
               {context.centerName} · {rangeLabel(context.from, context.to)}{program ? ` · ${program}` : ''}
             </p>
-          </header>
-
-          {/* Below the desktop the rail becomes four even tabs under the title. */}
-          <nav aria-label="Reports" className="lg:hidden">
-            <div className="grid grid-cols-4 gap-1">
-              {TABS.map((t) => (
-                <NavLink
-                  key={t.to}
-                  to={tabLink(t)}
-                  end={t.end}
-                  className={({ isActive }) => `flex flex-col items-center gap-1 rounded-xl py-2 font-ninja text-xs font-semibold transition-colors ${tabClass(isActive)}`}
-                >
-                  <t.Icon className="h-4 w-4" strokeWidth={1.9} aria-hidden="true" />
-                  {t.label}
-                </NavLink>
-              ))}
-            </div>
-          </nav>
-
-          <div className={`${CARD} grid grid-cols-2 gap-3 p-4 sm:grid-cols-3`}>
-            <Filter label="Center" className="col-span-2 sm:col-span-1">
-              <select className={SELECT} value={center} onChange={(e) => set('center', e.target.value, String(activeId))}>
-                {centers.length > 1 && <option value="all">All centers</option>}
-                {centers.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-              </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Filter label="Center" value={center} onChange={(e) => set('center', e.target.value, String(activeId))} className="col-span-2 sm:col-span-1">
+              {centers.length > 1 && <option value="all">All centers</option>}
+              {centers.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
             </Filter>
-            <Filter label="Period">
-              <select className={SELECT} value={period} onChange={(e) => set('period', e.target.value, '4w')}>
-                {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
+            <Filter label="Period" value={period} onChange={(e) => set('period', e.target.value, '4w')}>
+              {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </Filter>
-            <Filter label="Program">
-              <select className={SELECT} value={program} onChange={(e) => set('program', e.target.value, '')}>
-                <option value="">All programs</option>
-                {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+            <Filter label="Program" value={program} onChange={(e) => set('program', e.target.value, '')}>
+              <option value="">All</option>
+              {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
             </Filter>
           </div>
+        </header>
 
-          {/* Only the tab's own content arrives; the rail, title and filters
-              stay put, which is why Layout is handed a constant motionKey. */}
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="space-y-5"
-          >
-            {/* A tab's chunk loads the first time it is opened. Without a
-                boundary here the app-wide one would blank the whole page. */}
-            <Suspense fallback={<SkeletonCards count={6} label="Loading report" />}>
-              {outlet}
-            </Suspense>
-          </motion.div>
-        </div>
+        {/* The tabs: one track, the open tab lifted onto a white chip that
+            slides between them. A tint and a lift mark it, never an edge bar. */}
+        <nav aria-label="Reports" className="grid grid-cols-4 rounded-xl border border-ninja-border bg-ninja-bg p-1 sm:inline-grid">
+          {TABS.map((t) => (
+            <NavLink
+              key={t.to}
+              to={{ pathname: t.to, search }}
+              end={t.end}
+              className={({ isActive }) => `relative flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors sm:px-4 ${isActive ? 'text-ninja-navy' : 'text-ninja-muted hover:text-ninja-navy'}`}
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <motion.span
+                      layoutId="reports-tab"
+                      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                      className="absolute inset-0 rounded-lg border border-ninja-border bg-white shadow-sm"
+                    />
+                  )}
+                  <t.Icon className="relative hidden h-4 w-4 sm:block" strokeWidth={1.9} aria-hidden="true" />
+                  <span className="relative">{t.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Only the tab's own content arrives; the header, filters and tabs
+            stay put, which is why Layout is handed a constant motionKey. */}
+        <motion.div
+          key={pathname}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="space-y-5"
+        >
+          {/* A tab's chunk loads the first time it is opened. Without a
+              boundary here the app-wide one would blank the whole page. */}
+          <Suspense fallback={<Loading />}>
+            {outlet}
+          </Suspense>
+        </motion.div>
       </div>
     </Layout>
   );

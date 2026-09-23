@@ -1,20 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
+import { ArrowDownRightIcon, ArrowRightIcon, ArrowUpRightIcon } from 'lucide-react';
+import { Line, LineChart } from 'recharts';
+import { Link, useLocation, useOutletContext } from 'react-router-dom';
+import { ChartContainer } from '../ui/chart';
+import { Skeleton } from '../ui/Skeleton';
 import { api } from '../../api/client';
-import { CARD } from '../../lib/surfaces';
+import { REPORT_CARD } from '../../lib/surfaces';
 
-// The pieces every Reports tab is built from, so the four tabs read as one
-// report rather than four pages that happen to share a URL.
+// The pieces every Reports tab is built from. Reports is styled as an analytics
+// tool rather than as the rest of DojoLink: system type instead of Nunito, flat
+// white cards with a header, a body and an optional "See details" footer, big
+// quiet numbers, and tables where the rest of the app would stack tiles.
+
+// The whole section sets this on its root. The app face is rounded and warm,
+// which is right for a check-in board and wrong for a page of numbers.
+export const REPORT_FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 export const ACCENT = 'rgb(var(--ninja-blue))';
-
-// Each section is one card holding a stack of tiles a shade off the card, so
-// the rows read as objects rather than lines ruled across a box. The tint is
-// the page token, not bg-white, so it follows the theme and the dark overrides
-// never have to fight it.
-export const TILE = 'rounded-xl border border-ninja-border bg-ninja-bg/60';
 
 // White and Black disappear against a white or a slate card, so every swatch
 // carries a neutral hairline drawn inside it. A shadow rather than a border,
@@ -113,89 +116,178 @@ export function comparable(period, dataSince) {
   return !!period && !!dataSince && period.prevFrom >= dataSince;
 }
 
-// Change against the previous period, as a word a person reads rather than a
-// badge. `goodWhenDown` flips the colour for counts nobody wants to grow.
-export function Delta({ cur, prev, show = true, goodWhenDown = false }) {
-  if (!show || prev == null) return <span className="text-ninja-muted" title="No earlier data to compare with">No comparison yet</span>;
-  if (prev === 0) return <span className="text-ninja-muted">{cur === 0 ? 'Same as before' : 'None before'}</span>;
+// Change against the previous period. `goodWhenDown` flips the colour for
+// counts nobody wants to grow. Null when there is nothing honest to show.
+export function DeltaChip({ cur, prev, show = true, goodWhenDown = false }) {
+  if (!show || prev == null || prev === 0) return null;
   const pct = Math.round(((cur - prev) / prev) * 100);
-  if (pct === 0) return <span className="text-ninja-muted">Same as before</span>;
   const up = pct > 0;
+  const flat = pct === 0;
   const good = up !== goodWhenDown;
   const Icon = up ? ArrowUpRightIcon : ArrowDownRightIcon;
+  const tone = flat
+    ? { color: 'rgb(var(--ninja-muted))', backgroundColor: 'rgb(var(--ninja-border) / 0.6)' }
+    : good
+      ? { color: 'rgb(5 150 105)', backgroundColor: 'rgb(16 185 129 / 0.12)' }
+      : { color: 'rgb(220 38 38)', backgroundColor: 'rgb(239 68 68 / 0.12)' };
   return (
-    <span className={`inline-flex items-center gap-0.5 font-semibold ${good ? 'text-emerald-600 dark:text-emerald-400' : 'text-ninja-red'}`}>
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
-      {Math.abs(pct)}%
-      <span className="sr-only">{up ? 'up' : 'down'} from {prev}</span>
+    <span className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums" style={tone}>
+      {!flat && <Icon className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />}
+      {flat ? '0%' : `${Math.abs(pct)}%`}
+      <span className="sr-only">{flat ? 'no change' : `${up ? 'up' : 'down'} from ${prev}`}</span>
     </span>
   );
 }
 
-// The number row at the top of a tab. One surface split by hairlines, the way
-// a metric strip is: four numbers are one reading, not four objects.
-export function KpiStrip({ items }) {
+// A link out of a card to the tab that has the detail, keeping the filters.
+export function CardLink({ to, children = 'See details' }) {
+  const { search } = useLocation();
   return (
-    <div className={`${CARD} overflow-hidden`}>
-      <dl className={`grid grid-cols-2 gap-px bg-ninja-border ${items.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        {items.map((k) => (
-          <div key={k.label} className="bg-white px-5 py-4 sm:px-6 sm:py-5 min-w-0">
-            <dt className="font-ninja text-[13px] text-ninja-muted">{k.label}</dt>
-            <dd className={`mt-1 font-ninja font-bold text-3xl leading-tight tabular-nums tracking-tight ${k.tone || 'text-ninja-navy'}`}>
-              {k.value}
-            </dd>
-            {(k.delta || k.sub) && (
-              <dd className="mt-1 flex flex-wrap items-center gap-x-1.5 font-ninja text-xs text-ninja-muted">
-                {k.delta}
-                {k.sub && <span className="min-w-0">{k.sub}</span>}
-              </dd>
-            )}
-          </div>
-        ))}
-      </dl>
-    </div>
+    <Link
+      to={{ pathname: to, search }}
+      className="flex items-center justify-center gap-1.5 rounded-b-2xl border-t border-ninja-border py-3 text-[13px] font-medium text-ninja-navy transition-colors hover:bg-ninja-bg/70"
+    >
+      {children}
+      <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+    </Link>
   );
 }
 
-// The card, and the tile at its head that names it. The head is a tile like
-// the rows under it, so the whole section is one stack.
-export function Section({ title, value, unit, children, footer, action, className = '' }) {
+// A card: a titled header, a body, and optionally a footer link.
+export function Card({ title, sub, action, footer, children, className = '', bodyClass = '' }) {
   return (
-    <section className={`${CARD} p-2 flex flex-col gap-1.5 min-w-0 ${className}`}>
-      <header className={`${TILE} px-4 py-3.5`}>
-        <div className="flex items-start gap-3">
+    <section className={`${REPORT_CARD} flex min-w-0 flex-col ${className}`}>
+      {(title || action) && (
+        <header className="flex items-start gap-3 px-5 pt-4">
           <div className="min-w-0 flex-1">
-            <h2 className="font-ninja text-[13px] text-ninja-muted">{title}</h2>
-            {value != null && (
-              <p className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
-                <span className="font-ninja font-bold text-[28px] leading-tight text-ninja-navy tabular-nums tracking-tight">{value}</span>
-                {unit && <span className="font-ninja text-[13px] text-ninja-muted">{unit}</span>}
-              </p>
-            )}
+            <h3 className="text-[15px] font-semibold text-ninja-navy">{title}</h3>
+            {sub && <p className="mt-0.5 text-[13px] text-ninja-muted">{sub}</p>}
           </div>
-          {action}
-        </div>
-        {footer}
-      </header>
-      {children}
+          {action && <div className="shrink-0">{action}</div>}
+        </header>
+      )}
+      <div className={`flex-1 px-5 pb-5 pt-4 ${bodyClass}`}>{children}</div>
+      {footer}
     </section>
   );
 }
 
+// A small line of one series, for a metric card. Not interactive.
+export function Sparkline({ values }) {
+  if (!values || values.length < 2) return null;
+  const data = values.map((v, i) => ({ i, v }));
+  return (
+    <ChartContainer config={{ v: { label: 'Trend', color: ACCENT } }} className="w-full" style={{ height: 44 }}>
+      <LineChart data={data} margin={{ top: 4, right: 2, bottom: 4, left: 2 }}>
+        <Line type="monotone" dataKey="v" stroke="var(--color-v)" strokeWidth={2} dot={false} isAnimationActive={false} />
+      </LineChart>
+    </ChartContainer>
+  );
+}
+
+// One headline number: label, value, how it moved, and against what.
+export function Metric({ label, value, delta, compare, tone, spark, footer }) {
+  return (
+    <section className={`${REPORT_CARD} flex min-w-0 flex-col`}>
+      <div className="flex flex-1 gap-3 px-5 pb-5 pt-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-ninja-muted">{label}</p>
+          <p className={`mt-2 text-[32px] font-semibold leading-none tracking-tight tabular-nums ${tone || 'text-ninja-navy'}`}>{value}</p>
+          {(delta || compare) && (
+            <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-ninja-muted">
+              {delta}
+              {compare && <span>{compare}</span>}
+            </p>
+          )}
+        </div>
+        {spark && <div className="w-24 shrink-0 self-end">{spark}</div>}
+      </div>
+      {footer}
+    </section>
+  );
+}
+
+// Two to four exclusive choices on one track, the chosen one lifted onto a
+// white chip. Same shape as the section's tabs, so the page has one control.
+export function Toggle({ options, value, onChange, label }) {
+  const id = useId();
+  const at = options.findIndex((o) => o.value === value);
+  const onKey = (e) => {
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    onChange(options[(at + step + options.length) % options.length].value);
+  };
+  return (
+    <div role="radiogroup" aria-label={label} onKeyDown={onKey} className="inline-flex max-w-full overflow-x-auto no-scrollbar rounded-lg border border-ninja-border bg-ninja-bg p-0.5">
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(o.value)}
+            className={`relative shrink-0 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors ${on ? 'text-ninja-navy' : 'text-ninja-muted hover:text-ninja-navy'}`}
+          >
+            {on && (
+              <motion.span
+                layoutId={`toggle-${id}`}
+                transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                className="absolute inset-0 rounded-md border border-ninja-border bg-white shadow-sm"
+              />
+            )}
+            <span className="relative">{o.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Empty({ children }) {
-  return <p className="px-3 py-4 text-ninja-muted font-ninja text-sm">{children}</p>;
+  return <p className="py-6 text-center text-sm text-ninja-muted">{children}</p>;
 }
 
 export function ErrorLine({ children }) {
-  return <p className="px-3 py-4 text-ninja-red font-ninja text-sm">{children}</p>;
+  return <p className="py-6 text-center text-sm text-ninja-red">{children}</p>;
 }
 
-// How the whole divides, in one bar. Each segment is a share of the total, so
-// the eye gets the split before it reads a single row.
+// A labelled bar: name and count on a line, a bar under it measured against
+// the longest row so short rows still read as lengths.
+export function Meters({ rows, max, showPct = true }) {
+  return (
+    <ul className="space-y-3.5">
+      {rows.map((r, i) => (
+        <li key={r.name}>
+          <div className="flex items-center gap-2 text-[13px]">
+            {r.art && <span className="shrink-0">{r.art}</span>}
+            <span className="min-w-0 flex-1 truncate font-medium text-ninja-navy" title={r.name}>{r.name}</span>
+            <span className="shrink-0 font-semibold tabular-nums text-ninja-navy">{r.count}</span>
+            {showPct && r.pct != null && <span className="w-9 shrink-0 text-right text-xs tabular-nums text-ninja-muted">{r.pct}%</span>}
+          </div>
+          <span className="relative mt-1.5 block h-2 overflow-hidden rounded-full bg-ninja-bg">
+            <motion.span
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{ backgroundColor: r.color || ACCENT, boxShadow: r.color ? SWATCH_EDGE : undefined }}
+              initial={{ width: 0 }}
+              animate={{ width: `${max > 0 ? Math.max((r.count / max) * 100, r.count > 0 ? 2 : 0) : 0}%` }}
+              transition={{ duration: 0.6, delay: Math.min(i * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] }}
+            />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// How the whole divides, in one bar. Each segment is a share of the total.
 export function CompositionBar({ rows, total }) {
   if (total <= 0) return null;
   return (
-    <div className="mt-3 flex h-2 w-full gap-0.5 overflow-hidden rounded-full" role="img"
+    <div className="mb-5 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full" role="img"
       aria-label={rows.map((r) => `${r.name} ${r.count}`).join(', ')}>
       {rows.map((r) => (
         <motion.span
@@ -212,44 +304,66 @@ export function CompositionBar({ rows, total }) {
   );
 }
 
-// A row of a distribution: identity, a bar against the busiest row, the count
-// and its share. The bar's far end is the largest row, not the total, so the
-// short rows are still readable as lengths.
-export function BarRow({ rank, art, name, count, pct, color, max, index }) {
+// A plain data table: a tinted header row with rounded ends and hairline rows.
+// `columns` is [{ key, label, align, render, className }].
+export function Table({ columns, rows, rowKey, empty, maxHeight, minWidth = 420 }) {
+  if (!rows.length) return <Empty>{empty}</Empty>;
   return (
-    <motion.li
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3), ease: 'easeOut' }}
-      className={`${TILE} flex items-center gap-3 px-3 py-2.5`}
-    >
-      {rank != null && <span className="w-3 shrink-0 text-right font-ninja text-[13px] text-ninja-muted tabular-nums">{rank}</span>}
-      {art && <span className="shrink-0">{art}</span>}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate font-ninja text-[13px] font-semibold text-ninja-navy" title={name}>{name}</span>
-          <span className="shrink-0 font-ninja text-[13px] font-semibold text-ninja-navy tabular-nums">{count}</span>
-          {pct != null && <span className="w-9 shrink-0 text-right font-ninja text-xs text-ninja-muted tabular-nums">{pct}%</span>}
-        </div>
-        <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ninja-border/60">
-          <motion.span
-            className="absolute inset-y-0 left-0 rounded-full"
-            style={{ backgroundColor: color, boxShadow: SWATCH_EDGE }}
-            initial={{ width: 0 }}
-            animate={{ width: `${max > 0 ? Math.max((count / max) * 100, count > 0 ? 2 : 0) : 0}%` }}
-            transition={{ duration: 0.6, delay: Math.min(index * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] }}
-          />
-        </span>
-      </div>
-    </motion.li>
+    <div className="-mx-1 overflow-auto px-1" style={maxHeight ? { maxHeight } : undefined}>
+      <table className="w-full text-[13px]" style={{ minWidth }}>
+        <thead className="sticky top-0 z-10">
+          <tr>
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                scope="col"
+                className={`bg-ninja-bg px-3 py-2.5 text-xs font-medium text-ninja-muted first:rounded-l-lg last:rounded-r-lg ${c.align === 'right' ? 'text-right' : 'text-left'}`}
+              >
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={rowKey(r)} className="border-b border-ninja-border/70 last:border-0">
+              {columns.map((c) => (
+                <td key={c.key} className={`px-3 py-3 text-ninja-navy ${c.align === 'right' ? 'text-right tabular-nums' : ''} ${c.className || ''}`}>
+                  {c.render ? c.render(r) : r[c.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-// A ninja's initials in a square, for list rows.
-export function Initials({ name }) {
+// A ninja's initials and name, linking to their profile.
+export function NinjaCell({ id, name, sub }) {
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ninja-border/70 font-ninja text-[11px] font-semibold text-ninja-navy">
-      {initials(name)}
-    </span>
+    <Link to={`/manager/students/${id}`} className="group flex min-w-0 items-center gap-2.5">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ninja-bg text-[11px] font-semibold text-ninja-navy">
+        {initials(name)}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate font-medium text-ninja-navy group-hover:underline">{name}</span>
+        {sub && <span className="block truncate text-xs text-ninja-muted">{sub}</span>}
+      </span>
+    </Link>
+  );
+}
+
+// The loading outline: card-shaped blocks from the shared Skeleton, so the
+// page does not jump when the numbers land.
+export function Loading({ rows = 2 }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading report" className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+      </div>
+      {Array.from({ length: rows }, (_, i) => <Skeleton key={i} className="h-64 rounded-2xl" />)}
+    </div>
   );
 }

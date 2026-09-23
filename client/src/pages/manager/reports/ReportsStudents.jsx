@@ -1,11 +1,8 @@
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { BELTS, PROGRAM_LOGOS } from '../../../utils/beltConfig';
 import BeltIcon from '../../../components/ui/BeltIcon';
-import { SkeletonCards } from '../../../components/ui/Skeleton';
 import {
-  ACCENT, TILE, BarRow, CompositionBar, Empty, ErrorLine, Initials, KpiStrip, Section,
-  comparable, daysSince, initials, plural, shortDate, useReport, useReportFilters,
+  Card, CompositionBar, Empty, ErrorLine, Loading, Meters, Metric, NinjaCell, Table,
+  comparable, daysSince, initials, plural, rangeLabel, shortDate, useReport, useReportFilters,
 } from '../../../components/reports/ReportParts';
 
 // The Students tab: who the roster is, how often they actually come, and who
@@ -32,56 +29,11 @@ function Frequency({ visits, days }) {
   const counts = FREQUENCY.map((b) => ({ name: b.name, count: 0 }));
   for (const v of visits) counts[FREQUENCY.findIndex((b) => b.test(v / weeks))].count += 1;
   const total = visits.length;
-  const max = Math.max(0, ...counts.map((c) => c.count));
+  const rows = counts.map((c) => ({ ...c, pct: total ? Math.round((c.count / total) * 100) : 0 }));
   return (
-    <Section title="How often they come" value={total} unit={`ninja${total === 1 ? '' : 's'} came in this period`}>
-      {total === 0 ? <Empty>No check-ins in this period.</Empty> : (
-        <ul className="flex flex-col gap-1.5">
-          {counts.map((c, i) => (
-            <BarRow
-              key={c.name}
-              index={i}
-              name={c.name}
-              count={c.count}
-              pct={Math.round((c.count / total) * 100)}
-              color={ACCENT}
-              max={max}
-            />
-          ))}
-        </ul>
-      )}
-    </Section>
-  );
-}
-
-function NinjaList({ title, rows, empty, detail, className = '' }) {
-  return (
-    <Section title={title} value={rows.length} unit={`ninja${rows.length === 1 ? '' : 's'}`} className={className}>
-      {rows.length === 0 ? <Empty>{empty}</Empty> : (
-        <ul className="grid gap-1.5 sm:grid-cols-2 max-h-96 overflow-y-auto">
-          {rows.map((s, i) => (
-            <motion.li
-              key={s.id}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.3), ease: 'easeOut' }}
-            >
-              <Link
-                to={`/manager/students/${s.id}`}
-                className={`${TILE} flex items-center gap-3 px-3 py-2 transition-colors hover:bg-ninja-bg`}
-              >
-                <Initials name={s.full_name} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-ninja text-[13px] font-semibold text-ninja-navy">{s.full_name}</span>
-                  {s.centers && <span className="block truncate font-ninja text-xs text-ninja-muted">{s.centers}</span>}
-                </span>
-                <span className="shrink-0 text-right font-ninja text-xs text-ninja-muted tabular-nums">{detail(s)}</span>
-              </Link>
-            </motion.li>
-          ))}
-        </ul>
-      )}
-    </Section>
+    <Card title="How often they come" sub={`${plural(total, 'ninja')} who came in this period`}>
+      {total === 0 ? <Empty>No check-ins in this period.</Empty> : <Meters rows={rows} max={Math.max(...rows.map((r) => r.count))} />}
+    </Card>
   );
 }
 
@@ -92,38 +44,19 @@ function Enrollment({ data }) {
     count: r.count,
     pct: total > 0 ? Math.round((r.count / total) * 100) : 0,
     color: ENROLLMENT_COLORS[r.program] || '#6b7280',
+    art: PROGRAM_LOGOS[r.program]
+      ? <img src={PROGRAM_LOGOS[r.program]} alt="" className="h-5 w-5 object-contain" />
+      : <span className="text-[11px] font-semibold">{initials(r.program)}</span>,
   }));
-  const max = rows[0]?.count || 0;
   return (
-    <Section
-      title="Enrollment by program"
-      value={total}
-      unit={`enrollment${total === 1 ? '' : 's'} across ${plural(rows.length, 'program')}`}
-      footer={<CompositionBar rows={rows} total={total} />}
-    >
+    <Card title="Enrollment by program" sub={`${plural(total, 'enrollment')} across ${plural(rows.length, 'program')}`}>
       {rows.length === 0 ? <Empty>No enrollments yet.</Empty> : (
-        <ul className="flex flex-col gap-1.5">
-          {rows.map((r, i) => (
-            <BarRow
-              key={r.name}
-              index={i}
-              art={
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-ninja-border bg-white">
-                  {PROGRAM_LOGOS[r.name]
-                    ? <img src={PROGRAM_LOGOS[r.name]} alt="" className="h-5 w-5 object-contain" />
-                    : <span className="font-ninja text-[11px] font-semibold text-ninja-navy">{initials(r.name)}</span>}
-                </span>
-              }
-              name={r.name}
-              count={r.count}
-              pct={r.pct}
-              color={r.color}
-              max={max}
-            />
-          ))}
-        </ul>
+        <>
+          <CompositionBar rows={rows} total={total} />
+          <Meters rows={rows} max={rows[0].count} />
+        </>
       )}
-    </Section>
+    </Card>
   );
 }
 
@@ -137,23 +70,17 @@ function Belts({ data }) {
     count: r.count,
     pct: total > 0 ? Math.round((r.count / total) * 100) : 0,
     color: BELT_COLOR[r.belt_level] || '#e5e7eb',
+    art: <BeltIcon belt={r.belt_level} size={22} />,
   }));
-  const max = Math.max(0, ...rows.map((r) => r.count));
   return (
-    <Section
-      title="CREATE belts"
-      value={total}
-      unit={`ninja${total === 1 ? '' : 's'} on the ladder`}
-      footer={<CompositionBar rows={rows} total={total} />}
-    >
+    <Card title="CREATE belts" sub={`${plural(total, 'ninja')} on the ladder`}>
       {rows.length === 0 ? <Empty>No CREATE students yet.</Empty> : (
-        <ul className="flex flex-col gap-1.5">
-          {rows.map((r, i) => (
-            <BarRow key={r.name} index={i} art={<BeltIcon belt={r.name} size={26} />} name={r.name} count={r.count} pct={r.pct} color={r.color} max={max} />
-          ))}
-        </ul>
+        <>
+          <CompositionBar rows={rows} total={total} />
+          <Meters rows={rows} max={Math.max(...rows.map((r) => r.count))} />
+        </>
       )}
-    </Section>
+    </Card>
   );
 }
 
@@ -162,49 +89,67 @@ export default function ReportsStudents() {
   const { data, error } = useReport(`/reports/students?${query}`);
 
   if (error) return <ErrorLine>{error}</ErrorLine>;
-  if (!data) return <SkeletonCards count={6} label="Loading students" />;
+  if (!data) return <Loading />;
 
   const { period } = data;
   const came = data.visitsPerNinja.length;
   const showLapsed = comparable(period, data.dataSince);
+  const multi = data.lapsed.some((r) => r.centers) || data.inactive.some((r) => r.centers);
 
   return (
     <>
-      <KpiStrip
-        items={[
-          { label: 'On the roster', value: data.roster },
-          { label: 'Came in this period', value: came, sub: data.roster ? `${Math.round((came / data.roster) * 100)}% of the roster` : null },
-          {
-            label: 'Stopped coming',
-            value: showLapsed ? data.lapsed.length : '-',
-            tone: showLapsed && data.lapsed.length > 0 ? 'text-ninja-red' : undefined,
-            sub: showLapsed ? `came the ${plural(period.days, 'day')} before, not since` : 'No earlier data to compare with',
-          },
-          { label: 'Not seen in 30 days', value: data.inactive.length, sub: 'on the roster, no visit or club' },
-        ]}
-      />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="On the roster" value={data.roster} />
+        <Metric
+          label="Came in this period"
+          value={came}
+          compare={data.roster ? `${Math.round((came / data.roster) * 100)}% of the roster` : null}
+        />
+        <Metric
+          label="Stopped coming"
+          value={showLapsed ? data.lapsed.length : '-'}
+          tone={showLapsed && data.lapsed.length > 0 ? 'text-ninja-red' : undefined}
+          compare={showLapsed ? `came ${rangeLabel(period.prevFrom, period.prevTo)}, not since` : 'No earlier data to compare'}
+        />
+        <Metric label="Not seen in 30 days" value={data.inactive.length} compare="no visit or club" />
+      </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card
+          title="Stopped coming"
+          sub={showLapsed ? `Came ${rangeLabel(period.prevFrom, period.prevTo)}, not since` : null}
+          className="xl:col-span-2"
+        >
+          {showLapsed ? (
+            <Table
+              rowKey={(r) => r.id}
+              rows={data.lapsed}
+              maxHeight={380}
+              empty="Everyone who came the period before came again."
+              columns={[
+                { key: 'name', label: 'Ninja', render: (r) => <NinjaCell id={r.id} name={r.full_name} sub={multi ? r.centers : null} /> },
+                { key: 'prev', label: 'Visits before', align: 'right', render: (r) => r.prev_visits },
+                { key: 'last', label: 'Last visit', align: 'right', render: (r) => shortDate(r.last_seen) },
+              ]}
+            />
+          ) : <Empty>DojoLink has no check-ins from before this period to compare with.</Empty>}
+        </Card>
         <Frequency visits={data.visitsPerNinja} days={period.days} />
-        {showLapsed ? (
-          <NinjaList
-            title={`Stopped coming · came ${shortDate(period.prevFrom)} to ${shortDate(period.prevTo)}, not since`}
-            rows={data.lapsed}
-            empty="Everyone who came the period before came again."
-            detail={(s) => `${plural(s.prev_visits, 'visit')} before`}
-          />
-        ) : (
-          <Section title="Stopped coming"><Empty>DojoLink has no check-ins from before this period to compare with.</Empty></Section>
-        )}
         <Enrollment data={data.enrollment} />
         <Belts data={data.belts} />
-        <NinjaList
-          title="Not seen in 30 days"
-          rows={data.inactive}
-          empty="Everyone on the roster has come in the last 30 days."
-          detail={(s) => (s.last_seen ? `${daysSince(s.last_seen)}d ago` : 'Never')}
-          className="lg:col-span-2"
-        />
+        <Card title="Not seen in 30 days" sub="On the roster, no visit or club">
+          <Table
+            rowKey={(r) => r.id}
+            rows={data.inactive}
+            maxHeight={380}
+            minWidth={280}
+            empty="Everyone on the roster has come in the last 30 days."
+            columns={[
+              { key: 'name', label: 'Ninja', render: (r) => <NinjaCell id={r.id} name={r.full_name} sub={multi ? r.centers : null} /> },
+              { key: 'last', label: 'Last visit', align: 'right', render: (r) => (r.last_seen ? `${daysSince(r.last_seen)}d ago` : 'Never') },
+            ]}
+          />
+        </Card>
       </div>
     </>
   );

@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import Segmented from '../../../components/ui/Segmented';
-import { SkeletonCards } from '../../../components/ui/Skeleton';
 import {
-  ACCENT, TILE, Empty, ErrorLine, Section, WEEKDAY_NAMES, WEEKDAY_SHORT,
+  ACCENT, Card, Empty, ErrorLine, Loading, Toggle, WEEKDAY_NAMES, WEEKDAY_SHORT,
   addDays, centerToday, hourLabel, hourShort, localDate, median, plural, useReport, useReportFilters,
 } from '../../../components/reports/ReportParts';
+import { Skeleton } from '../../../components/ui/Skeleton';
 
 // The Attendance tab is for staffing. Its unit is the hour, and its headline
 // number is how many ninjas were in the room at once, because that is what a
@@ -17,6 +16,7 @@ import {
 // come one per center, and the hour detail asks which.
 
 const OPEN_WEEKDAYS = [1, 2, 3, 4, 5, 6];
+const METRICS = [{ value: 'peak', label: 'At once' }, { value: 'arrivals', label: 'Arrivals' }];
 
 function queryFor(query, centerId) {
   const q = new URLSearchParams(query);
@@ -58,14 +58,13 @@ function summarize(data) {
 
 function HeatCell({ value, max, title }) {
   const t = max > 0 ? value / max : 0;
-  const strong = t > 0.55;
   return (
     <div
       title={title}
-      className="flex h-11 items-center justify-center rounded-lg font-ninja text-sm font-bold tabular-nums"
+      className="flex h-10 items-center justify-center rounded-lg text-[13px] font-semibold tabular-nums"
       style={{
-        backgroundColor: value > 0 ? `rgb(var(--ninja-blue) / ${0.1 + t * 0.85})` : 'rgb(var(--ninja-border) / 0.45)',
-        color: strong ? '#ffffff' : 'rgb(var(--ninja-navy))',
+        backgroundColor: value > 0 ? `rgb(var(--ninja-blue) / ${0.1 + t * 0.9})` : 'rgb(var(--ninja-border) / 0.45)',
+        color: t > 0.55 ? '#ffffff' : 'rgb(var(--ninja-navy))',
       }}
     >
       {value}
@@ -80,16 +79,14 @@ function Heatmap({ stats, metric, max }) {
   const block = (days) => {
     const open = stats[days[0]]?.hours.map((h) => h.hour) || [];
     return (
-      <div className="grid grid-cols-[2.75rem_repeat(4,minmax(0,1fr))_3.5rem] items-center gap-1.5">
+      <div className="grid grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.75rem] items-center gap-1.5">
         <span />
-        {open.map((h) => (
-          <span key={h} className="text-center font-ninja text-[11px] text-ninja-muted">{hourShort(h)}</span>
-        ))}
-        <span className="text-right font-ninja text-[11px] text-ninja-muted">Days</span>
+        {open.map((h) => <span key={h} className="text-center text-[11px] text-ninja-muted">{hourShort(h)}</span>)}
+        <span className="text-right text-[11px] text-ninja-muted">Days</span>
         {days.map((wd) => {
           const s = stats[wd];
           return [
-            <span key={`${wd}-l`} className="font-ninja text-[13px] font-semibold text-ninja-navy">{WEEKDAY_SHORT[wd]}</span>,
+            <span key={`${wd}-l`} className="text-[13px] font-medium text-ninja-navy">{WEEKDAY_SHORT[wd]}</span>,
             ...(s?.hours || []).map((h) => {
               const v = metric === 'peak' ? h.peak : h.arrivals;
               const top = metric === 'peak' ? h.peakMax : h.arrivalsMax;
@@ -105,7 +102,7 @@ function Heatmap({ stats, metric, max }) {
                 />
               );
             }),
-            <span key={`${wd}-n`} className="text-right font-ninja text-xs text-ninja-muted tabular-nums">{s?.days || 0}</span>,
+            <span key={`${wd}-n`} className="text-right text-xs tabular-nums text-ninja-muted">{s?.days || 0}</span>,
           ];
         })}
       </div>
@@ -119,82 +116,55 @@ function Heatmap({ stats, metric, max }) {
   );
 }
 
-function HeatmapCard({ data, error, title, metric, onMetric, layoutId }) {
+function HeatmapCard({ data, error, title, sub, metric, onMetric }) {
   const stats = useMemo(() => (data ? summarize(data) : null), [data]);
   const max = stats
     ? Math.max(0, ...Object.values(stats).flatMap((s) => s.hours.map((h) => (metric === 'peak' ? h.peak : h.arrivals))))
     : 0;
   const any = stats && Object.values(stats).some((s) => s.days > 0);
   return (
-    <Section
+    <Card
       title={title}
-      action={onMetric && (
-        <Segmented
-          size="sm"
-          label="Heatmap shows"
-          layoutId={layoutId}
-          value={metric}
-          onChange={onMetric}
-          options={[{ value: 'peak', label: 'At once' }, { value: 'arrivals', label: 'Arrivals' }]}
-        />
-      )}
+      sub={sub}
+      action={onMetric && <Toggle label="Heatmap shows" options={METRICS} value={metric} onChange={onMetric} />}
     >
-      <div className={`${TILE} p-3 sm:p-4`}>
-        {error ? <ErrorLine>{error}</ErrorLine>
-          : !stats ? <SkeletonCards count={2} height={60} cols="grid-cols-1" label="Loading attendance" />
-            : !any ? <Empty>No check-ins in this period.</Empty>
-              : <Heatmap stats={stats} metric={metric} max={max} />}
-      </div>
-    </Section>
+      {error ? <ErrorLine>{error}</ErrorLine>
+        : !stats ? <Skeleton className="h-64 rounded-xl" />
+          : !any ? <Empty>No check-ins in this period.</Empty>
+            : <Heatmap stats={stats} metric={metric} max={max} />}
+    </Card>
   );
 }
 
-// One hour of the detail list. Over a period the bar is solid to the usual day
-// and pale out to the busiest, so the gap between them is the part a schedule
-// has to absorb.
-function HourRow({ hour, peak, peakMax, arrivals, arrivalsMax, scale, pattern, index }) {
+// One hour of the detail. Over a period the bar is solid to the usual day and
+// pale out to the busiest, so the gap between them is the part a schedule has
+// to absorb.
+function HourStat({ hour, peak, peakMax, arrivals, arrivalsMax, scale, pattern, index }) {
   const pctOf = (n) => (scale > 0 ? `${Math.max((n / scale) * 100, n > 0 ? 2 : 0)}%` : '0%');
-  const ease = { duration: 0.6, delay: Math.min(index * 0.04, 0.3), ease: [0.22, 1, 0.36, 1] };
+  const ease = { duration: 0.6, delay: Math.min(index * 0.05, 0.3), ease: [0.22, 1, 0.36, 1] };
   return (
-    <motion.li
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.3), ease: 'easeOut' }}
-      className={`${TILE} px-3 py-2.5`}
-    >
-      <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 truncate font-ninja text-[13px] font-semibold text-ninja-navy">{hourLabel(hour)}</span>
-        <span className="shrink-0 font-ninja text-[13px] text-ninja-muted">
-          <span className="font-semibold text-ninja-navy tabular-nums">{peak}</span>
-          {pattern ? <> at once, up to <span className="font-semibold text-ninja-navy tabular-nums">{peakMax}</span></> : ' at once'}
-        </span>
-      </div>
-      <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ninja-border/60">
+    <div className="min-w-0 py-4 xl:px-5 xl:first:pl-0 xl:last:pr-0">
+      <p className="text-[13px] font-medium text-ninja-muted">{hourLabel(hour)}</p>
+      <p className="mt-1.5 flex items-baseline gap-1.5">
+        <span className="text-[26px] font-semibold leading-none tracking-tight tabular-nums text-ninja-navy">{peak}</span>
+        <span className="text-[13px] text-ninja-muted">at once{pattern ? `, up to ${peakMax}` : ''}</span>
+      </p>
+      <span className="relative mt-3 block h-2 overflow-hidden rounded-full bg-ninja-bg">
         {pattern && (
-          <motion.span
-            className="absolute inset-y-0 left-0 rounded-full"
-            style={{ backgroundColor: ACCENT, opacity: 0.3 }}
-            initial={{ width: 0 }}
-            animate={{ width: pctOf(peakMax) }}
-            transition={ease}
-          />
+          <motion.span className="absolute inset-y-0 left-0 rounded-full" style={{ backgroundColor: ACCENT, opacity: 0.28 }}
+            initial={{ width: 0 }} animate={{ width: pctOf(peakMax) }} transition={ease} />
         )}
-        <motion.span
-          className="absolute inset-y-0 left-0 rounded-full"
-          style={{ backgroundColor: ACCENT }}
-          initial={{ width: 0 }}
-          animate={{ width: pctOf(peak) }}
-          transition={ease}
-        />
+        <motion.span className="absolute inset-y-0 left-0 rounded-full" style={{ backgroundColor: ACCENT }}
+          initial={{ width: 0 }} animate={{ width: pctOf(peak) }} transition={ease} />
       </span>
-      <p className="mt-1 font-ninja text-xs text-ninja-muted tabular-nums">
+      <p className="mt-2 text-xs tabular-nums text-ninja-muted">
         {pattern ? `${arrivals} arrived, up to ${arrivalsMax}` : `${arrivals} arrived`}
       </p>
-    </motion.li>
+    </div>
   );
 }
 
-const stepBtn = 'flex h-8 w-8 items-center justify-center rounded-lg border border-ninja-border text-ninja-navy transition-colors hover:bg-ninja-bg disabled:opacity-40 disabled:hover:bg-transparent';
+const stepBtn = 'flex h-8 w-8 items-center justify-center rounded-lg border border-ninja-border bg-white text-ninja-navy transition-colors hover:bg-ninja-bg disabled:opacity-40 disabled:hover:bg-white';
 
 // The hour-by-hour detail: one weekday over the period, or a single date.
 function HourDetail({ periodData, centerId, centerPicker }) {
@@ -207,8 +177,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
 
   const pattern = mode === 'typical';
   let rows = [];
-  let headline = null;
-  let unit;
+  let summary = null;
   let loading = false;
   let error = '';
   if (pattern) {
@@ -217,8 +186,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
     const s = stats?.[weekday];
     if (s?.days) {
       rows = s.hours;
-      headline = s.usualTotal;
-      unit = `ninjas on a usual ${WEEKDAY_NAMES[weekday]}, up to ${s.busiestTotal} · ${plural(s.days, 'day')}`;
+      summary = `Usually ${s.usualTotal} ninjas on a ${WEEKDAY_NAMES[weekday]}, up to ${s.busiestTotal}, over ${plural(s.days, 'day')}`;
     }
   } else {
     error = one.error;
@@ -227,14 +195,12 @@ function HourDetail({ periodData, centerId, centerPicker }) {
       const open = one.data.openHours[localDate(date).getDay()];
       const byHour = new Map(one.data.hours.map((r) => [r.hour, r]));
       if (open && one.data.days.length) {
-        rows = [];
         for (let h = open[0]; h < open[1]; h += 1) {
           const r = byHour.get(h);
           rows.push({ hour: h, peak: r?.peak || 0, peakMax: r?.peak || 0, arrivals: r?.arrivals || 0, arrivalsMax: r?.arrivals || 0 });
         }
       }
-      headline = one.data.hours.reduce((s, r) => s + r.arrivals, 0);
-      unit = `ninja${headline === 1 ? '' : 's'} checked in`;
+      summary = plural(one.data.hours.reduce((s, r) => s + r.arrivals, 0), 'ninja') + ' checked in';
     }
   }
   const scale = Math.max(0, ...rows.map((r) => r.peakMax));
@@ -242,68 +208,50 @@ function HourDetail({ periodData, centerId, centerPicker }) {
   const dayName = localDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
   return (
-    <Section
-      title={pattern ? `Hour by hour · ${WEEKDAY_NAMES[weekday]}s in this period` : `Hour by hour · ${dayName}`}
-      value={headline}
-      unit={unit}
-      footer={
-        <>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {centerPicker}
-            <Segmented
-              size="sm"
-              label="View"
-              layoutId="hour-detail-mode"
-              value={mode}
-              onChange={setMode}
-              options={[{ value: 'typical', label: 'Usual day' }, { value: 'day', label: 'One day' }]}
-            />
-            {pattern ? (
-              <Segmented
-                size="sm"
-                label="Weekday"
-                layoutId="hour-detail-weekday"
-                value={weekday}
-                onChange={setWeekday}
-                options={OPEN_WEEKDAYS.map((i) => ({ value: i, label: WEEKDAY_SHORT[i] }))}
-              />
-            ) : (
-              <div className="flex items-center gap-2">
-                <button type="button" className={stepBtn} onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">
-                  <ChevronLeftIcon className="h-4 w-4" />
-                </button>
-                <input
-                  type="date"
-                  value={date}
-                  max={today}
-                  onChange={(e) => e.target.value && setDate(e.target.value)}
-                  aria-label="Day"
-                  className="h-8 rounded-lg border border-ninja-border bg-white px-2 font-ninja text-[13px] text-ninja-navy"
-                />
-                <button type="button" className={stepBtn} onClick={() => setDate(addDays(date, 1))} disabled={date >= today} aria-label="Next day">
-                  <ChevronRightIcon className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-          </div>
-          <p className="mt-2 font-ninja text-xs text-ninja-muted">
-            At once assumes each class runs an hour, since check-outs aren&apos;t recorded.
-          </p>
-        </>
-      }
+    <Card
+      title="Hour by hour"
+      sub={pattern ? `${WEEKDAY_NAMES[weekday]}s in this period` : dayName}
+      action={<Toggle label="View" options={[{ value: 'typical', label: 'Usual day' }, { value: 'day', label: 'One day' }]} value={mode} onChange={setMode} />}
     >
-      {error ? <ErrorLine>{error}</ErrorLine>
-        : loading ? <SkeletonCards count={3} height={68} label="Loading check-ins" />
-          : closedDay ? <Empty>The center is closed on Sundays.</Empty>
-            : rows.length === 0 ? <Empty>{pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in this period.` : 'No check-ins on this day.'}</Empty>
-              : (
-                <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-                  {rows.map((r, i) => (
-                    <HourRow key={r.hour} index={i} scale={scale} pattern={pattern} {...r} />
-                  ))}
-                </ul>
-              )}
-    </Section>
+      <div className="flex flex-wrap items-center gap-2">
+        {centerPicker}
+        {pattern ? (
+          <Toggle label="Weekday" options={OPEN_WEEKDAYS.map((i) => ({ value: i, label: WEEKDAY_SHORT[i] }))} value={weekday} onChange={setWeekday} />
+        ) : (
+          <div className="flex items-center gap-2">
+            <button type="button" className={stepBtn} onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+            <input
+              type="date"
+              value={date}
+              max={today}
+              onChange={(e) => e.target.value && setDate(e.target.value)}
+              aria-label="Day"
+              className="h-8 rounded-lg border border-ninja-border bg-white px-2 text-[13px] text-ninja-navy"
+            />
+            <button type="button" className={stepBtn} onClick={() => setDate(addDays(date, 1))} disabled={date >= today} aria-label="Next day">
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+      {summary && <p className="mt-4 text-sm font-medium text-ninja-navy">{summary}</p>}
+      <div className="mt-1">
+        {error ? <ErrorLine>{error}</ErrorLine>
+          : loading ? <Skeleton className="mt-3 h-28 rounded-xl" />
+            : closedDay ? <Empty>The center is closed on Sundays.</Empty>
+              : rows.length === 0 ? <Empty>{pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in this period.` : 'No check-ins on this day.'}</Empty>
+                : (
+                  <div className="grid gap-x-8 divide-y divide-ninja-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:gap-x-0 xl:divide-x">
+                    {rows.map((r, i) => <HourStat key={r.hour} index={i} scale={scale} pattern={pattern} {...r} />)}
+                  </div>
+                )}
+      </div>
+      <p className="mt-3 border-t border-ninja-border pt-3 text-xs text-ninja-muted">
+        At once assumes each class runs an hour, since check-outs aren&apos;t recorded.
+      </p>
+    </Card>
   );
 }
 
@@ -316,9 +264,9 @@ function SingleCenter({ query, centerId }) {
         data={periodData.data}
         error={periodData.error}
         title="When the room is full"
+        sub={metric === 'peak' ? 'Ninjas in the room at once on a usual day' : 'Ninjas arriving on a usual day'}
         metric={metric}
         onMetric={setMetric}
-        layoutId="heat-metric"
       />
       <HourDetail periodData={periodData} centerId={centerId} />
     </>
@@ -337,16 +285,9 @@ function AllCenters({ query, centers }) {
   return (
     <>
       <div className="flex justify-end">
-        <Segmented
-          size="sm"
-          label="Heatmaps show"
-          layoutId="heat-metric-all"
-          value={metric}
-          onChange={setMetric}
-          options={[{ value: 'peak', label: 'At once' }, { value: 'arrivals', label: 'Arrivals' }]}
-        />
+        <Toggle label="Heatmaps show" options={METRICS} value={metric} onChange={setMetric} />
       </div>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {centers.map((c) => <CenterHeatmap key={c.id} query={query} center={c} metric={metric} />)}
       </div>
       <HourDetail
@@ -354,14 +295,7 @@ function AllCenters({ query, centers }) {
         periodData={periodData}
         centerId={picked}
         centerPicker={centers.length > 1 && (
-          <Segmented
-            size="sm"
-            label="Center"
-            layoutId="hour-detail-center"
-            value={picked}
-            onChange={setPicked}
-            options={centers.map((c) => ({ value: c.id, label: c.name }))}
-          />
+          <Toggle label="Center" options={centers.map((c) => ({ value: c.id, label: c.name }))} value={picked} onChange={setPicked} />
         )}
       />
     </>
@@ -370,6 +304,7 @@ function AllCenters({ query, centers }) {
 
 export default function ReportsAttendance() {
   const { query, center, centers } = useReportFilters();
+  if (!center) return <Loading />;
   return center === 'all'
     ? <AllCenters query={query} centers={centers} />
     : <SingleCenter key={center} query={query} centerId={center} />;
