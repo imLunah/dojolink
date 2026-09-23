@@ -300,19 +300,17 @@ async function matchStudent(pool, locationId, booking) {
 // Puts a kiosk check-in on Today's Board. Returns the assignment id, or null
 // when it is right to leave the board alone: a club (clubs are never board
 // check-ins), a ninja DojoLink cannot place with certainty, or one a sensei has
-// already put on today's board.
+// already put on today's board for this class.
+//
+// Every kiosk check-in is its own session, so a ninja checked in for CREATE and
+// then for Robotics gets two rows. A row only stands in for this check-in when
+// a sensei made it (no kiosk check-in claims it) and it is for the same program;
+// for a class with no program, any such row will do.
 async function addKioskCheckInToBoard(pool, locationId, booking) {
   if (booking.isClub) return { studentId: null, assignmentId: null };
 
   const studentId = await matchStudent(pool, locationId, booking);
   if (!studentId) return { studentId: null, assignmentId: null };
-
-  const date = todayDate();
-  const { rows: onBoard } = await pool.query(
-    'SELECT 1 FROM daily_assignments WHERE student_id = $1 AND session_date = $2 LIMIT 1',
-    [studentId, date]
-  );
-  if (onBoard[0]) return { studentId, assignmentId: null };
 
   let program = null;
   if (booking.program) {
@@ -322,6 +320,20 @@ async function addKioskCheckInToBoard(pool, locationId, booking) {
     );
     if (rows[0]) program = booking.program;
   }
+
+  const date = todayDate();
+  const { rows: onBoard } = await pool.query(
+    `SELECT 1 FROM daily_assignments d
+      WHERE d.student_id = $1 AND d.session_date = $2
+        AND ($3::text IS NULL OR d.program = $3)
+        AND NOT EXISTS (
+          SELECT 1 FROM mystudio_kiosk_checkins k
+           WHERE k.assignment_id = d.id AND k.undone_at IS NULL
+        )
+      LIMIT 1`,
+    [studentId, date, program]
+  );
+  if (onBoard[0]) return { studentId, assignmentId: null };
 
   const assignmentId = await addToBoard(pool, { studentId, program, date });
   return { studentId, assignmentId };

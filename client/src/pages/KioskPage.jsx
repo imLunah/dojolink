@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import Logo from '../components/ui/Logo';
@@ -196,15 +196,20 @@ export default function KioskPage() {
   }, [query, step, me]);
 
   // The count shown on the button is the timer, so the two cannot disagree.
-  useEffect(() => {
+  // The count lives in the interval, not in state: a screen that timed out
+  // used to leave secondsLeft at 0, and the next result screen read that 0 on
+  // its first render and closed itself before anyone saw it.
+  useLayoutEffect(() => {
     if (!AUTO_BACK_STEPS.has(step)) return undefined;
-    setSecondsLeft(AUTO_BACK_S);
-    const id = setInterval(() => setSecondsLeft((n) => n - 1), 1000);
+    let left = AUTO_BACK_S;
+    setSecondsLeft(left);
+    const id = setInterval(() => {
+      left -= 1;
+      if (left <= 0) reset();
+      else setSecondsLeft(left);
+    }, 1000);
     return () => clearInterval(id);
-  }, [step]);
-  useEffect(() => {
-    if (AUTO_BACK_STEPS.has(step) && secondsLeft <= 0) reset();
-  }, [step, secondsLeft, reset]);
+  }, [step, reset]);
 
   useEffect(() => {
     if (step === 'classes' || step === 'roster' || step === 'confirm' || (step === 'search' && query)) {
