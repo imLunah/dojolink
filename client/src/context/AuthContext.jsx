@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [viewAs, setViewAs] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.get('/auth/me')
@@ -65,8 +66,16 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // The server scopes every request to the session's active center, so after a switch
+  // anything the page fetched belongs to the old one. ProtectedRoute keys the page on the
+  // center, which remounts it and refetches; a page about one record from the old center
+  // (a student, a club session, a listing) has nothing to show at the new one, so it goes
+  // back to its list first.
   const switchLocation = async (locationId) => {
     const data = await api.post('/auth/switch-location', { locationId });
+    const home = ['manager', 'admin'].includes(user?.role) ? '/manager/overview' : '/sensei/dashboard';
+    const target = listPathFor(window.location.pathname, home);
+    if (target) navigate(target, { replace: true });
     setUser(prev => ({ ...prev, activeLocation: data.activeLocation }));
   };
 
@@ -86,6 +95,16 @@ export function AuthProvider({ children }) {
   );
 }
 
+
+// Routes that show one record belonging to a center, and where to land instead.
+function listPathFor(pathname, home) {
+  if (/^\/manager\/students\/\d+/.test(pathname)) return '/manager/students';
+  if (/^\/sensei\/student\/\d+/.test(pathname)) return home;
+  if (/^\/manager\/events\/\d+/.test(pathname)) return '/manager/events';
+  const session = pathname.match(/^(\/clubs\/[^/]+)\/sessions\/[^/]+/);
+  if (session) return session[1];
+  return null;
+}
 
 export function useAuth() {
   return useContext(AuthContext);
