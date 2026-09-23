@@ -173,10 +173,18 @@ export default function KioskSetupPage() {
                 // card, on its own.
                 <div>
                   <p className="font-ninja text-sm font-bold text-ninja-navy">
-                    {setup.blocked === 'expired' ? 'The MyStudio connection ran out' : "MyStudio isn't connected"}
+                    {setup.blocked === 'expired'
+                      ? 'The MyStudio connection ran out'
+                      : setup.blocked === 'off'
+                        ? 'The kiosk is turned off for this center'
+                        : "MyStudio isn't connected"}
                   </p>
                   <div className="mt-2 max-w-md">
-                    {setup.blocked === 'expired' ? (
+                    {setup.blocked === 'off' ? (
+                      <Link to="/account?mystudio=1" className="font-ninja text-sm font-semibold text-ninja-blue hover:underline">
+                        Turn it on from Account settings
+                      </Link>
+                    ) : setup.blocked === 'expired' ? (
                       <MyStudioReconnect onConnected={reload} />
                     ) : (
                       <Link to="/account?mystudio=1" className="font-ninja text-sm font-semibold text-ninja-blue hover:underline">

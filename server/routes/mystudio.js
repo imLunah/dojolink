@@ -26,7 +26,7 @@ async function loadConnection(pool, locationId) {
     `SELECT c.id, c.location_id, c.company_id, c.company_name, c.session_cookie,
             c.status, c.last_verified_at, c.last_synced_at,
             c.login_email, c.login_secret, c.login_saved_at,
-            c.feature_booked, c.feature_import,
+            c.feature_booked, c.feature_import, c.feature_kiosk,
             u.display_name AS connected_by_name
        FROM mystudio_connections c
        LEFT JOIN users u ON u.id = c.connected_by
@@ -76,13 +76,14 @@ function publicShape(conn) {
     features: {
       booked: conn.feature_booked !== false,
       import: conn.feature_import !== false,
+      kiosk: conn.feature_kiosk !== false,
     },
   };
 }
 
 const SAVE_RETURNING = `RETURNING id, location_id, company_id, company_name, status,
                  last_verified_at, last_synced_at, login_email, login_secret,
-                 feature_booked, feature_import`;
+                 feature_booked, feature_import, feature_kiosk`;
 
 // One place that writes a connection, used by both ways of making one.
 //
@@ -701,7 +702,7 @@ function parseBeltName(raw) {
   return BELT_NAMES.find((name) => text.includes(name.toLowerCase())) || null;
 }
 
-// PATCH /api/mystudio/features  { booked?, import? }
+// PATCH /api/mystudio/features  { booked?, import?, kiosk? }
 //
 // Which parts of a connection are live at this center. Separate from the user's
 // own experimental toggle, which answers whether somebody wants to see
@@ -713,7 +714,7 @@ router.patch('/features', requireManager, requireOwnLocation, async (req, res) =
 
   const updates = [];
   const values = [req.session.activeLocationId];
-  for (const [key, column] of [['booked', 'feature_booked'], ['import', 'feature_import']]) {
+  for (const [key, column] of [['booked', 'feature_booked'], ['import', 'feature_import'], ['kiosk', 'feature_kiosk']]) {
     if (typeof body[key] !== 'boolean') continue;
     values.push(body[key]);
     updates.push(`${column} = $${values.length}`);

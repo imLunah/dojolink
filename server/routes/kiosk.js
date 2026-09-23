@@ -107,7 +107,8 @@ async function savedLogin(pool, locationId) {
   return conn && conn.login_email && conn.login_secret ? conn : null;
 }
 
-// The center's own MyStudio connection: 'none', 'expired' or 'connected'.
+// The center's own MyStudio connection: 'none', 'off', 'expired' or 'connected'.
+// 'off' is a director switching the kiosk off in the connection's settings.
 //
 // The kiosk only runs while that connection does (the owner's call). Its
 // check-in portal token would carry on regardless, but a center whose
@@ -116,11 +117,12 @@ async function savedLogin(pool, locationId) {
 // reads it: the stored status, and the expiry the credential states itself.
 async function connectionState(pool, locationId) {
   const { rows } = await pool.query(
-    'SELECT status, session_cookie FROM mystudio_connections WHERE location_id = $1',
+    'SELECT status, session_cookie, feature_kiosk FROM mystudio_connections WHERE location_id = $1',
     [locationId]
   );
   const conn = rows[0];
   if (!conn) return 'none';
+  if (conn.feature_kiosk === false) return 'off';
   if (conn.status === 'expired') return 'expired';
   try {
     const expiresAt = ms.readCookieExpiry(ms.decryptCookie(conn.session_cookie));

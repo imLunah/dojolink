@@ -200,7 +200,7 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
   const expired = connected && status.status === 'expired';
   // Connected and pulling. Nothing needs doing, so nothing should be asked for.
   const healthy = connected && !expired;
-  const features = status?.features || { booked: true, import: true };
+  const features = status?.features || { booked: true, import: true, kiosk: true };
   const lastSynced = formatWhen(status?.lastSyncedAt);
 
   const body = (
@@ -444,6 +444,11 @@ export default function MyStudioConnect({ isOpen, onClose, status, onChanged, ce
                 key: 'import',
                 title: 'Roster import',
                 hint: 'Lets a director pull this center\'s ninjas from MyStudio.',
+              },
+              {
+                key: 'kiosk',
+                title: 'Check-in kiosk',
+                hint: 'Lets families check themselves in at the front desk.',
               },
             ].map((row) => (
               <div key={row.key} className="flex items-center gap-3 p-3">
