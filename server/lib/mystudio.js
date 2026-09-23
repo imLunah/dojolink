@@ -1525,11 +1525,17 @@ async function portalParticipants(token, cls, participantId) {
 }
 
 // `checkin_status` on the portal is the label of the button MyStudio would
-// show, not a state: "Check in" means NOT checked in yet, "Cancel check in"
-// means checked in. Measured on a live check-in. The timestamp is the state.
+// show: "Check in" means NOT checked in yet, "Cancel check in" means checked
+// in. The label is the state wherever it is set. The timestamp is not: on a
+// child's own class list (getAvailableClassDetails) every booked class carries
+// one, including a class booked ahead that nobody has checked in to (measured
+// 23 Sep 2026, "Check in" with a timestamp), so trusting it showed booked kids
+// as checked in with nothing to tap. The timestamp only decides a row that has
+// no label.
 function isCheckedInRow(row) {
-  return Boolean(row.att_checkin_datetime) ||
-    String(row.checkin_status || '').trim().toLowerCase() === 'cancel check in';
+  const label = String(row.checkin_status || '').trim().toLowerCase();
+  if (label) return label === 'cancel check in';
+  return Boolean(row.att_checkin_datetime);
 }
 
 // Which classes a membership may be registered into from the kiosk.
