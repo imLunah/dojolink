@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { invalidateCurriculumCache } from './CurriculumContext';
+import { getHomePath } from '../lib/navTabs';
 import SessionTimeoutModal from '../components/ui/SessionTimeoutModal';
 
 export const AuthContext = createContext(null);
@@ -27,7 +28,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [viewAs, setViewAs] = useState(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     api.get('/auth/me')
@@ -66,17 +66,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // The server scopes every request to the session's active center, so after a switch
-  // anything the page fetched belongs to the old one. ProtectedRoute keys the page on the
-  // center, which remounts it and refetches; a page about one record from the old center
-  // (a student, a club session, a listing) has nothing to show at the new one, so it goes
-  // back to its list first.
+  // Every staff request is scoped to the session's active center, and pages, contexts
+  // and caches all hold data fetched for the old one. Rather than teach each of them to
+  // notice, a switch reloads the app from the dashboard so nothing survives it.
   const switchLocation = async (locationId) => {
-    const data = await api.post('/auth/switch-location', { locationId });
-    const home = ['manager', 'admin'].includes(user?.role) ? '/manager/overview' : '/sensei/dashboard';
-    const target = listPathFor(window.location.pathname, home);
-    if (target) navigate(target, { replace: true });
-    setUser(prev => ({ ...prev, activeLocation: data.activeLocation }));
+    await api.post('/auth/switch-location', { locationId });
+    window.location.assign(getHomePath());
   };
 
   // Read-only when a non-admin is viewing a center they're not assigned to. Admins write
@@ -95,16 +90,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-
-// Routes that show one record belonging to a center, and where to land instead.
-function listPathFor(pathname, home) {
-  if (/^\/manager\/students\/\d+/.test(pathname)) return '/manager/students';
-  if (/^\/sensei\/student\/\d+/.test(pathname)) return home;
-  if (/^\/manager\/events\/\d+/.test(pathname)) return '/manager/events';
-  const session = pathname.match(/^(\/clubs\/[^/]+)\/sessions\/[^/]+/);
-  if (session) return session[1];
-  return null;
-}
 
 export function useAuth() {
   return useContext(AuthContext);
