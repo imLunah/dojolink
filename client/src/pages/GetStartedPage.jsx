@@ -249,7 +249,7 @@ export default function GetStartedPage() {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div role="alert" className="mt-4 bg-red-50 border border-ninja-border text-ninja-red rounded-xl px-4 py-3 font-ninja text-sm">
+              <div role="alert" className="mt-4 bg-red-50 text-ninja-red rounded-xl px-4 py-3 font-ninja text-sm">
                 {error}{' '}
                 <button type="button" onClick={back} className="font-bold underline underline-offset-2">
                   Check the code ({code})
