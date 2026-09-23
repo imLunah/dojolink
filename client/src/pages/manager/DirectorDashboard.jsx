@@ -903,6 +903,19 @@ export default function DirectorDashboard() {
 
   const bookedFeed = useExpectedToday(todayStr);
 
+  // Whether to offer the kiosk, read off the connection row itself. The booked
+  // feed would answer it too, but only once MyStudio has been pulled, so the
+  // card arrived seconds after everything around it.
+  const [kioskOn, setKioskOn] = useState(false);
+  useEffect(() => {
+    if (!isManager) return undefined;
+    let alive = true;
+    api.get('/mystudio/status')
+      .then((s) => { if (alive) setKioskOn(Boolean(s?.connected && s.features?.kiosk !== false)); })
+      .catch(() => { if (alive) setKioskOn(false); });
+    return () => { alive = false; };
+  }, [isManager, user?.activeLocation?.id]);
+
   useEffect(() => {
     let alive = true;
     api.get('/reports/attendance?range=all')
@@ -965,7 +978,7 @@ export default function DirectorDashboard() {
             <motion.div {...fadeUp(1)}>
               <QuickLinksCard isManager={isManager} />
             </motion.div>
-            {isManager && bookedFeed.data?.connected && (
+            {isManager && kioskOn && (
               <motion.div {...fadeUp(2)}>
                 <KioskCard />
               </motion.div>
