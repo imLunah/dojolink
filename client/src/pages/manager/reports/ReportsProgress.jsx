@@ -71,7 +71,7 @@ export default function ReportsProgress() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Metric label="Belt-ups" value={data.beltUps.length} compare={ninjasMoved !== data.beltUps.length ? `by ${plural(ninjasMoved, 'ninja')}` : null} />
         <Metric label="Sessions logged" value={sessions} />
-        <Metric label="Senseis who logged" value={data.senseis.length} />
+        <Metric label="Senseis teaching" value={data.senseis.length} compare="logged a session or ran a club" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -101,15 +101,16 @@ export default function ReportsProgress() {
             ]}
           />
         </Card>
-        <Card title="Sessions logged by sensei">
+        <Card title="Sessions by sensei">
           <Table
             rowKey={(r) => r.sensei_id ?? 'deleted'}
             rows={data.senseis}
             maxHeight={420}
-            empty="No sessions logged in this period."
+            empty="No sessions logged or clubs run in this period."
             columns={[
               { key: 'name', label: 'Sensei', render: (r) => <span className="font-medium">{authorName(r.display_name)}</span> },
               { key: 'sessions', label: 'Sessions', align: 'right' },
+              { key: 'clubs', label: 'Clubs run', align: 'right' },
               { key: 'ninjas', label: 'Ninjas', align: 'right' },
               { key: 'days', label: 'Days', align: 'right' },
             ]}

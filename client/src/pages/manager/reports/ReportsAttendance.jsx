@@ -27,7 +27,12 @@ function queryFor(query, centerId) {
 // Per weekday and hour: the usual and busiest at-once count and arrivals, over
 // the days that weekday had anyone in. A weekday with no check-ins at all in
 // the period is a closed day and has no stats, not zeros.
+//
+// Ninjas who came only for a club have no hour (clubs record a date, not a
+// time), so they sit out of the hourly numbers and into the day's total, and
+// the day counts as open even when nobody checked in on the board.
 function summarize(data) {
+  const club = new Map((data.clubOnly || []).map((r) => [r.day, r.count]));
   const byDay = new Map();
   for (const r of data.hours) {
     if (!byDay.has(r.day)) byDay.set(r.day, new Map());
@@ -50,8 +55,17 @@ function summarize(data) {
         arrivalsMax: Math.max(0, ...arrivals),
       });
     }
-    const totals = days.map((d) => [...(byDay.get(d)?.values() || [])].reduce((s, r) => s + r.arrivals, 0));
-    out[wd] = { days: days.length, hours, usualTotal: median(totals), busiestTotal: Math.max(0, ...totals) };
+    const allDays = [...new Set([...days, ...club.keys()])].filter((d) => localDate(d).getDay() === wd);
+    const totals = allDays.map((d) => [...(byDay.get(d)?.values() || [])].reduce((s, r) => s + r.arrivals, 0) + (club.get(d) || 0));
+    const clubs = allDays.map((d) => club.get(d) || 0);
+    out[wd] = {
+      days: days.length,
+      hours,
+      usualTotal: median(totals),
+      busiestTotal: Math.max(0, ...totals),
+      clubUsual: median(clubs),
+      clubMax: Math.max(0, ...clubs),
+    };
   }
   return out;
 }
@@ -180,6 +194,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
   let summary = null;
   let loading = false;
   let error = '';
+  let dayClub = 0;
   if (pattern) {
     error = periodData.error;
     loading = !stats && !error;
@@ -187,6 +202,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
     if (s?.days) {
       rows = s.hours;
       summary = `Usually ${s.usualTotal} ninjas on a ${WEEKDAY_NAMES[weekday]}, up to ${s.busiestTotal}, over ${plural(s.days, 'day')}`;
+      if (s.clubMax > 0) summary += `. Of those, ${s.clubUsual === s.clubMax ? s.clubMax : `${s.clubUsual} to ${s.clubMax}`} came only for a club`;
     }
   } else {
     error = one.error;
@@ -200,7 +216,11 @@ function HourDetail({ periodData, centerId, centerPicker }) {
           rows.push({ hour: h, peak: r?.peak || 0, peakMax: r?.peak || 0, arrivals: r?.arrivals || 0, arrivalsMax: r?.arrivals || 0 });
         }
       }
-      summary = plural(one.data.hours.reduce((s, r) => s + r.arrivals, 0), 'ninja') + ' checked in';
+      const clubCount = (one.data.clubOnly || []).reduce((s, r) => s + r.count, 0);
+      const board = one.data.hours.reduce((s, r) => s + r.arrivals, 0);
+      summary = `${plural(board + clubCount, 'ninja')} came`;
+      if (clubCount) summary += `, ${clubCount} of them only for a club`;
+      dayClub = clubCount;
     }
   }
   const scale = Math.max(0, ...rows.map((r) => r.peakMax));
@@ -241,7 +261,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
         {error ? <ErrorLine>{error}</ErrorLine>
           : loading ? <Skeleton className="mt-3 h-28 rounded-xl" />
             : closedDay ? <Empty>The center is closed on Sundays.</Empty>
-              : rows.length === 0 ? <Empty>{pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in this period.` : 'No check-ins on this day.'}</Empty>
+              : rows.length === 0 ? <Empty>{pattern ? `No check-ins on ${WEEKDAY_NAMES[weekday]}s in this period.` : dayClub ? 'Everyone this day came only for a club, and clubs have no time recorded.' : 'No check-ins on this day.'}</Empty>
                 : (
                   <div className="grid gap-x-8 divide-y divide-ninja-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:gap-x-0 xl:divide-x">
                     {rows.map((r, i) => <HourStat key={r.hour} index={i} scale={scale} pattern={pattern} {...r} />)}
@@ -249,7 +269,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
                 )}
       </div>
       <p className="mt-3 border-t border-ninja-border pt-3 text-xs text-ninja-muted">
-        At once assumes each class runs an hour, since check-outs aren&apos;t recorded.
+        At once assumes each class runs an hour, since check-outs aren&apos;t recorded. Clubs don&apos;t record a time, so ninjas who came only for a club count in the day but not in an hour.
       </p>
     </Card>
   );

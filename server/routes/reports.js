@@ -37,6 +37,29 @@ const openHourSql = (col, i) => `CASE EXTRACT(DOW FROM ${col})::int ${
 // A ninja is in scope when they belong to one of the centers in $1.
 const inScope = (col) => `EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = ${col} AND sl.location_id = ANY($1::int[]))`;
 
+// A VISIT is one ninja at a center on one day, however they came: checked in on
+// Today's Board, or marked present at a club. Some ninjas only ever come for a
+// club, and counting the board alone listed them as having stopped coming.
+// UNION (not UNION ALL) makes a ninja who did both one visit, not two.
+//
+// A club belongs to the center it ran at (club_sessions.location_id), which is
+// where the ninja was that day. Clubs are not a program, so a program filter
+// leaves them out. `locs` is the SQL for the int[] of centers in scope.
+const visitsSql = ({ from, to, program, locs = '$1::int[]' }) => `
+  SELECT da.student_id, da.session_date AS day
+  FROM daily_assignments da
+  WHERE da.session_date BETWEEN ${from}::date AND ${to}::date
+    AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = da.student_id AND sl.location_id = ANY(${locs}))
+    AND (${program}::text IS NULL OR da.program = ${program}::text)
+  UNION
+  SELECT ca.student_id, cs.session_date AS day
+  FROM club_attendees ca
+  JOIN club_sessions cs ON cs.id = ca.club_session_id
+  WHERE cs.session_date BETWEEN ${from}::date AND ${to}::date
+    AND cs.location_id = ANY(${locs})
+    AND ${program}::text IS NULL
+`;
+
 // A belt-up is the first log a ninja ever has at a belt, in a program, when
 // they already had logs in that program at lower belts and none at this belt or
 // above. Without the earlier-log half, every ninja's first log after the import
@@ -141,21 +164,18 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
   const pool = req.app.get('db');
   const f = await readFilters(req);
   const base = [f.centerIds, f.prevFrom, f.to, f.program, f.from];
-  const checkinWhere = `da.session_date BETWEEN $2::date AND $3::date AND ${inScope('da.student_id')}
-    AND ($4::text IS NULL OR da.program = $4::text)`;
+  const visits2 = visitsSql({ from: '$2', to: '$3', program: '$4' });
 
   const [daily, seen, beltUps, roster, inactive, lapsed, since, perCenter] = await Promise.all([
     pool.query(`
-      SELECT to_char(da.session_date, 'YYYY-MM-DD') AS day, COUNT(DISTINCT da.student_id)::int AS count
-      FROM daily_assignments da
-      WHERE ${checkinWhere}
-      GROUP BY da.session_date ORDER BY da.session_date
+      SELECT to_char(v.day, 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
+      FROM (${visits2}) v
+      GROUP BY v.day ORDER BY v.day
     `, base.slice(0, 4)),
     pool.query(`
-      SELECT COUNT(DISTINCT da.student_id) FILTER (WHERE da.session_date >= $5::date)::int AS cur,
-             COUNT(DISTINCT da.student_id) FILTER (WHERE da.session_date < $5::date)::int AS prev
-      FROM daily_assignments da
-      WHERE ${checkinWhere}
+      SELECT COUNT(DISTINCT v.student_id) FILTER (WHERE v.day >= $5::date)::int AS cur,
+             COUNT(DISTINCT v.student_id) FILTER (WHERE v.day < $5::date)::int AS prev
+      FROM (${visits2}) v
     `, base),
     pool.query(`
       SELECT COUNT(*) FILTER (WHERE d >= $5::date)::int AS cur,
@@ -178,24 +198,19 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
     `, [f.centerIds, f.program, centerToday()]),
     pool.query(`
+      WITH v AS (${visits2})
       SELECT COUNT(*)::int AS count FROM students s
-      WHERE s.active = true AND ${inScope('s.id')}
-        AND EXISTS (SELECT 1 FROM daily_assignments da WHERE da.student_id = s.id
-                    AND da.session_date BETWEEN $2::date AND $5::date - 1 AND ($4::text IS NULL OR da.program = $4::text))
-        AND NOT EXISTS (SELECT 1 FROM daily_assignments da WHERE da.student_id = s.id
-                    AND da.session_date BETWEEN $5::date AND $3::date AND ($4::text IS NULL OR da.program = $4::text))
+      WHERE s.active = true
+        AND EXISTS (SELECT 1 FROM v WHERE v.student_id = s.id AND v.day < $5::date)
+        AND NOT EXISTS (SELECT 1 FROM v WHERE v.student_id = s.id AND v.day >= $5::date)
     `, base),
     dataSince(pool, f.centerIds),
     f.centerIds.length > 1 ? pool.query(`
       SELECT l.id, l.name,
         (SELECT COUNT(*) FROM students s WHERE s.active = true
            AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = s.id AND sl.location_id = l.id))::int AS roster,
-        (SELECT COUNT(DISTINCT da.student_id) FROM daily_assignments da
-           WHERE da.session_date BETWEEN $2::date AND $3::date AND ($4::text IS NULL OR da.program = $4::text)
-             AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = da.student_id AND sl.location_id = l.id))::int AS seen,
-        (SELECT COUNT(*) FROM (SELECT DISTINCT da.student_id, da.session_date FROM daily_assignments da
-           WHERE da.session_date BETWEEN $2::date AND $3::date AND ($4::text IS NULL OR da.program = $4::text)
-             AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = da.student_id AND sl.location_id = l.id)) v)::int AS visits
+        (SELECT COUNT(DISTINCT v.student_id) FROM (${visitsSql({ from: '$2', to: '$3', program: '$4', locs: 'ARRAY[l.id]' })}) v)::int AS seen,
+        (SELECT COUNT(*) FROM (${visitsSql({ from: '$2', to: '$3', program: '$4', locs: 'ARRAY[l.id]' })}) v)::int AS visits
       FROM locations l
       WHERE l.id = ANY($1::int[])
       ORDER BY l.name
@@ -251,16 +266,35 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
   const pool = req.app.get('db');
   let where;
   let params;
+  let range;
   if (req.query.date != null) {
     const { centerIds } = await readFilters(req, { period: false, allowAll: false });
     if (!isDate(req.query.date)) throw badRequest('Invalid date');
     where = 'da.session_date = $3::date';
     params = [centerIds, CENTER_TZ, req.query.date, null];
+    range = [centerIds, req.query.date, req.query.date, null];
   } else {
     const f = await readFilters(req, { allowAll: false });
     where = 'da.session_date BETWEEN $3::date AND $5::date';
     params = [f.centerIds, CENTER_TZ, f.from, f.program, f.to];
+    range = [f.centerIds, f.from, f.to, f.program];
   }
+
+  // Ninjas who came only for a club that day. A club session records its date
+  // but not its hour (its timestamp is when a sensei logged it, which runs from
+  // 3 to 7 PM for the same club), so they cannot be put in an hour. They are
+  // returned per day so the page counts them in the day and says so, rather
+  // than leaving them out without a word.
+  const clubOnly = pool.query(`
+    SELECT to_char(cs.session_date, 'YYYY-MM-DD') AS day, COUNT(DISTINCT ca.student_id)::int AS count
+    FROM club_attendees ca
+    JOIN club_sessions cs ON cs.id = ca.club_session_id
+    WHERE cs.session_date BETWEEN $2::date AND $3::date
+      AND cs.location_id = ANY($1::int[])
+      AND $4::text IS NULL
+      AND NOT EXISTS (SELECT 1 FROM daily_assignments da WHERE da.student_id = ca.student_id AND da.session_date = cs.session_date)
+    GROUP BY cs.session_date
+  `, range);
 
   const { rows } = await pool.query(`
     WITH checkins AS (
@@ -317,7 +351,7 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
   `, params);
 
   const days = [...new Set(rows.map((r) => r.day))];
-  res.json({ days, hours: rows, openHours: CENTER_HOURS });
+  res.json({ days, hours: rows, clubOnly: (await clubOnly).rows, openHours: CENTER_HOURS });
 }));
 
 // GET /api/reports/students — the Students tab: who the roster is, how often
@@ -348,13 +382,11 @@ router.get('/students', requireManager, handle('student report', async (req, res
       WHERE s.active = true AND ${inScope('s.id')} AND sp.program = 'CREATE' AND sp.belt_level IS NOT NULL
       GROUP BY sp.belt_level
     `, [f.centerIds]),
-    // Visits in the period for each ninja who came at least once.
+    // Visits in the period for each ninja who came at least once, board or club.
     pool.query(`
-      SELECT da.student_id, COUNT(DISTINCT da.session_date)::int AS visits
-      FROM daily_assignments da
-      WHERE da.session_date BETWEEN $2::date AND $3::date AND ${inScope('da.student_id')}
-        AND ($4::text IS NULL OR da.program = $4::text)
-      GROUP BY da.student_id
+      SELECT v.student_id, COUNT(*)::int AS visits
+      FROM (${visitsSql({ from: '$2', to: '$3', program: '$4' })}) v
+      GROUP BY v.student_id
     `, [f.centerIds, f.from, f.to, f.program]),
     pool.query(`
       SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers,
@@ -371,17 +403,17 @@ router.get('/students', requireManager, handle('student report', async (req, res
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
       ORDER BY last_seen ASC NULLS FIRST, s.full_name
     `, [f.centerIds, f.program, centerToday()]),
-    // Came in the comparison period, did not come in this one.
+    // Came in the comparison period, did not come in this one. A club counts as
+    // coming, the same as a board check-in.
     pool.query(`
+      WITH v AS (${visitsSql({ from: '$2', to: '$3', program: '$4' })})
       SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers,
-             COUNT(DISTINCT da.session_date)::int AS prev_visits,
-             to_char(MAX(da.session_date), 'YYYY-MM-DD') AS last_seen
+             COUNT(*)::int AS prev_visits,
+             to_char(MAX(v.day), 'YYYY-MM-DD') AS last_seen
       FROM students s
-      JOIN daily_assignments da ON da.student_id = s.id
-        AND da.session_date BETWEEN $2::date AND $5::date - 1 AND ($4::text IS NULL OR da.program = $4::text)
-      WHERE s.active = true AND ${inScope('s.id')}
-        AND NOT EXISTS (SELECT 1 FROM daily_assignments d2 WHERE d2.student_id = s.id
-                        AND d2.session_date BETWEEN $5::date AND $3::date AND ($4::text IS NULL OR d2.program = $4::text))
+      JOIN v ON v.student_id = s.id AND v.day < $5::date
+      WHERE s.active = true
+        AND NOT EXISTS (SELECT 1 FROM v v2 WHERE v2.student_id = s.id AND v2.day >= $5::date)
       GROUP BY s.id
       ORDER BY prev_visits DESC, s.full_name
     `, [f.centerIds, f.prevFrom, f.to, f.program, f.from]),
@@ -409,7 +441,7 @@ router.get('/progress', requireManager, handle('progress report', async (req, re
   const multi = f.centerIds.length > 1;
   const base = [f.centerIds, f.from, f.to, f.program];
 
-  const [beltUps, weekly, senseis] = await Promise.all([
+  const [beltUps, weekly, senseis, clubs] = await Promise.all([
     pool.query(`
       SELECT b.student_id, s.full_name, b.program, b.belt_level_at AS belt, to_char(b.d, 'YYYY-MM-DD') AS day,
              ${multi ? `(SELECT string_agg(l.name, ', ' ORDER BY l.name) FROM student_locations sl2
@@ -454,13 +486,37 @@ router.get('/progress', requireManager, handle('progress report', async (req, re
       GROUP BY pl.sensei_id, u.display_name
       ORDER BY u.display_name NULLS LAST
     `, base),
+    // Club sessions each sensei ran, so a sensei who mostly runs clubs does not
+    // read as idle. Clubs are not a program, so a program filter leaves them out.
+    pool.query(`
+      SELECT cs.sensei_id, u.display_name, COUNT(*)::int AS clubs,
+             COUNT(DISTINCT ca.student_id)::int AS club_ninjas
+      FROM club_sessions cs
+      LEFT JOIN club_attendees ca ON ca.club_session_id = cs.id
+      LEFT JOIN users u ON u.id = cs.sensei_id
+      WHERE cs.session_date BETWEEN $2::date AND $3::date AND cs.location_id = ANY($1::int[])
+        AND $4::text IS NULL
+      GROUP BY cs.sensei_id, u.display_name
+    `, base),
   ]);
+
+  // One row per sensei: logged sessions and clubs run side by side. A club's
+  // count is sessions, not attendees, so both columns count the same thing.
+  const bySensei = new Map();
+  for (const r of senseis.rows) bySensei.set(r.sensei_id, { ...r, clubs: 0 });
+  for (const c of clubs.rows) {
+    const row = bySensei.get(c.sensei_id) || { sensei_id: c.sensei_id, display_name: c.display_name, sessions: 0, ninjas: 0, days: 0 };
+    row.clubs = c.clubs;
+    bySensei.set(c.sensei_id, row);
+  }
+  const senseiRows = [...bySensei.values()].sort((a, b) =>
+    String(a.display_name ?? '\uffff').localeCompare(String(b.display_name ?? '\uffff')));
 
   res.json({
     period: { from: f.from, to: f.to, prevFrom: f.prevFrom, prevTo: f.prevTo, days: f.days },
     beltUps: beltUps.rows,
     weekly: weekly.rows,
-    senseis: senseis.rows,
+    senseis: senseiRows,
   });
 }));
 
