@@ -16,7 +16,6 @@ import { Skeleton } from '../../../components/ui/Skeleton';
 // come one per center, and the hour detail asks which.
 
 const OPEN_WEEKDAYS = [1, 2, 3, 4, 5, 6];
-const METRICS = [{ value: 'peak', label: 'At once' }, { value: 'arrivals', label: 'Arrivals' }];
 
 function queryFor(query, centerId) {
   const q = new URLSearchParams(query);
@@ -89,7 +88,7 @@ function HeatCell({ value, max, title }) {
 // Weekdays down the side, open hours across. Saturday keeps different hours,
 // so it gets its own header row rather than sitting under 3 PM as if 10 AM
 // were the same slot.
-function Heatmap({ stats, metric, max }) {
+function Heatmap({ stats, max }) {
   const block = (days) => {
     const open = stats[days[0]]?.hours.map((h) => h.hour) || [];
     return (
@@ -102,16 +101,14 @@ function Heatmap({ stats, metric, max }) {
           return [
             <span key={`${wd}-l`} className="text-[13px] font-medium text-ninja-navy">{WEEKDAY_SHORT[wd]}</span>,
             ...(s?.hours || []).map((h) => {
-              const v = metric === 'peak' ? h.peak : h.arrivals;
-              const top = metric === 'peak' ? h.peakMax : h.arrivalsMax;
-              const noun = metric === 'peak' ? 'in the room at once' : 'arrived';
+              const v = h.peak;
               return (
                 <HeatCell
                   key={`${wd}-${h.hour}`}
                   value={s.days ? v : 0}
                   max={max}
                   title={s.days
-                    ? `${WEEKDAY_NAMES[wd]} ${hourLabel(h.hour)}: usually ${v} ${noun}, up to ${top}, over ${plural(s.days, 'day')}`
+                    ? `${WEEKDAY_NAMES[wd]} ${hourLabel(h.hour)}: usually ${v} in the room at once, up to ${h.peakMax}, over ${plural(s.days, 'day')}`
                     : `${WEEKDAY_NAMES[wd]}: no check-ins in this period`}
                 />
               );
@@ -130,22 +127,18 @@ function Heatmap({ stats, metric, max }) {
   );
 }
 
-function HeatmapCard({ data, error, title, sub, metric, onMetric }) {
+function HeatmapCard({ data, error, title, sub }) {
   const stats = useMemo(() => (data ? summarize(data) : null), [data]);
   const max = stats
-    ? Math.max(0, ...Object.values(stats).flatMap((s) => s.hours.map((h) => (metric === 'peak' ? h.peak : h.arrivals))))
+    ? Math.max(0, ...Object.values(stats).flatMap((s) => s.hours.map((h) => h.peak)))
     : 0;
   const any = stats && Object.values(stats).some((s) => s.days > 0);
   return (
-    <Card
-      title={title}
-      sub={sub}
-      action={onMetric && <Toggle label="Heatmap shows" options={METRICS} value={metric} onChange={onMetric} />}
-    >
+    <Card title={title} sub={sub}>
       {error ? <ErrorLine>{error}</ErrorLine>
         : !stats ? <Skeleton className="h-64 rounded-xl" />
           : !any ? <Empty>No check-ins in this period.</Empty>
-            : <Heatmap stats={stats} metric={metric} max={max} />}
+            : <Heatmap stats={stats} max={max} />}
     </Card>
   );
 }
@@ -277,38 +270,31 @@ function HourDetail({ periodData, centerId, centerPicker }) {
 
 function SingleCenter({ query, centerId }) {
   const periodData = useReport(`/reports/checkins-by-hour?${query}`);
-  const [metric, setMetric] = useState('peak');
   return (
     <>
       <HeatmapCard
         data={periodData.data}
         error={periodData.error}
         title="When the room is full"
-        sub={metric === 'peak' ? 'Ninjas in the room at once on a usual day' : 'Ninjas arriving on a usual day'}
-        metric={metric}
-        onMetric={setMetric}
+        sub="Ninjas in the room at once on a usual day"
       />
       <HourDetail periodData={periodData} centerId={centerId} />
     </>
   );
 }
 
-function CenterHeatmap({ query, center, metric }) {
+function CenterHeatmap({ query, center }) {
   const { data, error } = useReport(`/reports/checkins-by-hour?${queryFor(query, center.id)}`);
-  return <HeatmapCard data={data} error={error} title={center.name} metric={metric} />;
+  return <HeatmapCard data={data} error={error} title={center.name} />;
 }
 
 function AllCenters({ query, centers }) {
-  const [metric, setMetric] = useState('peak');
   const [picked, setPicked] = useState(centers[0]?.id);
   const periodData = useReport(picked ? `/reports/checkins-by-hour?${queryFor(query, picked)}` : null);
   return (
     <>
-      <div className="flex justify-end">
-        <Toggle label="Heatmaps show" options={METRICS} value={metric} onChange={setMetric} />
-      </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {centers.map((c) => <CenterHeatmap key={c.id} query={query} center={c} metric={metric} />)}
+        {centers.map((c) => <CenterHeatmap key={c.id} query={query} center={c} />)}
       </div>
       <HourDetail
         key={picked}
