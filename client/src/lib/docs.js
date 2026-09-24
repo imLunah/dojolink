@@ -441,6 +441,7 @@ export const DOCS = [
       {
         title: 'What families see',
         blocks: [
+          { img: '/docs/events.jpg', alt: 'The Events page with a listing card, its status dot, and Edit and Delete' },
           { p: 'Published listings rotate as a slideshow at the top of the Parent Portal. **Learn more** opens the full details and the sign-up button.' },
           { p: 'A listing with a date comes down by itself once the day has passed. One without a date stays up until you unpublish it. The dot on each card shows its state: green is live, amber is a draft, grey has ended.' },
           { tip: 'Listings are separate from the staff calendar on purpose. Nothing you write on the calendar is ever shown to families.' },
@@ -472,6 +473,7 @@ export const DOCS = [
             '**Progress**: belt-ups, sessions logged each week, and sessions logged by each sensei.',
           ] },
           { img: '/docs/reports-attendance.jpg', alt: 'The Attendance tab heatmap of ninjas in the room at once by weekday and hour' },
+          { img: '/docs/reports-progress.jpg', alt: 'The Progress tab with sessions logged and belt-ups each week' },
         ],
       },
       {
