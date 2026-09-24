@@ -525,6 +525,20 @@ export const DOCS = [
         ],
       },
       {
+        title: 'How it works',
+        blocks: [
+          { p: 'The MyStudio connection is not a wrapper. MyStudio has no public API, so there was nothing official to build on. It was reverse engineered from how MyStudio\'s own website talks to its servers.' },
+          { p: 'That is possible because of how web apps work:' },
+          { list: [
+            '**The website\'s code runs in your browser.** MyStudio sends its code to everyone who signs in, and that code has to say where it fetches its data from.',
+            '**Its servers answer requests, not browsers.** A request with the right address and a valid sign-in gets the same answer whether it comes from Chrome or from DojoLink.',
+            '**A sign-in is a set of cookies.** Once you sign in, MyStudio hands out cookies that prove who you are, and DojoLink sends them with its requests the same way your browser does.',
+            '**It uses your real account.** DojoLink signs in as you, including the code MyStudio emails you, and sees only what you already see in MyStudio.',
+          ] },
+          { p: 'On top of that, DojoLink matches each booked member to the right ninja, removes private details like check-in PINs and birthdays as soon as they arrive, and keeps your saved sign-in encrypted. Today\'s Board and the roster import only read from MyStudio. The [kiosk](/docs/kiosk) is the one place that sends check-ins to it.' },
+        ],
+      },
+      {
         title: 'Connecting',
         blocks: [
           { steps: [
