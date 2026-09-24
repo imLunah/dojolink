@@ -843,13 +843,13 @@ export const DOCS = [
   {
     slug: 'contact',
     group: 'help',
-    title: 'Report a problem',
+    title: 'Send feedback',
     lede: 'Tell us about a bug or suggest something new.',
     sections: [
       {
         title: 'Staff',
         blocks: [
-          { p: 'Select the rocket icon beside your name at the bottom of the sidebar. Choose **Report a Bug** or **Suggest a Feature**, describe it, and send. Say what you were doing and what you expected to happen.' },
+          { p: 'Open the menu under your name and select **Send feedback**. Choose **Report a bug** or **Suggest a feature**, describe it, and send. Say what you were doing and what you expected to happen.' },
         ],
       },
       {

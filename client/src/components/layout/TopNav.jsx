@@ -174,7 +174,7 @@ export default function TopNav({ onOpenBug }) {
                   className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
                 >
                   <RocketIcon className="w-4 h-4 flex-shrink-0" />
-                  Report a bug
+                  Send feedback
                 </button>
                 <button
                   type="button"
