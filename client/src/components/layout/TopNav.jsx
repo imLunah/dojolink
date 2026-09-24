@@ -163,10 +163,10 @@ export default function TopNav({ onOpenBug }) {
                   <UserIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
                   Account
                 </Link>
-                <a href="/docs" target="_blank" rel="noopener" role="menuitem" onClick={() => setMenuOpen(false)} className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+                <Link to="/docs" role="menuitem" onClick={() => setMenuOpen(false)} className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
                   <CircleHelpIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
                   Help Center
-                </a>
+                </Link>
                 <button
                   type="button"
                   role="menuitem"

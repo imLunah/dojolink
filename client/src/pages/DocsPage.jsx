@@ -5,6 +5,9 @@ import {
   Lightbulb, Rocket, Search, Store, UserRound, Users,
 } from 'lucide-react';
 import { useLightOnly } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useParentAuth } from '../context/ParentAuthContext';
+import { getHomePath } from '../lib/navTabs';
 import Logo from '../components/ui/Logo';
 import { DOCS, DOC_GROUPS, docBySlug, docText, sectionId } from '../lib/docs';
 
@@ -332,6 +335,13 @@ export default function DocsPage() {
   const [query, setQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const desktopSearch = useRef(null);
+  // Help is readable signed in or out. Signed in, the header leads back to
+  // your own home instead of offering a sign-in you do not need.
+  const { user } = useAuth();
+  const { parent } = useParentAuth();
+  const home = user ? { to: getHomePath(user), label: 'Back to DojoLink' }
+    : parent ? { to: '/parent/dashboard', label: 'Back to DojoLink' }
+    : { to: '/login', label: 'Sign in' };
 
   useEffect(() => {
     document.title = doc ? `${doc.title} · DojoLink Help` : 'DojoLink Help Center';
@@ -363,8 +373,8 @@ export default function DocsPage() {
           <Link to="/docs" className="flex items-center" aria-label="DojoLink Help Center">
             <Logo variant="lockup" className="h-7 text-ninja-navy" />
           </Link>
-          <Link to="/login" className="rounded-xl bg-ninja-blue text-white font-bold text-sm px-4 py-2.5 hover:opacity-90 transition-opacity">
-            Sign in
+          <Link to={home.to} className="rounded-xl bg-ninja-blue text-white font-bold text-sm px-4 py-2.5 hover:opacity-90 transition-opacity">
+            {home.label}
           </Link>
         </div>
       </header>

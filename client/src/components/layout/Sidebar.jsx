@@ -298,16 +298,14 @@ export default function Sidebar({ onOpenBug }) {
               </div>
             </Link>
             <div className="flex items-center flex-shrink-0 -mr-1">
-              <a
-                href="/docs"
-                target="_blank"
-                rel="noopener"
+              <Link
+                to="/docs"
                 title="Help Center"
                 aria-label="Help Center"
                 className="text-ninja-muted hover:text-ninja-blue transition-colors flex-shrink-0 p-1"
               >
                 <CircleHelpIcon className="w-4 h-4" />
-              </a>
+              </Link>
               <button
                 onClick={onOpenBug}
                 title="Report a bug or suggest a feature"
