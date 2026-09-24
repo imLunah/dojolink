@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { today } from '../../utils/dateUtils';
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon, PencilIcon } from 'lucide-react';
 import { ProgramAvatar } from '../ui/ProgramBadge';
 import ActionMenu, { MenuItem } from '../ui/ActionMenu';
 import { isBirthdayToday } from '../shared/BirthdayConfetti';
@@ -112,17 +112,18 @@ function PinnedNotePill({ note, parentNote }) {
   );
 }
 
-// "Change class" on the card, for anyone who can log (senseis included), so a
-// check-in filed under the wrong class can be put right from the board. Only
-// unlogged check-ins move: a logged one's class belongs to its log.
-function ClassPicker({ group, onChange }) {
+// The card's class icon is the way to change the class, for anyone who can log
+// (senseis included), so a check-in filed under the wrong class can be put
+// right from the board. A pencil shows on hover so the icon reads as editable.
+// Only unlogged check-ins move: a logged one's class belongs to its log.
+function ClassPicker({ group, onChange, children }) {
   const { isReadOnly } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const pending = group.assignments.filter((a) => !a.completed);
   const enrolled = group.assignments[0].enrolled_programs || [];
   const nothingToChange = enrolled.length === 1 && pending.every((a) => a.program === enrolled[0]);
-  if (isReadOnly || !onChange || pending.length === 0 || enrolled.length === 0 || nothingToChange) return null;
+  if (isReadOnly || !onChange || pending.length === 0 || enrolled.length === 0 || nothingToChange) return children;
 
   const pick = async (assignment, program, close) => {
     if (assignment.program === program) { close(); return; }
@@ -143,10 +144,20 @@ function ClassPicker({ group, onChange }) {
     <span onClick={(e) => e.stopPropagation()} className="inline-flex">
       <ActionMenu
         label="Change class"
-        align="right"
+        align="left"
         onClosed={() => setError('')}
-        triggerClassName="font-ninja font-semibold text-xs text-ninja-muted hover:text-ninja-blue transition-colors"
-        trigger="Change class"
+        triggerClassName="group/class relative block rounded-full transition-transform duration-150 hover:scale-105"
+        trigger={
+          <>
+            {children}
+            <span
+              aria-hidden
+              className="absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 rounded-full bg-white border border-ninja-border text-ninja-navy shadow-sm opacity-0 scale-75 transition-all duration-150 group-hover/class:opacity-100 group-hover/class:scale-100"
+            >
+              <PencilIcon size={11} strokeWidth={2.25} />
+            </span>
+          </>
+        }
       >
         {({ close }) => (
           <div className="min-w-[12rem]">
@@ -340,12 +351,14 @@ export default function TodayBoard({
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative flex-shrink-0">
-                      <ProgramAvatar
-                        program={primaryProgram}
-                        belt={beltFor(primaryProgram)}
-                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                        size="md"
-                      />
+                      <ClassPicker group={group} onChange={onUpdate}>
+                        <ProgramAvatar
+                          program={primaryProgram}
+                          belt={beltFor(primaryProgram)}
+                          items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                          size="md"
+                        />
+                      </ClassPicker>
                       {sessionCount > 1 && (
                         <span
                           title={`${sessionCount} sessions today`}
@@ -408,9 +421,6 @@ export default function TodayBoard({
                     Sensei: {group.assignments[0].sensei_name}
                   </p>
                 )}
-                <div className="flex justify-end">
-                  <ClassPicker group={group} onChange={onUpdate} />
-                </div>
                 {/* A logged ninja still needs a way back into what was written —
                     the same door they went in by, since that page now carries
                     the session's own logs. The board was a dead end for it. */}
@@ -454,12 +464,14 @@ export default function TodayBoard({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative flex-shrink-0">
-                    <ProgramAvatar
-                      program={primaryProgram}
-                      belt={beltFor(primaryProgram)}
-                      items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                      size="md"
-                    />
+                    <ClassPicker group={group} onChange={onUpdate}>
+                      <ProgramAvatar
+                        program={primaryProgram}
+                        belt={beltFor(primaryProgram)}
+                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                        size="md"
+                      />
+                    </ClassPicker>
                     {sessionCount > 1 && (
                       <span
                         title={`${sessionCount} sessions today`}
@@ -509,16 +521,13 @@ export default function TodayBoard({
                   )}
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                {allDone ? (
-                  <p className="text-green-600 font-ninja font-semibold text-xs">Logged ✓</p>
-                ) : isOverdue ? (
-                  <p className="text-red-600 font-ninja font-semibold text-xs">Overdue</p>
-                ) : (
-                  <p className="text-yellow-700 font-ninja font-semibold text-xs">Not logged yet</p>
-                )}
-                <ClassPicker group={group} onChange={onUpdate} />
-              </div>
+              {allDone ? (
+                <p className="text-green-600 font-ninja font-semibold text-xs">Logged ✓</p>
+              ) : isOverdue ? (
+                <p className="text-red-600 font-ninja font-semibold text-xs">Overdue</p>
+              ) : (
+                <p className="text-yellow-700 font-ninja font-semibold text-xs">Not logged yet</p>
+              )}
               {!isReadOnly && (
                 <button
                   onClick={() => navigate(buildLogUrl(group))}
