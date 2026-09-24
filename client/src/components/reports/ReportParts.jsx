@@ -95,17 +95,50 @@ export function useReportFilters() {
   return useOutletContext();
 }
 
+// Answers are kept for a minute, keyed by the full path, so moving between
+// tabs (or back to one) paints at once instead of flashing the skeleton.
+// The key carries every filter, so a cached answer can never sit under a
+// different period's title; a change of filters is a new key and loads fresh.
+const REPORT_TTL = 60_000;
+const reportCache = new Map();
+
+function fresh(path) {
+  const hit = reportCache.get(path);
+  return hit && Date.now() - hit.at < REPORT_TTL ? hit : null;
+}
+
+// Start (or join) the request for a path. The layout calls this for the tabs
+// that are not open yet, so they are ready before anyone clicks them.
+export function prefetchReport(path) {
+  const hit = fresh(path);
+  if (hit) return hit.promise;
+  const promise = api.get(path).then(
+    (data) => { reportCache.set(path, { at: Date.now(), promise, data }); return data; },
+    (e) => { reportCache.delete(path); throw e; },
+  );
+  reportCache.set(path, { at: Date.now(), promise, data: undefined });
+  return promise;
+}
+
 // GET a report and hold it. A change of path or filters drops the old answer
 // first, so a tab never shows last period's numbers under this period's title.
 export function useReport(path) {
-  const [state, setState] = useState({ data: null, error: '' });
+  const [state, setState] = useState(() => {
+    const data = path ? fresh(path)?.data : undefined;
+    return { data: data ?? null, error: '', path: data !== undefined ? path : null };
+  });
   useEffect(() => {
     if (!path) return undefined;
+    const cached = fresh(path)?.data;
+    if (cached !== undefined) {
+      setState((s) => (s.path === path ? s : { data: cached, error: '', path }));
+      return undefined;
+    }
     let live = true;
-    setState({ data: null, error: '' });
-    api.get(path)
-      .then((data) => { if (live) setState({ data, error: '' }); })
-      .catch((e) => { if (live) setState({ data: null, error: e?.message || 'Failed to load this report' }); });
+    setState({ data: null, error: '', path: null });
+    prefetchReport(path)
+      .then((data) => { if (live) setState({ data, error: '', path }); })
+      .catch((e) => { if (live) setState({ data: null, error: e?.message || 'Failed to load this report', path: null }); });
     return () => { live = false; };
   }, [path]);
   return state;
@@ -193,7 +226,7 @@ export function Metric({ label, value, delta, compare, tone, spark, footer }) {
           {/* A number counts up to itself once, as the card comes into view, so
               the eye lands on the figures rather than on the labels. */}
           <p className={`mt-2 text-[32px] font-semibold leading-none tracking-tight tabular-nums ${tone || 'text-ninja-navy'}`}>
-            {typeof value === 'number' ? <CountUp to={value} duration={0.5} /> : value}
+            {typeof value === 'number' ? <CountUp to={value} duration={0.5} id={label} /> : value}
           </p>
           {(delta || compare) && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-ninja-muted">

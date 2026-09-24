@@ -17,9 +17,14 @@ const decimalsOf = (n) => {
   return d && parseInt(d, 10) !== 0 ? d.length : 0;
 };
 
-export default function CountUp({ to, from = 0, delay = 0, duration = 1, className = '', separator = ',' }) {
+// With an `id`, a number that has already counted up to this same value once
+// this visit shows it straight away: going back to a tab should not replay it.
+const counted = new Map();
+
+export default function CountUp({ to, from = 0, delay = 0, duration = 1, className = '', separator = ',', id }) {
   const ref = useRef(null);
-  const reduce = useReducedMotion();
+  const seen = useRef(id != null && counted.get(id) === to).current;
+  const reduce = useReducedMotion() || seen;
   const inView = useInView(ref, { once: true });
   const decimals = Math.max(decimalsOf(from), decimalsOf(to));
 
@@ -37,6 +42,7 @@ export default function CountUp({ to, from = 0, delay = 0, duration = 1, classNa
   }, [from, to, reduce, format]);
 
   useEffect(() => {
+    if (id != null) counted.set(id, to);
     if (!inView || reduce) return undefined;
     const controls = animate(from, to, {
       duration,
@@ -45,7 +51,7 @@ export default function CountUp({ to, from = 0, delay = 0, duration = 1, classNa
       onUpdate: (v) => { if (ref.current) ref.current.textContent = format(v); },
     });
     return () => controls.stop();
-  }, [inView, reduce, from, to, duration, delay, format]);
+  }, [inView, reduce, from, to, duration, delay, format, id]);
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { Suspense, useMemo } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { NavLink, useLocation, useOutlet, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -12,7 +12,7 @@ import Layout from '../../../components/layout/Layout';
 import { useAuth } from '../../../context/AuthContext';
 import { PROGRAMS } from '../../../utils/beltConfig';
 import {
-  Loading, REPORT_FONT, addDays, centerToday, isoDate, localDate, rangeLabel,
+  Loading, REPORT_FONT, addDays, centerToday, isoDate, localDate, prefetchReport, rangeLabel,
 } from '../../../components/reports/ReportParts';
 
 // Reports is its own section, laid out like an analytics tool: a title with
@@ -71,6 +71,15 @@ function Filter({ label, value, onChange, children, className = '' }) {
   );
 }
 
+// Every tab's code, loaded while the first tab is on screen. These are the
+// same specifiers App.jsx lazy-loads, so the tab's own import finds them done.
+const loadTabs = () => Promise.all([
+  import('./ReportsOverview'),
+  import('./ReportsAttendance'),
+  import('./ReportsStudents'),
+  import('./ReportsProgress'),
+]);
+
 export default function ReportsLayout() {
   const { user } = useAuth();
   const { pathname } = useLocation();
@@ -108,6 +117,20 @@ export default function ReportsLayout() {
       query: q.toString(),
     };
   }, [center, period, program, centers]);
+
+  // Warm the other tabs once this one has had its turn: their code, and the
+  // report each opens with. Attendance with All centers asks one question per
+  // center, so it is left to load on its own.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      loadTabs().catch(() => {});
+      const q = context.query;
+      const paths = [`/reports/summary?${q}`, `/reports/students?${q}`, `/reports/progress?${q}`];
+      if (context.center !== 'all') paths.push(`/reports/checkins-by-hour?${q}`);
+      paths.forEach((p) => prefetchReport(p).catch(() => {}));
+    }, 400);
+    return () => clearTimeout(id);
+  }, [context.query, context.center]);
 
   const outlet = useOutlet(context);
   const search = params.toString() ? `?${params.toString()}` : '';
