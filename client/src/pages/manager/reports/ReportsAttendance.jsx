@@ -89,13 +89,13 @@ function HeatCell({ value, max, title }) {
 // so it gets its own header row rather than sitting under 3 PM as if 10 AM
 // were the same slot.
 function Heatmap({ stats, max }) {
-  const block = (days) => {
+  const block = (days, first) => {
     const open = stats[days[0]]?.hours.map((h) => h.hour) || [];
     return (
       <div className="grid grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_4.5rem] items-center gap-1.5">
         <span />
         {open.map((h) => <span key={h} className="text-center text-[11px] text-ninja-muted">{hourShort(h)}</span>)}
-        <span className="text-right text-[11px] text-ninja-muted">Median of</span>
+        {first ? <span className="text-right text-[11px] text-ninja-muted">Median of</span> : <span />}
         {days.map((wd) => {
           const s = stats[wd];
           return [
@@ -121,7 +121,7 @@ function Heatmap({ stats, max }) {
   };
   return (
     <div className="space-y-4">
-      {block([1, 2, 3, 4, 5])}
+      {block([1, 2, 3, 4, 5], true)}
       {block([6])}
     </div>
   );
