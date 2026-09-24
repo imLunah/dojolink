@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
-import { LogOutIcon, UserIcon, ChevronDownIcon } from 'lucide-react';
+import { LogOutIcon, UserIcon, ChevronDownIcon, CircleHelpIcon } from 'lucide-react';
 import { managerLinks, senseiLinks, isLinkActive, QuickFlyoutPanel, visibleLinks } from './Sidebar';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -163,6 +163,10 @@ export default function TopNav({ onOpenBug }) {
                   <UserIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
                   Account
                 </Link>
+                <a href="/docs" target="_blank" rel="noopener" role="menuitem" onClick={() => setMenuOpen(false)} className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+                  <CircleHelpIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+                  Help Center
+                </a>
                 <button
                   type="button"
                   role="menuitem"

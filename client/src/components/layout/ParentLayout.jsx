@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, useAnimationControls, useReducedMotion } from 'framer-motion';
-import { HomeIcon, CalendarDaysIcon, LogOutIcon, ChevronLeftIcon } from 'lucide-react';
+import { HomeIcon, CalendarDaysIcon, LogOutIcon, ChevronLeftIcon, CircleHelpIcon } from 'lucide-react';
 import { useParentAuth } from '../../context/ParentAuthContext';
 import { useLightOnly } from '../../context/ThemeContext';
 import Logo from '../ui/Logo';
@@ -230,6 +230,16 @@ function ParentSideNav({ parentName, centerName, onLogout, onReport }) {
                   {centerName && <span className="block font-ninja text-ninja-muted text-xs truncate">{centerName}</span>}
                 </span>
               </button>
+              <a
+                href="/docs/parent-portal"
+                target="_blank"
+                rel="noopener"
+                title="Help"
+                aria-label="Help"
+                className="text-ninja-muted hover:text-ninja-blue transition-colors flex-shrink-0 p-1"
+              >
+                <CircleHelpIcon className="w-4 h-4" />
+              </a>
               <button
                 onClick={onReport}
                 title="Report a bug or suggest a feature"

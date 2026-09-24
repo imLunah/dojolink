@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
-import { LogOutIcon } from 'lucide-react';
+import { LogOutIcon, CircleHelpIcon } from 'lucide-react';
 import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -297,6 +297,16 @@ export default function Sidebar({ onOpenBug }) {
                 <p className="font-ninja text-ninja-muted text-xs capitalize">{user?.role === 'manager' ? 'Center Director' : user?.role === 'admin' ? 'Admin' : user?.role}</p>
               </div>
             </Link>
+            <a
+              href="/docs"
+              target="_blank"
+              rel="noopener"
+              title="Help Center"
+              aria-label="Help Center"
+              className="text-ninja-muted hover:text-ninja-blue transition-colors flex-shrink-0 p-1"
+            >
+              <CircleHelpIcon className="w-4 h-4" />
+            </a>
             <button
               onClick={onOpenBug}
               title="Report a bug or suggest a feature"
