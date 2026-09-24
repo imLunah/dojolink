@@ -590,34 +590,68 @@ export const DOCS = [
     group: 'families',
     title: 'The Parent Portal',
     lede: 'Follow your ninja\'s belts, levels, badges and recent sessions, and hear about events at your center.',
+    image: { src: '/docs/parent-home.jpg', alt: 'The Parent Portal home with an event banner, how busy the center is, and a card for each ninja' },
     sections: [
       {
         title: 'Home',
         blocks: [
-          { p: 'Home shows every ninja in your family, each with their own banner. Tap a ninja to open their profile. Events from your center rotate across the top.' },
+          { list: [
+            '**Events** from your center rotate across the top. Select **Learn more** for the details and the sign-up link.',
+            '**Live at your center** shows how busy the dojo is right now, hour by hour, and when it closes today.',
+            '**A card for each ninja** in your family, with their most recent sessions. Select **Full profile** to open it.',
+          ] },
         ],
       },
       {
         title: 'Your ninja\'s profile',
         blocks: [
+          { img: '/docs/parent-profile.jpg', alt: 'A ninja profile banner with sessions, programs and belt, an activity chart, and the CREATE course' },
           { list: [
-            '**Belt road**: every CREATE belt, with the one your ninja is on lit up. Tap a belt to see what it covers.',
-            '**Courses**: each program your ninja is in, with the levels or modules they have finished.',
-            '**Sticker book**: a badge for every CREATE level your ninja completes.',
-            '**Recent sessions**: what they worked on in class.',
+            'The banner shows how many sessions they have logged, how many programs they are in, and their belt.',
+            '**Activity** charts their sessions over the last six months.',
+            '**Courses** has a card for each program they are in. Select one to open it.',
           ] },
+        ],
+      },
+      {
+        title: 'Courses and the belt road',
+        blocks: [
+          { img: '/docs/parent-course.jpg', alt: 'The CREATE course page with the belt road, the current level and its stickers' },
+          { p: 'In CREATE, the **belt road** across the top shows every belt, with the one your ninja is on lit up. Tap any belt to see what it covers. Below it you will find the level they are on now, the projects in it, and every level of the belt.' },
+          { p: 'Other programs, like JR and Robotics Academy, list their tracks and modules, with the ones your ninja has finished marked done.' },
+        ],
+      },
+      {
+        title: 'The sticker book',
+        blocks: [
+          { img: '/docs/parent-stickers.jpg', alt: 'The sticker book with personal records and the full collection' },
+          { p: 'Your ninja earns a sticker for every CREATE level and every module in their other programs. The sticker book shows their records, their most recent sticker, and the whole collection. Locked stickers show what it takes to earn them.' },
         ],
       },
       {
         title: 'Leaving a note for the senseis',
         blocks: [
-          { p: 'Use the note on your ninja\'s profile to tell the senseis anything they should know. It is shown to staff when they work with your ninja.' },
+          { steps: [
+            'Open your ninja\'s profile.',
+            'Select the **pin** at the top right of the banner.',
+            'Write anything the senseis should know, like allergies, pickup notes or how your ninja learns best, then select **Save note**.',
+          ] },
+          { img: '/docs/parent-note.jpg', alt: 'The Note for Senseis dialog with a text box and a Save note button' },
+          { p: 'Senseis see your note when they check your ninja in and when they log their session.' },
+        ],
+      },
+      {
+        title: 'Events',
+        blocks: [
+          { img: '/docs/parent-events.jpg', alt: 'The Events page listing upcoming events by month' },
+          { p: '**Events** in the sidebar lists everything coming up at your center, by month. Select **Details** for the date, time, description and sign-up link.' },
         ],
       },
       {
         title: 'Settings',
         blocks: [
-          { p: 'Under **Account**, **Your ninjas** lets you pick which ninja character represents each of your children in the portal.' },
+          { img: '/docs/parent-settings.jpg', alt: 'Parent settings on Your ninjas, with three ninja characters to pick from for each child' },
+          { p: 'Select your name at the bottom of the sidebar to open **Settings**. **Your ninjas** lets each of your kids pick the ninja character that shows on their profile. You can also edit your details or delete your account there.' },
         ],
       },
     ],
