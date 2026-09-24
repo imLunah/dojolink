@@ -92,10 +92,10 @@ function Heatmap({ stats, max }) {
   const block = (days) => {
     const open = stats[days[0]]?.hours.map((h) => h.hour) || [];
     return (
-      <div className="grid grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_2.75rem] items-center gap-1.5">
+      <div className="grid grid-cols-[2.5rem_repeat(4,minmax(0,1fr))_4.5rem] items-center gap-1.5">
         <span />
         {open.map((h) => <span key={h} className="text-center text-[11px] text-ninja-muted">{hourShort(h)}</span>)}
-        <span className="text-right text-[11px] text-ninja-muted">Days</span>
+        <span className="text-right text-[11px] text-ninja-muted">Median of</span>
         {days.map((wd) => {
           const s = stats[wd];
           return [
@@ -113,7 +113,7 @@ function Heatmap({ stats, max }) {
                 />
               );
             }),
-            <span key={`${wd}-n`} className="text-right text-xs tabular-nums text-ninja-muted">{s?.days || 0}</span>,
+            <span key={`${wd}-n`} className="text-right text-xs tabular-nums text-ninja-muted">{plural(s?.days || 0, 'day')}</span>,
           ];
         })}
       </div>
