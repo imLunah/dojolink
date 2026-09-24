@@ -193,7 +193,7 @@ export function Metric({ label, value, delta, compare, tone, spark, footer }) {
           {/* A number counts up to itself once, as the card comes into view, so
               the eye lands on the figures rather than on the labels. */}
           <p className={`mt-2 text-[32px] font-semibold leading-none tracking-tight tabular-nums ${tone || 'text-ninja-navy'}`}>
-            {typeof value === 'number' ? <CountUp to={value} duration={0.9} /> : value}
+            {typeof value === 'number' ? <CountUp to={value} duration={0.5} /> : value}
           </p>
           {(delta || compare) && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-ninja-muted">

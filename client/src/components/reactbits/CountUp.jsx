@@ -5,9 +5,12 @@
 // already ships, instead of adding the `motion` package for the same three
 // hooks; it shows the final number at once under prefers-reduced-motion; and
 // the finished value is also the element's text for screen readers from the
-// first render, so nothing announces a run of changing numbers.
+// first render, so nothing announces a run of changing numbers. The count is
+// a fixed-length ease-out tween rather than the original's spring: that spring
+// was heavily overdamped and crept through the last few digits for about three
+// seconds whatever `duration` said.
 import { useCallback, useEffect, useRef } from 'react';
-import { useInView, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import { animate, useInView, useReducedMotion } from 'framer-motion';
 
 const decimalsOf = (n) => {
   const [, d] = String(n).split('.');
@@ -17,8 +20,6 @@ const decimalsOf = (n) => {
 export default function CountUp({ to, from = 0, delay = 0, duration = 1, className = '', separator = ',' }) {
   const ref = useRef(null);
   const reduce = useReducedMotion();
-  const motionValue = useMotionValue(from);
-  const springValue = useSpring(motionValue, { damping: 20 + 40 * (1 / duration), stiffness: 100 * (1 / duration) });
   const inView = useInView(ref, { once: true });
   const decimals = Math.max(decimalsOf(from), decimalsOf(to));
 
@@ -37,13 +38,14 @@ export default function CountUp({ to, from = 0, delay = 0, duration = 1, classNa
 
   useEffect(() => {
     if (!inView || reduce) return undefined;
-    const id = setTimeout(() => motionValue.set(to), delay * 1000);
-    return () => clearTimeout(id);
-  }, [inView, reduce, motionValue, to, delay]);
-
-  useEffect(() => springValue.on('change', (v) => {
-    if (ref.current) ref.current.textContent = format(v);
-  }), [springValue, format]);
+    const controls = animate(from, to, {
+      duration,
+      delay,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => { if (ref.current) ref.current.textContent = format(v); },
+    });
+    return () => controls.stop();
+  }, [inView, reduce, from, to, duration, delay, format]);
 
   return (
     <>
