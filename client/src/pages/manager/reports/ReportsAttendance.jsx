@@ -261,9 +261,6 @@ function HourDetail({ periodData, centerId, centerPicker }) {
                   </div>
                 )}
       </div>
-      <p className="mt-3 border-t border-ninja-border pt-3 text-xs text-ninja-muted">
-        At once assumes each class runs an hour, since check-outs aren&apos;t recorded. Clubs don&apos;t record a time, so ninjas who came only for a club count in the day but not in an hour.
-      </p>
     </Card>
   );
 }
