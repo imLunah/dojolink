@@ -360,10 +360,8 @@ export default function DocsPage() {
     <div className="theme-locked min-h-[100dvh] bg-ninja-bg font-ninja">
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-ninja-border">
         <div className="max-w-[1400px] mx-auto h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
-          <Link to="/docs" className="flex items-center gap-3" aria-label="DojoLink Help Center">
+          <Link to="/docs" className="flex items-center" aria-label="DojoLink Help Center">
             <Logo variant="lockup" className="h-7 text-ninja-navy" />
-            <span className="hidden sm:block h-5 w-px bg-ninja-border" aria-hidden />
-            <span className="hidden sm:block font-bold text-ninja-navy">Help</span>
           </Link>
           <Link to="/login" className="rounded-xl bg-ninja-blue text-white font-bold text-sm px-4 py-2.5 hover:opacity-90 transition-opacity">
             Sign in
