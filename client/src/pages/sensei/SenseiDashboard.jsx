@@ -119,6 +119,10 @@ export default function SenseiDashboard() {
     setAssignments((prev) => [...prev.filter((a) => a.id !== newAssignment.id), newAssignment]);
   };
 
+  const handleUpdate = (updated) => {
+    setAssignments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  };
+
   const existingEntries = assignments.map((a) => ({ student_id: a.student_id, program: a.program }));
 
   // New check-ins from the front desk appear without a reload. Shared with the
@@ -262,6 +266,7 @@ export default function SenseiDashboard() {
               assignments={filteredAssignments}
               statusFilter={statusFilter}
               canRemove={false}
+              onUpdate={handleUpdate}
               emptyHint={'Use the "+ Check In Ninja" button to get started.'}
             />
           </motion.div>

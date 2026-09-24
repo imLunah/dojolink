@@ -6,7 +6,9 @@ import ReactMarkdown from 'react-markdown';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { today } from '../../utils/dateUtils';
+import { CheckIcon } from 'lucide-react';
 import { ProgramAvatar } from '../ui/ProgramBadge';
+import ActionMenu, { MenuItem } from '../ui/ActionMenu';
 import { isBirthdayToday } from '../shared/BirthdayConfetti';
 import { MARKDOWN_COMPONENTS, Pin } from '../shared/PinnedNote';
 
@@ -110,6 +112,69 @@ function PinnedNotePill({ note, parentNote }) {
   );
 }
 
+// The card's class icon doubles as the way to change the class, for anyone who
+// can log (senseis included), so a check-in filed under the wrong class can be
+// put right from the board. Only unlogged check-ins move: a logged one's class
+// belongs to its log.
+function ClassPicker({ group, onChange, children }) {
+  const { isReadOnly } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const pending = group.assignments.filter((a) => !a.completed);
+  const enrolled = group.assignments[0].enrolled_programs || [];
+  const nothingToChange = enrolled.length === 1 && pending.every((a) => a.program === enrolled[0]);
+  if (isReadOnly || !onChange || pending.length === 0 || enrolled.length === 0 || nothingToChange) return children;
+
+  const pick = async (assignment, program, close) => {
+    if (assignment.program === program) { close(); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await api.patch(`/daily/${assignment.id}/program`, { program });
+      onChange(updated);
+      close();
+    } catch (err) {
+      setError(err.message || 'Could not change the class');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+      <ActionMenu
+        label="Change class"
+        align="left"
+        onClosed={() => setError('')}
+        triggerClassName="rounded-full transition-transform duration-150 hover:scale-105"
+        trigger={children}
+      >
+        {({ close }) => (
+          <div className="min-w-[12rem]">
+            {pending.map((a, idx) => (
+              <div key={a.id}>
+                {pending.length > 1 && (
+                  <p className="px-2.5 pt-1.5 pb-0.5 font-ninja text-[11px] font-bold uppercase tracking-wide text-ninja-muted">
+                    Class {idx + 1}
+                  </p>
+                )}
+                {enrolled.map((program) => (
+                  <MenuItem key={program} disabled={saving} onSelect={() => pick(a, program, close)}>
+                    <ProgramAvatar program={program} belt={program === 'CREATE' ? a.belt_level || group.assignments.find((x) => x.program === 'CREATE')?.belt_level : null} size="xs" />
+                    <span className="flex-1">{program}</span>
+                    {a.program === program && <CheckIcon size={15} strokeWidth={2.25} className="text-ninja-blue" aria-label="Current class" />}
+                  </MenuItem>
+                ))}
+              </div>
+            ))}
+            {error && <p className="px-2.5 py-1.5 font-ninja text-xs text-ninja-red">{error}</p>}
+          </div>
+        )}
+      </ActionMenu>
+    </span>
+  );
+}
+
 function buildLogUrl(group) {
   // A generic (no-class) check-in has no program — let the sensei pick any
   // enrolled class on the log page (no programs filter passed).
@@ -149,6 +214,7 @@ export default function TodayBoard({
   onRemove,
   statusFilter = 'unlogged',
   canRemove = true,
+  onUpdate,
   emptyHint = 'Use the "+ Check In Ninja" button to get started.',
 }) {
   const { isReadOnly } = useAuth();
@@ -269,18 +335,20 @@ export default function TodayBoard({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05, duration: 0.25, ease: 'easeOut' }}
-                className="bg-white border border-ninja-border rounded-2xl p-4 cursor-pointer"
+                className="relative has-[[aria-expanded=true]]:z-30 bg-white border border-ninja-border rounded-2xl p-4 cursor-pointer"
                 onClick={() => navigate(`/manager/students/${group.student_id}`)}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative flex-shrink-0">
-                      <ProgramAvatar
-                        program={primaryProgram}
-                        belt={beltFor(primaryProgram)}
-                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                        size="md"
-                      />
+                      <ClassPicker group={group} onChange={onUpdate}>
+                        <ProgramAvatar
+                          program={primaryProgram}
+                          belt={beltFor(primaryProgram)}
+                          items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                          size="md"
+                        />
+                      </ClassPicker>
                       {sessionCount > 1 && (
                         <span
                           title={`${sessionCount} sessions today`}
@@ -383,17 +451,19 @@ export default function TodayBoard({
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.28, ease: 'easeOut' }}
-              className={`bg-white border-2 ${borderClass} rounded-2xl p-4 shadow-sm flex flex-col gap-3`}
+              className={`relative has-[[aria-expanded=true]]:z-30 bg-white border-2 ${borderClass} rounded-2xl p-4 shadow-sm flex flex-col gap-3`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative flex-shrink-0">
-                    <ProgramAvatar
-                      program={primaryProgram}
-                      belt={beltFor(primaryProgram)}
-                      items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                      size="md"
-                    />
+                    <ClassPicker group={group} onChange={onUpdate}>
+                      <ProgramAvatar
+                        program={primaryProgram}
+                        belt={beltFor(primaryProgram)}
+                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                        size="md"
+                      />
+                    </ClassPicker>
                     {sessionCount > 1 && (
                       <span
                         title={`${sessionCount} sessions today`}
