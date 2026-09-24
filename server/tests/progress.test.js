@@ -133,7 +133,7 @@ describe('POST /api/progress — write validation (security regressions)', () =>
   });
 });
 
-describe('DELETE /api/progress/:id — ownership', () => {
+describe('DELETE /api/progress/:id, scoped to the center', () => {
   async function makeLog() {
     const { agent } = await login(app, 'sensei_a');
     const res = await csrf(agent.post('/api/progress')).send(logBody());
@@ -147,9 +147,16 @@ describe('DELETE /api/progress/:id — ownership', () => {
     expect(res.status).toBe(200);
   });
 
-  it('forbids a different sensei from deleting another sensei\'s log (404)', async () => {
+  it('lets a different sensei at the same center delete the log (200)', async () => {
     const id = await makeLog();
     const { agent } = await login(app, 'sensei_a2'); // same center, different sensei
+    const res = await csrf(agent.delete(`/api/progress/${id}`)).send();
+    expect(res.status).toBe(200);
+  });
+
+  it('forbids a sensei at another center from deleting the log (404)', async () => {
+    const id = await makeLog();
+    const { agent } = await login(app, 'sensei_b');
     const res = await csrf(agent.delete(`/api/progress/${id}`)).send();
     expect(res.status).toBe(404);
     // and the log still exists

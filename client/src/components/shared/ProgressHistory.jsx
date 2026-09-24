@@ -520,6 +520,8 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                   const isReplying = replyingId === log.id;
 
                   const canEdit = !isReadOnly && (isManager || log.sensei_id === user?.id);
+                  // Deleting is open to any staff at the center; editing is not.
+                  const canDelete = !isReadOnly;
 
                   return (
                     // The tint runs the full width of the card, so a line
@@ -563,7 +565,7 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                             <span className="text-ninja-muted text-xs font-ninja">by {authorName(log.sensei_name)}</span>
                           )}
                         </div>
-                        {!isEditing && (!isReadOnly || canEdit) && (
+                        {!isEditing && !isReadOnly && (
                           // bg-white, not the default: this card is already
                           // ninja-bg, so a ninja-bg strip would vanish into it.
                           <RowActions surface="bg-white" className="self-center">
@@ -578,7 +580,7 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                 />
                               </>
                             )}
-                            {canEdit && (
+                            {(canEdit || canDelete) && (
                               <ActionMenu
                                 label="Log actions"
                                 className={`flex-shrink-0 ${IN_STRIP_MENU}`}
@@ -601,7 +603,9 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                     </div>
                                   ) : (
                                     <>
-                                      <MenuItem icon={PencilIcon} onSelect={() => { startEdit(log); close(); }}>Edit</MenuItem>
+                                      {canEdit && (
+                                        <MenuItem icon={PencilIcon} onSelect={() => { startEdit(log); close(); }}>Edit</MenuItem>
+                                      )}
                                       <MenuItem icon={TrashIcon} danger onSelect={() => { setConfirmDeleteId(log.id); setEditingId(null); }}>
                                         Delete
                                       </MenuItem>

@@ -457,22 +457,17 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
 // DELETE /api/progress/:id — managers delete any log in their center; senseis delete only their own
 router.delete('/:id', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
-  const isManager = ['manager', 'admin'].includes(req.session.role);
+  // Any staff member at the center may delete a log there, not only its author.
+  // Editing stays with the author and directors (PATCH above).
   try {
-    const ownershipClause = isManager ? '' : 'AND progress_logs.sensei_id = $3';
-    const params = isManager
-      ? [req.params.id, req.session.activeLocationId]
-      : [req.params.id, req.session.activeLocationId, req.session.userId];
-
     const { rows } = await pool.query(
       `DELETE FROM progress_logs
        USING students s
        WHERE progress_logs.id = $1 AND progress_logs.student_id = s.id AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
-       ${ownershipClause}
        RETURNING progress_logs.id`,
-      params
+      [req.params.id, req.session.activeLocationId]
     );
-    if (!rows[0]) return res.status(404).json({ error: 'Log not found or not yours' });
+    if (!rows[0]) return res.status(404).json({ error: 'Log not found' });
     res.json({ ok: true });
   } catch (err) {
     console.error('Progress log delete error:', err);
