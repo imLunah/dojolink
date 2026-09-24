@@ -112,18 +112,17 @@ function PinnedNotePill({ note, parentNote }) {
   );
 }
 
-// The card's class icon doubles as the way to change the class, for anyone who
-// can log (senseis included), so a check-in filed under the wrong class can be
-// put right from the board. Only unlogged check-ins move: a logged one's class
-// belongs to its log.
-function ClassPicker({ group, onChange, children }) {
+// "Change class" on the card, for anyone who can log (senseis included), so a
+// check-in filed under the wrong class can be put right from the board. Only
+// unlogged check-ins move: a logged one's class belongs to its log.
+function ClassPicker({ group, onChange }) {
   const { isReadOnly } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const pending = group.assignments.filter((a) => !a.completed);
   const enrolled = group.assignments[0].enrolled_programs || [];
   const nothingToChange = enrolled.length === 1 && pending.every((a) => a.program === enrolled[0]);
-  if (isReadOnly || !onChange || pending.length === 0 || enrolled.length === 0 || nothingToChange) return children;
+  if (isReadOnly || !onChange || pending.length === 0 || enrolled.length === 0 || nothingToChange) return null;
 
   const pick = async (assignment, program, close) => {
     if (assignment.program === program) { close(); return; }
@@ -144,10 +143,10 @@ function ClassPicker({ group, onChange, children }) {
     <span onClick={(e) => e.stopPropagation()} className="inline-flex">
       <ActionMenu
         label="Change class"
-        align="left"
+        align="right"
         onClosed={() => setError('')}
-        triggerClassName="rounded-full transition-transform duration-150 hover:scale-105"
-        trigger={children}
+        triggerClassName="font-ninja font-semibold text-xs text-ninja-muted hover:text-ninja-blue transition-colors"
+        trigger="Change class"
       >
         {({ close }) => (
           <div className="min-w-[12rem]">
@@ -341,14 +340,12 @@ export default function TodayBoard({
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative flex-shrink-0">
-                      <ClassPicker group={group} onChange={onUpdate}>
-                        <ProgramAvatar
-                          program={primaryProgram}
-                          belt={beltFor(primaryProgram)}
-                          items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                          size="md"
-                        />
-                      </ClassPicker>
+                      <ProgramAvatar
+                        program={primaryProgram}
+                        belt={beltFor(primaryProgram)}
+                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                        size="md"
+                      />
                       {sessionCount > 1 && (
                         <span
                           title={`${sessionCount} sessions today`}
@@ -412,6 +409,9 @@ export default function TodayBoard({
                     Sensei: {group.assignments[0].sensei_name}
                   </p>
                 )}
+                <div className="flex justify-end">
+                  <ClassPicker group={group} onChange={onUpdate} />
+                </div>
                 {/* A logged ninja still needs a way back into what was written —
                     the same door they went in by, since that page now carries
                     the session's own logs. The board was a dead end for it. */}
@@ -456,14 +456,12 @@ export default function TodayBoard({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative flex-shrink-0">
-                    <ClassPicker group={group} onChange={onUpdate}>
-                      <ProgramAvatar
-                        program={primaryProgram}
-                        belt={beltFor(primaryProgram)}
-                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                        size="md"
-                      />
-                    </ClassPicker>
+                    <ProgramAvatar
+                      program={primaryProgram}
+                      belt={beltFor(primaryProgram)}
+                      items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                      size="md"
+                    />
                     {sessionCount > 1 && (
                       <span
                         title={`${sessionCount} sessions today`}
@@ -514,13 +512,16 @@ export default function TodayBoard({
                   )}
                 </div>
               </div>
-              {allDone ? (
-                <p className="text-green-600 font-ninja font-semibold text-xs">Logged ✓</p>
-              ) : isOverdue ? (
-                <p className="text-red-600 font-ninja font-semibold text-xs">Overdue</p>
-              ) : (
-                <p className="text-yellow-700 font-ninja font-semibold text-xs">Not logged yet</p>
-              )}
+              <div className="flex items-center justify-between gap-2">
+                {allDone ? (
+                  <p className="text-green-600 font-ninja font-semibold text-xs">Logged ✓</p>
+                ) : isOverdue ? (
+                  <p className="text-red-600 font-ninja font-semibold text-xs">Overdue</p>
+                ) : (
+                  <p className="text-yellow-700 font-ninja font-semibold text-xs">Not logged yet</p>
+                )}
+                <ClassPicker group={group} onChange={onUpdate} />
+              </div>
               {!isReadOnly && (
                 <button
                   onClick={() => navigate(buildLogUrl(group))}
