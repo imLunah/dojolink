@@ -52,7 +52,7 @@ function Inline({ text }) {
 function Shot({ src, alt, caption, narrow, eager }) {
   return (
     <figure className={narrow ? 'max-w-md' : ''}>
-      <div className="rounded-2xl border border-ninja-border bg-white overflow-hidden shadow-sm">
+      <div className="rounded-2xl bg-white overflow-hidden shadow-sm">
         <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} decoding="async" className="block w-full h-auto" />
       </div>
       {caption && <figcaption className="mt-2 text-sm text-ninja-muted">{caption}</figcaption>}
@@ -97,7 +97,7 @@ function Block({ block }) {
   }
   if (block.qa) {
     return (
-      <div className="divide-y divide-ninja-border border-y border-ninja-border">
+      <div className="divide-y divide-ninja-border">
         {block.qa.map(({ q, a }) => (
           <details key={q} className="group py-1">
             <summary className="flex items-center justify-between gap-4 py-3 cursor-pointer list-none text-[15px] font-bold text-ninja-navy [&::-webkit-details-marker]:hidden">
@@ -113,7 +113,7 @@ function Block({ block }) {
   if (block.table) {
     const { head, rows } = block.table;
     return (
-      <div className="overflow-x-auto rounded-xl border border-ninja-border">
+      <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-ninja-bg">
             <tr>
@@ -149,7 +149,7 @@ function SearchBox({ query, setQuery, inputRef }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search..."
-        className="w-full rounded-xl border border-ninja-border bg-white pl-10 pr-3 py-2.5 text-sm text-ninja-navy placeholder:text-ninja-muted"
+        className="w-full rounded-xl bg-white shadow-sm pl-10 pr-3 py-2.5 text-sm text-ninja-navy placeholder:text-ninja-muted"
       />
     </label>
   );
@@ -250,13 +250,13 @@ function Article({ doc }) {
 
         <nav aria-label="More articles" className="mt-16 grid sm:grid-cols-2 gap-4">
           {prev ? (
-            <Link to={`/docs/${prev.slug}`} className="group rounded-xl border border-ninja-border bg-white px-5 py-4 hover:bg-ninja-bg transition-colors">
+            <Link to={`/docs/${prev.slug}`} className="group rounded-xl bg-white shadow-sm px-5 py-4 hover:shadow-md transition-shadow">
               <span className="flex items-center gap-1.5 text-sm text-ninja-muted"><ArrowLeft aria-hidden className="w-4 h-4" />Previous</span>
               <span className="mt-1 block font-bold text-ninja-navy group-hover:text-ninja-blue">{prev.title}</span>
             </Link>
           ) : <span />}
           {next && (
-            <Link to={`/docs/${next.slug}`} className="group rounded-xl border border-ninja-border bg-white px-5 py-4 text-right hover:bg-ninja-bg transition-colors">
+            <Link to={`/docs/${next.slug}`} className="group rounded-xl bg-white shadow-sm px-5 py-4 text-right hover:shadow-md transition-shadow">
               <span className="flex items-center justify-end gap-1.5 text-sm text-ninja-muted">Next<ArrowRight aria-hidden className="w-4 h-4" /></span>
               <span className="mt-1 block font-bold text-ninja-navy group-hover:text-ninja-blue">{next.title}</span>
             </Link>
@@ -303,7 +303,7 @@ function Home() {
           const Icon = GROUP_ICONS[g.id];
           const docs = DOCS.filter((d) => d.group === g.id);
           return (
-            <section key={g.id} className="rounded-2xl border border-ninja-border bg-white p-5">
+            <section key={g.id} className="rounded-2xl bg-white shadow-sm p-5">
               <Link to={`/docs/${docs[0].slug}`} className="group flex items-start gap-3">
                 <span className="w-10 h-10 rounded-xl bg-ninja-blue/10 text-ninja-blue flex items-center justify-center flex-shrink-0">
                   <Icon aria-hidden className="w-5 h-5" />
@@ -368,7 +368,7 @@ export default function DocsPage() {
 
   return (
     <div className="theme-locked min-h-[100dvh] bg-ninja-bg font-ninja">
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-ninja-border">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur shadow-sm">
         <div className="max-w-[1400px] mx-auto h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
           <Link to="/docs" className="flex items-center" aria-label="DojoLink Help Center">
             <Logo variant="lockup" className="h-7 text-ninja-navy" />
@@ -395,13 +395,13 @@ export default function DocsPage() {
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
             aria-expanded={menuOpen}
-            className="w-full flex items-center justify-between rounded-xl border border-ninja-border bg-white px-4 py-3 text-[15px] font-bold text-ninja-navy"
+            className="w-full flex items-center justify-between rounded-xl bg-white shadow-sm px-4 py-3 text-[15px] font-bold text-ninja-navy"
           >
             {doc ? doc.title : 'Browse topics'}
             <ChevronDown aria-hidden className={`w-4 h-4 text-ninja-muted transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
           </button>
           {menuOpen && (
-            <div className="mt-2 rounded-xl border border-ninja-border bg-white p-3">
+            <div className="mt-2 rounded-xl bg-white shadow-sm p-3">
               <SearchBox query={query} setQuery={setQuery} />
               <nav aria-label="Help topics" className="mt-4">
                 <NavList activeSlug={slug} query={query} onPick={() => setMenuOpen(false)} />
@@ -413,7 +413,7 @@ export default function DocsPage() {
         <main className="min-w-0 flex-1 py-8 lg:py-12">
           {doc ? <Article doc={doc} /> : <Home />}
 
-          <footer className="mt-20 pt-6 border-t border-ninja-border flex flex-wrap items-center gap-3 text-xs text-ninja-muted">
+          <footer className="mt-20 pt-6 flex flex-wrap items-center gap-3 text-xs text-ninja-muted">
             <Link to="/" className="hover:text-ninja-blue transition-colors">DojoLink</Link>
             <span className="opacity-40">·</span>
             <Link to="/privacy" className="hover:text-ninja-blue transition-colors">Privacy Policy</Link>
