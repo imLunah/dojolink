@@ -297,30 +297,32 @@ export default function Sidebar({ onOpenBug }) {
                 <p className="font-ninja text-ninja-muted text-xs capitalize">{user?.role === 'manager' ? 'Center Director' : user?.role === 'admin' ? 'Admin' : user?.role}</p>
               </div>
             </Link>
-            <a
-              href="/docs"
-              target="_blank"
-              rel="noopener"
-              title="Help Center"
-              aria-label="Help Center"
-              className="text-ninja-muted hover:text-ninja-blue transition-colors flex-shrink-0 p-1"
-            >
-              <CircleHelpIcon className="w-4 h-4" />
-            </a>
-            <button
-              onClick={onOpenBug}
-              title="Report a bug or suggest a feature"
-              className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
-            >
-              <BugIcon />
-            </button>
-            <button
-              onClick={handleLogout}
-              title="Log out"
-              className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
-            >
-              <LogOutIcon className="w-4 h-4" />
-            </button>
+            <div className="flex items-center flex-shrink-0 -mr-1">
+              <a
+                href="/docs"
+                target="_blank"
+                rel="noopener"
+                title="Help Center"
+                aria-label="Help Center"
+                className="text-ninja-muted hover:text-ninja-blue transition-colors flex-shrink-0 p-1"
+              >
+                <CircleHelpIcon className="w-4 h-4" />
+              </a>
+              <button
+                onClick={onOpenBug}
+                title="Report a bug or suggest a feature"
+                className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
+              >
+                <BugIcon />
+              </button>
+              <button
+                onClick={handleLogout}
+                title="Log out"
+                className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
+              >
+                <LogOutIcon className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>
