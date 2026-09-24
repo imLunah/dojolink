@@ -320,7 +320,7 @@ export default function TodayBoard({
             const isOverdue = group.assignments.some(
               (a) => !a.completed && a.session_date && String(a.session_date).split('T')[0] < todayStr
             );
-            const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
+            const borderClass = allDone ? 'border-green-500' : isOverdue ? 'border-red-500' : 'border-yellow-400';
             const sessionCount = group.assignments.length;
             const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
             const realPrograms = uniquePrograms.filter(Boolean);
@@ -334,7 +334,7 @@ export default function TodayBoard({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05, duration: 0.25, ease: 'easeOut' }}
-                className="relative has-[[aria-expanded=true]]:z-30 bg-white border border-ninja-border rounded-2xl p-4 cursor-pointer"
+                className={`relative has-[[aria-expanded=true]]:z-30 bg-white border-2 ${borderClass} rounded-2xl p-4 cursor-pointer`}
                 onClick={() => navigate(`/manager/students/${group.student_id}`)}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
@@ -375,7 +375,6 @@ export default function TodayBoard({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
-                    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${dotClass}`} />
                     {showRemove && (
                       confirmId === group.student_id ? (
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -436,8 +435,7 @@ export default function TodayBoard({
           const isOverdue = group.assignments.some(
             (a) => !a.completed && a.session_date && String(a.session_date).split('T')[0] < todayStr
           );
-          const borderClass = allDone ? 'border-ninja-border' : isOverdue ? 'border-ninja-border' : 'border-ninja-border';
-            const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
+          const borderClass = allDone ? 'border-green-500' : isOverdue ? 'border-red-500' : 'border-yellow-400';
           const sessionCount = group.assignments.length;
           const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
           const realPrograms = uniquePrograms.filter(Boolean);
@@ -484,7 +482,6 @@ export default function TodayBoard({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 mt-1">
-                  <div className={`w-3 h-3 rounded-full ${dotClass}`} />
                   {showRemove && (
                     confirmId === group.student_id ? (
                       <div className="flex items-center gap-1">
