@@ -128,43 +128,6 @@ function Weekdays({ rows }) {
   );
 }
 
-// Which classes the visits went to. A ninja who did two classes in one
-// afternoon counts once in each, so the shares are of class visits.
-function ClassTable({ rows, days, showPrev }) {
-  const total = rows.reduce((sum, r) => sum + r.cur, 0);
-  const shown = rows
-    .filter((r) => r.cur > 0 || r.prev > 0)
-    .map((r) => ({ ...r, name: r.cls || 'No class picked' }))
-    .sort((a, b) => (a.cls === '') - (b.cls === '') || b.cur - a.cur);
-  return (
-    <Card title="Classes" sub="Where the visits went" className="xl:col-span-3">
-      <Table
-        rowKey={(r) => r.name}
-        rows={shown}
-        minWidth={620}
-        empty="No check-ins in this period."
-        columns={[
-          { key: 'name', label: 'Class', render: (r) => <span className="font-medium">{r.name}</span> },
-          { key: 'ninjas', label: 'Ninjas', align: 'right' },
-          {
-            key: 'cur',
-            label: 'Visits',
-            align: 'right',
-            render: (r) => (
-              <span className="inline-flex items-center justify-end gap-2">
-                <DeltaChip cur={r.cur} prev={r.prev} show={showPrev} />
-                {r.cur}
-              </span>
-            ),
-          },
-          { key: 'rate', label: 'Visits a week, per ninja', align: 'right', render: (r) => perWeek(r.cur, r.ninjas, days) ?? '0.0' },
-          { key: 'share', label: 'Share of visits', align: 'right', render: (r) => (total ? `${Math.round((r.cur / total) * 100)}%` : '0%') },
-        ]}
-      />
-    </Card>
-  );
-}
-
 function CenterTable({ rows, days }) {
   return (
     <Card title="Centers side by side" className="xl:col-span-3">
@@ -186,7 +149,7 @@ function CenterTable({ rows, days }) {
 }
 
 export default function ReportsOverview() {
-  const { query, program } = useReportFilters();
+  const { query } = useReportFilters();
   const { data, error } = useReport(`/reports/summary?${query}`);
 
   const view = useMemo(() => {
@@ -269,7 +232,6 @@ export default function ReportsOverview() {
           delta={<DeltaChip {...kpis.visits} show={showPrev} />}
         />
         <Weekdays rows={view.weekdays} />
-        {data.byClass && !program && <ClassTable rows={data.byClass} days={period.days} showPrev={showPrev} />}
         {data.perCenter && <CenterTable rows={data.perCenter} days={period.days} />}
       </div>
     </>

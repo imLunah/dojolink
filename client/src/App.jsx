@@ -30,6 +30,7 @@ const StaffPage = lazy(() => import('./pages/manager/StaffPage'));
 const ReportsLayout = lazy(() => import('./pages/manager/reports/ReportsLayout'));
 const ReportsOverview = lazy(() => import('./pages/manager/reports/ReportsOverview'));
 const ReportsAttendance = lazy(() => import('./pages/manager/reports/ReportsAttendance'));
+const ReportsClasses = lazy(() => import('./pages/manager/reports/ReportsClasses'));
 const ReportsStudents = lazy(() => import('./pages/manager/reports/ReportsStudents'));
 const ReportsProgress = lazy(() => import('./pages/manager/reports/ReportsProgress'));
 const TasksPage = lazy(() => import('./pages/manager/TasksPage'));
@@ -112,6 +113,7 @@ export default function App() {
             <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsLayout /></ProtectedRoute>}>
               <Route index element={<ReportsOverview />} />
               <Route path="attendance" element={<ReportsAttendance />} />
+              <Route path="classes" element={<ReportsClasses />} />
               <Route path="students" element={<ReportsStudents />} />
               <Route path="progress" element={<ReportsProgress />} />
             </Route>

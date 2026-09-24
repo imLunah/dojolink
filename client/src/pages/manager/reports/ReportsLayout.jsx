@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import {
   ChevronDownIcon,
   ClockIcon,
+  LayersIcon,
   LayoutDashboardIcon,
   TrendingUpIcon,
   UsersIcon,
@@ -23,6 +24,7 @@ import {
 const TABS = [
   { to: '/manager/reports', end: true, label: 'Overview', Icon: LayoutDashboardIcon },
   { to: '/manager/reports/attendance', label: 'Attendance', Icon: ClockIcon },
+  { to: '/manager/reports/classes', label: 'Classes', Icon: LayersIcon },
   { to: '/manager/reports/students', label: 'Students', Icon: UsersIcon },
   { to: '/manager/reports/progress', label: 'Progress', Icon: TrendingUpIcon },
 ];
@@ -76,6 +78,7 @@ function Filter({ label, value, onChange, children, className = '' }) {
 const loadTabs = () => Promise.all([
   import('./ReportsOverview'),
   import('./ReportsAttendance'),
+  import('./ReportsClasses'),
   import('./ReportsStudents'),
   import('./ReportsProgress'),
 ]);
@@ -125,7 +128,7 @@ export default function ReportsLayout() {
     const id = setTimeout(() => {
       loadTabs().catch(() => {});
       const q = context.query;
-      const paths = [`/reports/summary?${q}`, `/reports/students?${q}`, `/reports/progress?${q}`];
+      const paths = [`/reports/summary?${q}`, `/reports/classes?${q}`, `/reports/students?${q}`, `/reports/progress?${q}`];
       if (context.center !== 'all') paths.push(`/reports/checkins-by-hour?${q}`);
       paths.forEach((p) => prefetchReport(p).catch(() => {}));
     }, 400);
@@ -162,13 +165,13 @@ export default function ReportsLayout() {
 
         {/* The tabs: one track, the open tab lifted onto a white chip that
             slides between them. A tint and a lift mark it, never an edge bar. */}
-        <nav aria-label="Reports" className="grid grid-cols-4 rounded-xl border border-ninja-border bg-ninja-bg p-1 sm:inline-grid">
+        <nav aria-label="Reports" className="no-scrollbar flex overflow-x-auto rounded-xl border border-ninja-border bg-ninja-bg p-1 sm:inline-grid sm:grid-cols-5">
           {TABS.map((t) => (
             <NavLink
               key={t.to}
               to={{ pathname: t.to, search }}
               end={t.end}
-              className={({ isActive }) => `relative flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors sm:px-4 ${isActive ? 'text-ninja-navy' : 'text-ninja-muted hover:text-ninja-navy'}`}
+              className={({ isActive }) => `relative flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors sm:px-4 ${isActive ? 'text-ninja-navy' : 'text-ninja-muted hover:text-ninja-navy'}`}
             >
               {({ isActive }) => (
                 <>

@@ -166,7 +166,7 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
   const base = [f.centerIds, f.prevFrom, f.to, f.program, f.from];
   const visits2 = visitsSql({ from: '$2', to: '$3', program: '$4' });
 
-  const [daily, seen, beltUps, roster, inactive, lapsed, since, perCenter, byClass] = await Promise.all([
+  const [daily, seen, beltUps, roster, inactive, lapsed, since, perCenter] = await Promise.all([
     pool.query(`
       SELECT to_char(v.day, 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
       FROM (${visits2}) v
@@ -215,27 +215,6 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
       WHERE l.id = ANY($1::int[])
       ORDER BY l.name
     `, [f.centerIds, f.from, f.to, f.program]) : null,
-    // Visits by class. Here a visit is a ninja in one class on one day, so a
-    // ninja who did CREATE and Robotics on the same afternoon counts in both.
-    // A check-in with no program is its own row (''), and clubs are one row.
-    // It ignores the program filter: the page hides it when one is set.
-    pool.query(`
-      WITH v AS (
-        SELECT da.student_id, da.session_date AS day, COALESCE(da.program, '') AS cls
-        FROM daily_assignments da
-        WHERE da.session_date BETWEEN $2::date AND $3::date AND ${inScope('da.student_id')}
-        UNION
-        SELECT ca.student_id, cs.session_date AS day, 'Clubs' AS cls
-        FROM club_attendees ca
-        JOIN club_sessions cs ON cs.id = ca.club_session_id
-        WHERE cs.session_date BETWEEN $2::date AND $3::date AND cs.location_id = ANY($1::int[])
-      )
-      SELECT cls,
-        COUNT(*) FILTER (WHERE day >= $4::date)::int AS cur,
-        COUNT(*) FILTER (WHERE day < $4::date)::int AS prev,
-        COUNT(DISTINCT student_id) FILTER (WHERE day >= $4::date)::int AS ninjas
-      FROM v GROUP BY cls
-    `, [f.centerIds, f.prevFrom, f.to, f.from]),
   ]);
 
   const visits = { cur: 0, prev: 0 };
@@ -254,7 +233,6 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
       lapsed: lapsed.rows[0].count,
     },
     perCenter: perCenter ? perCenter.rows : null,
-    byClass: byClass.rows,
   });
 }));
 
@@ -539,6 +517,79 @@ router.get('/progress', requireManager, handle('progress report', async (req, re
     beltUps: beltUps.rows,
     weekly: weekly.rows,
     senseis: senseiRows,
+  });
+}));
+
+// GET /api/reports/classes — the Classes tab: which programs and clubs the
+// visits go to. A visit here is a ninja in one class on one day, so a ninja
+// who did CREATE and Robotics on the same afternoon counts once in each. A
+// check-in with no program is its own row (''). A program filter narrows the
+// programs to that one and leaves clubs out, as it does on every other tab.
+router.get('/classes', requireManager, handle('classes report', async (req, res) => {
+  const pool = req.app.get('db');
+  const f = await readFilters(req);
+  const base = [f.centerIds, f.prevFrom, f.to, f.from, f.program];
+  const classVisits = `
+    SELECT da.student_id, da.session_date AS day, COALESCE(da.program, '') AS cls
+    FROM daily_assignments da
+    WHERE da.session_date BETWEEN $2::date AND $3::date AND ${inScope('da.student_id')}
+      AND ($5::text IS NULL OR da.program = $5::text)
+    UNION
+    SELECT ca.student_id, cs.session_date AS day, 'Clubs' AS cls
+    FROM club_attendees ca
+    JOIN club_sessions cs ON cs.id = ca.club_session_id
+    WHERE cs.session_date BETWEEN $2::date AND $3::date AND cs.location_id = ANY($1::int[])
+      AND $5::text IS NULL
+  `;
+
+  const [programs, weekly, clubs, since] = await Promise.all([
+    pool.query(`
+      WITH v AS (${classVisits}),
+      visits AS (
+        SELECT cls,
+          COUNT(*) FILTER (WHERE day >= $4::date)::int AS cur,
+          COUNT(*) FILTER (WHERE day < $4::date)::int AS prev,
+          COUNT(DISTINCT student_id) FILTER (WHERE day >= $4::date)::int AS ninjas
+        FROM v WHERE cls <> 'Clubs' GROUP BY cls
+      ),
+      enrolled AS (
+        SELECT sp.program AS cls, COUNT(DISTINCT sp.student_id)::int AS enrolled
+        FROM student_programs sp JOIN students s ON s.id = sp.student_id
+        WHERE s.active = true AND ${inScope('s.id')} AND ($5::text IS NULL OR sp.program = $5::text)
+        GROUP BY sp.program
+      )
+      SELECT COALESCE(v.cls, e.cls) AS cls, COALESCE(v.cur, 0) AS cur, COALESCE(v.prev, 0) AS prev,
+             COALESCE(v.ninjas, 0) AS ninjas, COALESCE(e.enrolled, 0) AS enrolled
+      FROM visits v FULL JOIN enrolled e ON e.cls = v.cls
+    `, base),
+    pool.query(`
+      WITH v AS (${classVisits})
+      SELECT to_char(date_trunc('week', day)::date, 'YYYY-MM-DD') AS week, cls, COUNT(*)::int AS visits
+      FROM v WHERE day >= $4::date
+      GROUP BY 1, 2 ORDER BY 1
+    `, base),
+    f.program ? null : pool.query(`
+      SELECT cs.club_name AS name,
+        COUNT(DISTINCT cs.id) FILTER (WHERE cs.session_date >= $4::date)::int AS sessions,
+        COUNT(ca.id) FILTER (WHERE cs.session_date >= $4::date)::int AS cur,
+        COUNT(ca.id) FILTER (WHERE cs.session_date < $4::date)::int AS prev,
+        COUNT(DISTINCT ca.student_id) FILTER (WHERE cs.session_date >= $4::date)::int AS ninjas,
+        to_char(MAX(cs.session_date) FILTER (WHERE cs.session_date >= $4::date), 'YYYY-MM-DD') AS last
+      FROM club_sessions cs
+      LEFT JOIN club_attendees ca ON ca.club_session_id = cs.id
+      WHERE cs.session_date BETWEEN $2::date AND $3::date AND cs.location_id = ANY($1::int[])
+      GROUP BY cs.club_name
+      ORDER BY cs.club_name
+    `, base.slice(0, 4)),
+    dataSince(pool, f.centerIds),
+  ]);
+
+  res.json({
+    period: { from: f.from, to: f.to, prevFrom: f.prevFrom, prevTo: f.prevTo, days: f.days },
+    dataSince: since,
+    programs: programs.rows,
+    weekly: weekly.rows,
+    clubs: clubs ? clubs.rows : null,
   });
 }));
 
