@@ -318,6 +318,8 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="flex items-center justify-center flex-wrap gap-3 pb-8 px-6 text-xs text-ninja-muted">
+        <Link to="/docs" className="hover:text-ninja-blue transition-colors">Help</Link>
+        <span className="opacity-40">·</span>
         <Link to="/privacy" className="hover:text-ninja-blue transition-colors">Privacy Policy</Link>
         <span className="opacity-40">·</span>
         <Link to="/terms" className="hover:text-ninja-blue transition-colors">Terms</Link>

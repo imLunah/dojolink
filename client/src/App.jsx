@@ -58,6 +58,7 @@ const ParentStickerBook = lazy(() => import('./pages/parent/ParentStickerBook'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
+const DocsPage = lazy(() => import('./pages/DocsPage'));
 const CurriculumRoadmapPage = lazy(() => import('./pages/CurriculumRoadmapPage'));
 const LocationsPage = lazy(() => import('./pages/admin/LocationsPage'));
 const CurriculumPage = lazy(() => import('./pages/admin/CurriculumPage'));
@@ -175,6 +176,8 @@ export default function App() {
             <Route path="/privacy"       element={<PrivacyPage />} />
             <Route path="/terms"         element={<TermsPage />} />
             <Route path="/accessibility" element={<AccessibilityPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/docs/:slug" element={<DocsPage />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

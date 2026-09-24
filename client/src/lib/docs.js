@@ -1,0 +1,836 @@
+// The Help Center's content. Every article is data, rendered by DocsPage, so
+// adding a page is adding an entry here and nothing else.
+//
+// Blocks: { p }, { list }, { steps }, { img, alt, caption }, { tip },
+// { qa: [{ q, a }] }, { table: { head, rows } }. Text accepts **bold** and
+// [label](/docs/slug) links, nothing more.
+//
+// Screenshots live in /public/docs. The repo is public, so every one was taken
+// with made-up names and sample data in place of real ninjas, parents and
+// staff. Keep it that way when retaking them.
+
+export const DOC_GROUPS = [
+  { id: 'start', label: 'Get started' },
+  { id: 'senseis', label: 'Teaching a class' },
+  { id: 'directors', label: 'Running a center' },
+  { id: 'families', label: 'For families' },
+  { id: 'account', label: 'Your account' },
+  { id: 'help', label: 'Help' },
+];
+
+export const DOCS = [
+  // ── Get started ────────────────────────────────────────────────
+  {
+    slug: 'what-is-dojolink',
+    group: 'start',
+    title: 'What is DojoLink',
+    lede: 'The studio app for Code Ninjas centers: check ninjas in, log what they worked on, and keep families up to date.',
+    image: { src: '/docs/dashboard.jpg', alt: 'The Center Director dashboard with quick links, the daily schedule and the center calendar' },
+    sections: [
+      {
+        title: 'Who it is for',
+        blocks: [
+          { list: [
+            '**Senseis** check ninjas in on Today\'s Board and log each session.',
+            '**Center Directors** do everything a sensei does, plus run the roster, staff, tasks, events and reports for their center.',
+            '**Families** sign in to the Parent Portal to follow their ninja\'s belts, levels and badges.',
+          ] },
+        ],
+      },
+      {
+        title: 'A day in DojoLink',
+        blocks: [
+          { steps: [
+            'A ninja arrives and gets checked in on [Today\'s Board](/docs/todays-board), by a sensei or at the [check-in kiosk](/docs/kiosk).',
+            'During class the sensei opens the ninja and [logs the session](/docs/logging-progress): notes, belt, level and project.',
+            'The ninja\'s belt journey moves forward, and their family sees it in the [Parent Portal](/docs/parent-portal).',
+            'At the end of the week the director checks [Reports](/docs/reports) to see who came, who moved up and who stopped coming.',
+          ] },
+        ],
+      },
+      {
+        title: 'Where to go next',
+        blocks: [
+          { p: 'New here? Start with [Signing in](/docs/signing-in), then read the guide for your role: [Today\'s Board](/docs/todays-board) for senseis, [The dashboard](/docs/dashboard) for directors, or [The Parent Portal](/docs/parent-portal) for families.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'signing-in',
+    group: 'start',
+    title: 'Signing in',
+    lede: 'Staff sign in with a username and password. Families sign in with their center code and the email the center has on file.',
+    image: { src: '/docs/get-started.jpg', alt: 'The Get Started screen asking whether you are a parent or work at a center', narrow: true },
+    sections: [
+      {
+        title: 'Senseis and Center Directors',
+        blocks: [
+          { steps: [
+            'Go to the sign-in page and keep **Sensei / Center Director** selected.',
+            'Enter the username and password your Center Director gave you.',
+            'The first time you sign in you will be asked to choose your own password, confirm your name and pick an avatar.',
+          ] },
+          { tip: 'Forgot your username or password? Your Center Director can look it up and reset it for you from the Staff page. There is no self-service reset for staff accounts.' },
+        ],
+      },
+      {
+        title: 'Families',
+        blocks: [
+          { img: '/docs/login-parent.jpg', alt: 'The parent sign-in form with a center code field and an email field', narrow: true },
+          { steps: [
+            'Choose **Parent** on the sign-in page.',
+            'Type your center\'s code. It is a short code like ABC123 from the front desk, the welcome email or a center flyer.',
+            'Type the email address your center has on file for your family.',
+            'Tick **Keep me signed in on this device** if it is your own phone or computer.',
+          ] },
+          { p: 'There is no password for the Parent Portal. The center code and your email together are what sign you in. Read more in [Center codes](/docs/center-codes).' },
+        ],
+      },
+      {
+        title: 'Not sure where to start?',
+        blocks: [
+          { p: 'The **Get Started** button on the home page walks you through signing in one question at a time. On the sign-in page, **Need help signing in?** answers the most common questions.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'roles',
+    group: 'start',
+    title: 'Roles and permissions',
+    lede: 'What a sensei, a Center Director and an administrator can each see and change.',
+    sections: [
+      {
+        title: 'At a glance',
+        blocks: [
+          { table: {
+            head: ['', 'Sensei', 'Center Director', 'Admin'],
+            rows: [
+              ['Today\'s Board and check-in', 'Yes', 'Yes', 'Yes'],
+              ['Log sessions and club sessions', 'Yes', 'Yes', 'Yes'],
+              ['Ninja roster and profiles', 'View', 'Full', 'Full'],
+              ['Curriculum and passcodes', 'Yes', 'Yes', 'Yes'],
+              ['Center calendar', 'View', 'Edit', 'Edit'],
+              ['Tasks', 'Their own', 'Whole center', 'Whole center'],
+              ['Staff accounts', 'View', 'Their center', 'Every center'],
+              ['Reports, events, kiosk', 'No', 'Yes', 'Yes'],
+              ['Create or delete a location', 'No', 'No', 'Yes'],
+            ],
+          } },
+        ],
+      },
+      {
+        title: 'More than one center',
+        blocks: [
+          { p: 'Staff who work at more than one center switch between them with the center picker at the top of the sidebar. Everything you see and change is scoped to the center you have picked.' },
+          { p: 'A Center Director can look at any active center, but can only make changes at the centers they belong to.' },
+        ],
+      },
+    ],
+  },
+
+  // ── Teaching a class ───────────────────────────────────────────
+  {
+    slug: 'todays-board',
+    group: 'senseis',
+    title: 'Today\'s Board',
+    lede: 'Everyone checked in today, in one place. Check a ninja in, then log their session from their card.',
+    image: { src: '/docs/todays-board.jpg', alt: 'Today\'s Board showing checked-in ninjas with a Log Progress button on each card' },
+    sections: [
+      {
+        title: 'Checking a ninja in',
+        blocks: [
+          { steps: [
+            'Select **+ Check In Ninja** at the top right.',
+            'Search for the ninja by name.',
+            'Select **Add** next to the class they are here for. If you are not sure, use **Add without class** and pick when you log.',
+          ] },
+          { img: '/docs/check-in.jpg', alt: 'The Check In Ninja dialog listing ninjas with an Add button for each of their classes' },
+          { tip: 'A ninja booked in more than one class today can be added once per class. Each one gets its own card and its own log.' },
+        ],
+      },
+      {
+        title: 'Reading the board',
+        blocks: [
+          { list: [
+            '**Logged today**, **Pending** and **Overdue** at the top count where every card stands. Overdue is a check-in from an earlier day that was never logged.',
+            'The program chips filter the board to one program.',
+            'A yellow dot on a card means it still needs a log. A note icon beside a name means there is a pinned note or a note from the parent. Hover or tap it to read.',
+            'The board refreshes itself every 30 seconds, so check-ins from the kiosk or another sensei appear without reloading.',
+          ] },
+        ],
+      },
+      {
+        title: 'Booked in MyStudio',
+        blocks: [
+          { p: 'If your center has connected MyStudio, the people icon beside **Check In Ninja** shows who is booked today. Tap a name to check them in. See [MyStudio](/docs/mystudio).' },
+        ],
+      },
+      {
+        title: 'Removing a check-in',
+        blocks: [
+          { p: 'Use the × on a card to take a ninja off today\'s board, for example if they were checked in by mistake.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'logging-progress',
+    group: 'senseis',
+    title: 'Logging a session',
+    lede: 'Write down what a ninja worked on, where they are on the belt ladder, and how far they got.',
+    image: { src: '/docs/log-progress.jpg', alt: 'The Log Today\'s Session form with session notes, belt, level, project and status' },
+    sections: [
+      {
+        title: 'Writing the log',
+        blocks: [
+          { steps: [
+            'On Today\'s Board, select **Log Progress** on the ninja\'s card.',
+            'Write **session notes**. They are required: what the ninja worked on, and any wins or struggles.',
+            'For CREATE, check the **belt** and **level**, then pick the **project** and its status: Started, Working On or Completed.',
+            'Worked on more than one project? Select **+ Add Another Project**. Each project can sit on its own belt and level.',
+            'Select **Log Progress**.',
+          ] },
+          { p: 'Once the ninja has nothing left to log today, you are taken back to Today\'s Board. If they are in another class too, the form moves on to that class instead.' },
+        ],
+      },
+      {
+        title: 'Formatting notes',
+        blocks: [
+          { p: 'Notes support bold, italics, links and lists from the toolbar above the box. Links you type are saved but do not open while you are writing, so a stray click will not take you off the page.' },
+        ],
+      },
+      {
+        title: 'Fixing a log',
+        blocks: [
+          { p: 'Open the ninja\'s profile and find the session under their progress history. You can edit or delete a log you wrote. Center Directors can fix anyone\'s.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'ninja-profiles',
+    group: 'senseis',
+    title: 'Ninja profiles',
+    lede: 'A ninja\'s belt journey, activity, notes and family contact on one page.',
+    image: { src: '/docs/student-profile.jpg', alt: 'A ninja profile with a pinned note, the belt journey and an activity chart' },
+    sections: [
+      {
+        title: 'What is on a profile',
+        blocks: [
+          { list: [
+            '**Pinned note**: anything every sensei should know before working with this ninja. It also shows on their card on Today\'s Board.',
+            '**Note from parent**: written by the family in the Parent Portal. It appears inside the pinned note card.',
+            '**Belt journey**: every belt on the ladder, with how far the ninja is toward the next one.',
+            '**Activity**: sessions over the last six months, including club sessions.',
+            '**Progress history**: every logged session, newest first.',
+          ] },
+        ],
+      },
+      {
+        title: 'Pinning a note',
+        blocks: [
+          { p: 'Select **Add note** on the pinned note card, write the note and save. Keep it short and useful to the next sensei. Pinned notes can use bold, lists and links.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'clubs',
+    group: 'senseis',
+    title: 'Clubs',
+    lede: 'Weekly optional clubs like Minecraft or 3D printing, and the sessions logged for them.',
+    image: { src: '/docs/clubs.jpg', alt: 'The Clubs page with a card for each club and the day it meets' },
+    sections: [
+      {
+        title: 'Running a club session',
+        blocks: [
+          { steps: [
+            'On Today\'s Board, select **+ Check In Club** and pick the club.',
+            'After the session, open it and log who came and what the group worked on.',
+          ] },
+          { p: 'Club sessions count as a visit for every ninja who came, so they show up in the ninja\'s activity and in [Reports](/docs/reports).' },
+        ],
+      },
+      {
+        title: 'Creating a club',
+        blocks: [
+          { p: 'Center Directors create clubs from **+ Create Club** on the Clubs page, with a name, the day it meets, a description and an optional cover photo.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'curriculum',
+    group: 'senseis',
+    title: 'Curriculum and passcodes',
+    lede: 'Every program\'s modules, lessons and projects, plus the lesson passcodes senseis need in class.',
+    image: { src: '/docs/curriculum.jpg', alt: 'The curriculum page showing the CREATE belt road and the White belt levels' },
+    sections: [
+      {
+        title: 'Finding a lesson',
+        blocks: [
+          { steps: [
+            'Open **Curriculum** from the sidebar, or from the button on Today\'s Board.',
+            'Pick a program from the tabs: CREATE, JR, AI Academy, Robotics Academy or VR Coding.',
+            'For CREATE, tap a belt on the belt road, then a level, to see its projects.',
+          ] },
+        ],
+      },
+      {
+        title: 'Passcodes',
+        blocks: [
+          { p: 'Switch from **Course** to **Resources** to find the AI Academy and Robotics Academy lesson completion passcodes. They are only visible to signed-in staff.' },
+        ],
+      },
+    ],
+  },
+
+  // ── Running a center ───────────────────────────────────────────
+  {
+    slug: 'dashboard',
+    group: 'directors',
+    title: 'The dashboard',
+    lede: 'Where Center Directors land after signing in: quick links, today\'s schedule, the center calendar and check-ins.',
+    image: { src: '/docs/dashboard.jpg', alt: 'The dashboard with quick links, the daily schedule, the calendar and a check-ins chart' },
+    sections: [
+      {
+        title: 'What is on it',
+        blocks: [
+          { list: [
+            '**Quick links** to Tasks, Today\'s Board, Events, Reports, Curriculum and What\'s New.',
+            '**Daily schedule**: today\'s classes and who is booked, when MyStudio is connected.',
+            '**Calendar**: center events and ninja birthdays. Select **+ New event** or any day to add one.',
+            '**Check-ins**: how many ninjas came this week, with **View all** for longer ranges.',
+          ] },
+          { tip: 'Hover over **Dashboard** in the sidebar to jump straight to Events, Tasks, Reports, Curriculum or What\'s New.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'roster',
+    group: 'directors',
+    title: 'Managing the roster',
+    lede: 'Add ninjas one at a time, import a whole roster, and archive ninjas who have left.',
+    image: { src: '/docs/roster.jpg', alt: 'The Ninjas roster with program filters, belts and last session dates' },
+    sections: [
+      {
+        title: 'Adding a ninja',
+        blocks: [
+          { p: 'Select **+ Add Ninja**, fill in their name, birthday, parent contact and programs, and save. The parent email is what the family signs in to the Parent Portal with, so get it right.' },
+        ],
+      },
+      {
+        title: 'Importing a CSV',
+        blocks: [
+          { steps: [
+            'Select **Import CSV** and choose your export file.',
+            'Review the preview. It lists who will be added, who is already here, and any belt changes found.',
+            'Tick the belt changes you want applied. They are off by default.',
+            'Select **Apply Changes** to confirm.',
+          ] },
+          { tip: 'A CSV import treats the file as the full roster. Active ninjas missing from the file are offered for archiving, so always import a complete export, never a partial one.' },
+        ],
+      },
+      {
+        title: 'Pulling from MyStudio',
+        blocks: [
+          { p: '**Pull from MyStudio** adds members MyStudio has and DojoLink does not. It never archives anyone and only changes an existing ninja if you tick the change. See [MyStudio](/docs/mystudio).' },
+        ],
+      },
+      {
+        title: 'Archiving',
+        blocks: [
+          { p: 'Archive a ninja from their profile when they leave. Their history is kept and **Archived** on the roster lets you restore them. **Delete Permanently** removes the ninja and every log, and cannot be undone.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'staff',
+    group: 'directors',
+    title: 'Managing staff',
+    lede: 'Create sensei accounts, reset logins, and archive staff who have moved on.',
+    image: { src: '/docs/staff.jpg', alt: 'The Center Staff page listing senseis and directors with their progress log counts' },
+    sections: [
+      {
+        title: 'Adding a sensei',
+        blocks: [
+          { steps: [
+            'Select **+ Add Staff** and enter their name and a username.',
+            'DojoLink creates a temporary password and shows it once. Copy both and give them to the sensei.',
+            'On their first sign-in they choose their own password.',
+          ] },
+        ],
+      },
+      {
+        title: 'Resetting a login',
+        blocks: [
+          { p: 'Select a staff member to open their ID card, then **Reset Login**. They get a new temporary password and choose a new one when they next sign in.' },
+        ],
+      },
+      {
+        title: 'Archiving staff',
+        blocks: [
+          { p: 'Archived staff can no longer sign in, but the sessions they logged stay on every ninja\'s history. Find them again under **Archived**.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'tasks',
+    group: 'directors',
+    title: 'Tasks',
+    lede: 'A shared to-do board for the center, with assignees, due dates, checklists and comments.',
+    image: { src: '/docs/tasks.jpg', alt: 'The Tasks board with To do, In progress and Done columns' },
+    sections: [
+      {
+        title: 'Two ways to add a task',
+        blocks: [
+          { list: [
+            '**Quick add** (the + on a column, or Quick add under it) is for a one-line task. Type it and press Enter. Quick tasks go to the whole center, so every staff member can see them.',
+            '**Add task** at the top opens the full editor for a due date, named assignees, a checklist and notes.',
+          ] },
+        ],
+      },
+      {
+        title: 'Moving tasks along',
+        blocks: [
+          { list: [
+            'Use the arrows on a card to move it to the previous or next column.',
+            'On a wide screen, drag a card to reorder it or move it between columns.',
+            'On a phone, swipe a card right for the next column and left for the previous one.',
+            '**Board** and **List** switch between the columns and a table of every task.',
+          ] },
+        ],
+      },
+      {
+        title: 'Comments and mentions',
+        blocks: [
+          { p: 'Open a task to comment on it. Type @ to mention someone. They see a red count on their Tasks link and on the task until they open it.' },
+        ],
+      },
+      {
+        title: 'Deleting',
+        blocks: [
+          { p: 'Deleted tasks go to **Recently deleted** for 14 days, where you can restore them. On a phone, hold a card until it jiggles, then swipe it to delete. On a desktop, drag it past the last column.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'events',
+    group: 'directors',
+    title: 'Event listings',
+    lede: 'Promote camps, parent nights and other events to families on the Parent Portal home page.',
+    image: { src: '/docs/event-editor.jpg', alt: 'The New listing form with title, subtitle, sign-up link, date, times, banner image and description' },
+    sections: [
+      {
+        title: 'Creating a listing',
+        blocks: [
+          { steps: [
+            'Open **Events** from the dashboard and select **+ New listing**.',
+            'Add a title, a short subtitle and a sign-up link, such as a MyStudio event page or a form.',
+            'Add a date and times if the event has them, a wide banner image (about 1600 × 800), and a description.',
+            'Select **Publish** to show it to families, or **Save draft** to finish later.',
+          ] },
+        ],
+      },
+      {
+        title: 'What families see',
+        blocks: [
+          { p: 'Published listings rotate as a slideshow at the top of the Parent Portal. **Learn more** opens the full details and the sign-up button.' },
+          { p: 'A listing with a date comes down by itself once the day has passed. One without a date stays up until you unpublish it. The dot on each card shows its state: green is live, amber is a draft, grey has ended.' },
+          { tip: 'Listings are separate from the staff calendar on purpose. Nothing you write on the calendar is ever shown to families.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'reports',
+    group: 'directors',
+    title: 'Reports',
+    lede: 'Who came, when the room is busiest, who moved up a belt, and who has stopped coming.',
+    image: { src: '/docs/reports-overview.jpg', alt: 'The Reports overview with ninjas who came, visits, belt-ups and stopped coming, and a daily chart' },
+    sections: [
+      {
+        title: 'Filters',
+        blocks: [
+          { p: 'Pick a **center** (or All centers), a **period** and a **program** at the top. Every tab uses the same filters, and they stay in the page link, so you can bookmark or share a view.' },
+          { p: 'Rolling periods like Last 4 weeks end yesterday, so a half-finished today does not drag the numbers down.' },
+        ],
+      },
+      {
+        title: 'The four tabs',
+        blocks: [
+          { list: [
+            '**Overview**: the headline numbers against the period before, ninjas each day, and a usual weekday.',
+            '**Attendance**: how many ninjas are in the room at once, by weekday and hour. Useful for staffing.',
+            '**Students**: roster size, how often ninjas come, who stopped coming, and enrollment by program and belt.',
+            '**Progress**: belt-ups, sessions logged each week, and sessions logged by each sensei.',
+          ] },
+          { img: '/docs/reports-attendance.jpg', alt: 'The Attendance tab heatmap of ninjas in the room at once by weekday and hour' },
+        ],
+      },
+      {
+        title: 'How the numbers are counted',
+        blocks: [
+          { list: [
+            'A **visit** is a ninja at a center on a day, from the board or a club.',
+            'A **belt-up** is the first log at a new belt, when the ninja already had logs at a lower one.',
+            '**Stopped coming** lists ninjas who came in the period before and not in this one.',
+            'A comparison is only shown when there is data for the whole previous period.',
+          ] },
+          { img: '/docs/reports-students.jpg', alt: 'The Students tab with roster counts, the stopped coming list and how often ninjas come' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'kiosk',
+    group: 'directors',
+    title: 'Check-in kiosk',
+    lede: 'Let families check their ninja in on a tablet at the front desk.',
+    image: { src: '/docs/kiosk-setup.jpg', alt: 'The Kiosk setup page with start with, names, classes shown and color options' },
+    sections: [
+      {
+        title: 'Setting it up',
+        blocks: [
+          { steps: [
+            'Open **Check-in kiosk** from the dashboard.',
+            'Choose whether families **start with** their ninja\'s name or with the class.',
+            'Choose whether every name is listed, or only names that match what a family types.',
+            'Choose which classes show: all day, or only those starting near now.',
+            'Pick a color, then select **Open the kiosk** on the tablet you will leave at the counter.',
+          ] },
+          { p: 'Each kiosk check-in is sent to MyStudio and appears on Today\'s Board. The kiosk needs your center\'s MyStudio check-in portal to be signed in.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'mystudio',
+    group: 'directors',
+    title: 'MyStudio',
+    lede: 'Connect your center\'s MyStudio account to see who is booked today and import your roster.',
+    sections: [
+      {
+        title: 'Before you start',
+        blocks: [
+          { p: 'The MyStudio connection is an **experimental** feature. MyStudio can change without notice, and when it does, check-in simply falls back to the manual way. Turn it on under **Account → Experimental**.' },
+        ],
+      },
+      {
+        title: 'Connecting',
+        blocks: [
+          { steps: [
+            'Go to **Account → Experimental** and open the MyStudio panel.',
+            'Sign in with your MyStudio email and password.',
+            'Enter the six-digit code MyStudio emails you.',
+          ] },
+          { p: 'Each center connects its own account. If signing in does not work, **Paste a cookie instead** is a backup: in MyStudio, open developer tools, reload the home page, and copy the first request (named **home**) as cURL.' },
+        ],
+      },
+      {
+        title: 'When it runs out',
+        blocks: [
+          { p: 'MyStudio sign-ins expire. When yours does, Today\'s Board says so and links straight to the panel. Sign in again and enter the new code.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'admin-settings',
+    group: 'directors',
+    title: 'Admin settings',
+    lede: 'Center details, center codes, staff accounts across the center, and the shared curriculum.',
+    sections: [
+      {
+        title: 'Getting there',
+        blocks: [
+          { p: 'Open **Account**, then **Admin settings**. Directors see only the centers they belong to.' },
+        ],
+      },
+      {
+        title: 'Your center code',
+        blocks: [
+          { p: 'Every center has a short code that families type when they sign in. Set it under Locations, then put it on your welcome email and front desk flyer. See [Center codes](/docs/center-codes).' },
+        ],
+      },
+      {
+        title: 'Shared settings',
+        blocks: [
+          { tip: 'Curriculum and app settings are shared by every center. A change you make there shows up at the other centers too.' },
+        ],
+      },
+    ],
+  },
+
+  // ── For families ───────────────────────────────────────────────
+  {
+    slug: 'parent-portal',
+    group: 'families',
+    title: 'The Parent Portal',
+    lede: 'Follow your ninja\'s belts, levels, badges and recent sessions, and hear about events at your center.',
+    sections: [
+      {
+        title: 'Home',
+        blocks: [
+          { p: 'Home shows every ninja in your family, each with their own banner. Tap a ninja to open their profile. Events from your center rotate across the top.' },
+        ],
+      },
+      {
+        title: 'Your ninja\'s profile',
+        blocks: [
+          { list: [
+            '**Belt road**: every CREATE belt, with the one your ninja is on lit up. Tap a belt to see what it covers.',
+            '**Courses**: each program your ninja is in, with the levels or modules they have finished.',
+            '**Sticker book**: a badge for every CREATE level your ninja completes.',
+            '**Recent sessions**: what they worked on in class.',
+          ] },
+        ],
+      },
+      {
+        title: 'Leaving a note for the senseis',
+        blocks: [
+          { p: 'Use the note on your ninja\'s profile to tell the senseis anything they should know. It is shown to staff when they work with your ninja.' },
+        ],
+      },
+      {
+        title: 'Settings',
+        blocks: [
+          { p: 'Under **Account**, **Your ninjas** lets you pick which ninja character represents each of your children in the portal.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'center-codes',
+    group: 'families',
+    title: 'Center codes',
+    lede: 'The short code that tells DojoLink which center your family belongs to.',
+    sections: [
+      {
+        title: 'What it is',
+        blocks: [
+          { p: 'Each Code Ninjas center has its own code, like ABC123. You type it with your email when you sign in to the Parent Portal. It makes sure you only ever see your own center.' },
+        ],
+      },
+      {
+        title: 'Where to find it',
+        blocks: [
+          { list: [
+            'Ask at the front desk.',
+            'Check the welcome email or flyer from your center.',
+          ] },
+        ],
+      },
+    ],
+  },
+
+  // ── Your account ───────────────────────────────────────────────
+  {
+    slug: 'account',
+    group: 'account',
+    title: 'Profile and password',
+    lede: 'Change your name, username, avatar and password.',
+    image: { src: '/docs/account.jpg', alt: 'The Edit profile page with the staff ID card', narrow: false },
+    sections: [
+      {
+        title: 'Editing your profile',
+        blocks: [
+          { list: [
+            'Tap your **name** on the ID card to retype it. Press Enter to save.',
+            'Tap the **photo** to step through the avatars.',
+            'Tap anywhere else on the card to turn it over. Your **username** is on the back, and you can tap it to change it.',
+          ] },
+        ],
+      },
+      {
+        title: 'Changing your password',
+        blocks: [
+          { p: 'Open **Account → Password**, enter your current password and the new one twice.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'appearance',
+    group: 'account',
+    title: 'Appearance and display',
+    lede: 'Dark mode, accent colors and the navigation layout.',
+    sections: [
+      {
+        title: 'Light and dark',
+        blocks: [
+          { p: 'Use the sun icon at the bottom of the sidebar to switch between light and dark. On a phone, open **Account → Appearance**.' },
+        ],
+      },
+      {
+        title: 'Navigation layout',
+        blocks: [
+          { p: 'Under **Account → Display**, choose between a sidebar and a top bar.' },
+        ],
+      },
+      {
+        title: 'Reduced motion',
+        blocks: [
+          { p: 'If your device is set to reduce motion, DojoLink turns off its animations to match.' },
+        ],
+      },
+    ],
+  },
+
+  // ── Help ───────────────────────────────────────────────────────
+  {
+    slug: 'faq',
+    group: 'help',
+    title: 'Frequently asked questions',
+    lede: 'Quick answers to the questions we hear most.',
+    sections: [
+      {
+        title: 'Staff',
+        blocks: [
+          { qa: [
+            { q: 'I checked in the wrong ninja.', a: 'Use the × on their card on Today\'s Board to remove the check-in.' },
+            { q: 'A ninja did two classes today.', a: 'Check them in once per class. Each class gets its own card and its own log.' },
+            { q: 'The board still shows a ninja from yesterday.', a: 'That check-in was never logged, so it counts as overdue. Log it, or remove it if they did not come.' },
+            { q: 'Can I log a project from a different belt?', a: 'Yes. Add another project to the log and choose its own belt and level.' },
+          ] },
+        ],
+      },
+      {
+        title: 'Families',
+        blocks: [
+          { qa: [
+            { q: 'Do I need a password?', a: 'No. You sign in with your center code and the email your center has on file.' },
+            { q: 'It says my code and email do not match.', a: 'Check the code for typos, then try any other email you might have given the center. If it still does not work, ask your Center Director which email is on file.' },
+            { q: 'Why has my ninja\'s belt not changed?', a: 'The portal updates when a sensei logs a session. If something looks wrong, ask at the front desk.' },
+          ] },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'troubleshooting',
+    group: 'help',
+    title: 'Troubleshooting',
+    lede: 'What to try when something is not working.',
+    sections: [
+      {
+        title: 'Common fixes',
+        blocks: [
+          { qa: [
+            { q: 'I was signed out suddenly.', a: 'Sessions end after a while for safety. Sign in again and you will be back where you were.' },
+            { q: 'A new feature is not showing.', a: 'Refresh the page. If DojoLink is installed on your home screen, close it fully and open it again.' },
+            { q: 'I cannot switch to another center.', a: 'Sign out and back in once so DojoLink picks up the centers you were added to.' },
+            { q: 'Booked ninjas are not showing on Today\'s Board.', a: 'Your MyStudio sign-in has probably run out. Follow the link on the board to sign in again.' },
+            { q: 'A photo or cover image will not upload.', a: 'Try a smaller JPG or PNG. If it keeps failing, report it with the steps below.' },
+          ] },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'glossary',
+    group: 'help',
+    title: 'Glossary',
+    lede: 'The words you will see around DojoLink and the dojo.',
+    sections: [
+      {
+        title: 'People',
+        blocks: [
+          { table: {
+            head: ['Term', 'Meaning'],
+            rows: [
+              ['Ninja', 'A student.'],
+              ['Sensei', 'An instructor who works with ninjas in class.'],
+              ['Center Director (CD)', 'The person who runs a center.'],
+            ],
+          } },
+        ],
+      },
+      {
+        title: 'Programs',
+        blocks: [
+          { table: {
+            head: ['Program', 'What it is'],
+            rows: [
+              ['CREATE', 'The core game-building program, organized as a ladder of belts and levels.'],
+              ['JR', 'The program for younger ninjas.'],
+              ['Robotics Academy', 'Robotics kits, organized as kits and modules.'],
+              ['AI Academy', 'Artificial intelligence lessons.'],
+              ['VR Coding', 'Coding in virtual reality.'],
+            ],
+          } },
+        ],
+      },
+      {
+        title: 'Belts',
+        blocks: [
+          { p: 'CREATE belts go White, Yellow, Orange, Green, Blue, Purple, Brown, Red and Black, then Bronze, Silver, Platinum and Gold. Each belt has its own levels, and each level has its own projects.' },
+        ],
+      },
+      {
+        title: 'In the app',
+        blocks: [
+          { table: {
+            head: ['Term', 'Meaning'],
+            rows: [
+              ['Check-in', 'Adding a ninja to Today\'s Board for a class.'],
+              ['Log', 'The record of what a ninja did in a session.'],
+              ['Visit', 'A ninja at a center on a given day.'],
+              ['Belt-up', 'Moving up to the next belt.'],
+              ['Center code', 'The short code families use to sign in.'],
+            ],
+          } },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'contact',
+    group: 'help',
+    title: 'Report a problem',
+    lede: 'Tell us about a bug or suggest something new.',
+    sections: [
+      {
+        title: 'Staff',
+        blocks: [
+          { p: 'Select the rocket icon beside your name at the bottom of the sidebar. Choose **Report a Bug** or **Suggest a Feature**, describe it, and send. Say what you were doing and what you expected to happen.' },
+        ],
+      },
+      {
+        title: 'Families',
+        blocks: [
+          { p: 'Use the rocket icon in the Parent Portal, or ask your Center Director. For anything about your ninja\'s classes, the front desk is the fastest way.' },
+        ],
+      },
+    ],
+  },
+];
+
+export const docBySlug = (slug) => DOCS.find((d) => d.slug === slug);
+
+// A slug for a section heading, used for the "On this page" anchors.
+export const sectionId = (title) =>
+  title.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// Plain text of an article for search: title, lede, headings and body.
+export function docText(doc) {
+  const parts = [doc.title, doc.lede];
+  for (const s of doc.sections) {
+    parts.push(s.title);
+    for (const b of s.blocks) {
+      if (b.p) parts.push(b.p);
+      if (b.tip) parts.push(b.tip);
+      if (b.list) parts.push(...b.list);
+      if (b.steps) parts.push(...b.steps);
+      if (b.qa) b.qa.forEach(({ q, a }) => parts.push(q, a));
+      if (b.table) b.table.rows.forEach((r) => parts.push(...r));
+    }
+  }
+  return parts.join(' ').replace(/\*\*|\[|\]\([^)]*\)/g, '').toLowerCase();
+}
