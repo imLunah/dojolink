@@ -274,7 +274,10 @@ function AreaChart({ points, height = 120, gradientId, className = '', formatLab
       className={`w-full ${className}`}
       style={{ height }}
     >
-      <RechartsAreaChart data={data} margin={CHART_MARGIN}>
+      {/* No accessibility layer: the chart sits inside a button (or a
+          dialog that reads out the same numbers), and a focusable chart
+          inside a button drew its own blue ring after a click. */}
+      <RechartsAreaChart data={data} margin={CHART_MARGIN} accessibilityLayer={false}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-count)" stopOpacity="0.32" />

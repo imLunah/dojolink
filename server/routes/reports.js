@@ -588,16 +588,20 @@ router.get('/attendance', requireSensei, async (req, res) => {
   const days = Math.min(365, Math.max(7, parseInt(req.query.days, 10) || 120));
   const params = all ? [locationId] : [locationId, days];
   try {
+    // A check-in is a visit, board or club, counted the same way Reports
+    // counts it (visitsSql), so the dashboard and Reports never disagree
+    // about how many ninjas came on a day.
+    const visits = visitsSql({
+      from: all ? "'2000-01-01'" : '(CURRENT_DATE - ($2::int - 1))',
+      to: 'CURRENT_DATE',
+      program: 'NULL',
+      locs: 'ARRAY[$1::int]',
+    });
     const { rows } = await pool.query(`
-      SELECT to_char(da.session_date, 'YYYY-MM-DD') AS day,
-             COUNT(DISTINCT da.student_id)::int AS count
-      FROM daily_assignments da
-      JOIN students s ON da.student_id = s.id
-      WHERE EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $1)
-        AND da.session_date <= CURRENT_DATE
-        ${all ? '' : 'AND da.session_date >= CURRENT_DATE - ($2::int - 1)'}
-      GROUP BY da.session_date
-      ORDER BY da.session_date ASC
+      SELECT to_char(v.day, 'YYYY-MM-DD') AS day, COUNT(DISTINCT v.student_id)::int AS count
+      FROM (${visits}) v
+      GROUP BY v.day
+      ORDER BY v.day ASC
     `, params);
     res.json({ range: all ? 'all' : String(days), attendance: rows });
   } catch (err) {
