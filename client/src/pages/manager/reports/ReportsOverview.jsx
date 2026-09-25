@@ -52,18 +52,13 @@ function Legend({ showPrev }) {
   );
 }
 
-function VisitsChart({ data, showPrev, total, delta }) {
+function VisitsChart({ data, showPrev }) {
   return (
     <Card
       title="Ninjas each day"
       className="xl:col-span-2"
       action={<Legend showPrev={showPrev} />}
     >
-      <div className="mb-4 flex items-baseline gap-2">
-        <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums text-ninja-navy">{total}</span>
-        <span className="text-[13px] text-ninja-muted">visits</span>
-        {delta}
-      </div>
       {data.length === 0 ? <Empty>No check-ins in this period.</Empty> : (
         <ChartContainer config={CHART_CONFIG} className="w-full" style={{ height: 260 }}>
           <ComposedChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
@@ -228,8 +223,6 @@ export default function ReportsOverview() {
         <VisitsChart
           data={view.hasVisits ? view.chart : []}
           showPrev={showPrev}
-          total={kpis.visits.cur}
-          delta={<DeltaChip {...kpis.visits} show={showPrev} />}
         />
         <Weekdays rows={view.weekdays} />
         {data.perCenter && <CenterTable rows={data.perCenter} days={period.days} />}
