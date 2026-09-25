@@ -4,7 +4,7 @@ const { requireManager, requireOwnLocation, requireKiosk, kioskLocationId } = re
 const ms = require('../lib/mystudio');
 const { keepSignedIn } = require('../lib/mystudioSession');
 const { addToBoard } = require('../lib/boardCheckIn');
-const { resolveClass } = require('../lib/classMappings');
+const { resolveClass, loadMappings, pickProgram, programsOf, sectionKeyOf } = require('../lib/classMappings');
 
 // The check-in kiosk.
 //
@@ -326,13 +326,15 @@ async function addKioskCheckInToBoard(pool, locationId, booking) {
   if (!studentId) return none;
   if (booking.already) return { ...none, studentId };
 
+  // The class may stand for more than one program (Academies); the ninja gets
+  // the one of them they are enrolled in, or a check-in with no program.
   let program = null;
-  if (booking.program) {
+  if (booking.programs && booking.programs.length) {
     const { rows } = await pool.query(
-      'SELECT 1 FROM student_programs WHERE student_id = $1 AND program = $2',
-      [studentId, booking.program]
+      'SELECT program FROM student_programs WHERE student_id = $1 AND program = ANY($2::text[])',
+      [studentId, booking.programs]
     );
-    if (rows[0]) program = booking.program;
+    program = pickProgram(booking.programs, new Set(rows.map((r) => r.program)));
   }
 
   const date = todayDate();
@@ -568,42 +570,101 @@ router.patch('/setup', requireManager, requireOwnLocation, async (req, res) => {
 // Class names (directors)
 // ---------------------------------------------------------------------------
 
-// Titles a director may want to map: every class the kiosk has checked a
-// ninja into here, today's schedule when the kiosk can read it, and any title
-// already mapped.
-async function classTitlesFor(pool, locationId) {
-  const titles = new Map();
-  const add = (t) => {
-    const title = String(t || '').trim();
-    if (title && !titles.has(title.toLowerCase())) titles.set(title.toLowerCase(), title);
-  };
-  const { rows: seen } = await pool.query(
-    `SELECT DISTINCT class_name FROM mystudio_kiosk_checkins
-      WHERE location_id = $1 AND class_name IS NOT NULL
-        AND created_at > now() - interval '180 days'`,
-    [locationId]
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// The next seven dates in Pacific time, today first.
+function weekDates() {
+  const [y, m, d] = todayDate().split('-').map(Number);
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(Date.UTC(y, m - 1, d + i));
+    return { date: date.toISOString().slice(0, 10), weekday: date.getUTCDay() };
+  });
+}
+
+// A week of this center's classes from the check-in portal, remembered for a
+// few minutes: the page asks again after every save.
+const WEEK_TTL_MS = 5 * 60 * 1000;
+const weekCache = new Map();
+
+async function weekOfClasses(pool, locationId) {
+  const hit = weekCache.get(locationId);
+  if (hit && hit.expiresAt > Date.now()) return hit.classes;
+  const kiosk = await loadKiosk(pool, locationId);
+  if (!kiosk || kiosk.status !== 'connected') return [];
+  const token = ms.decryptCookie(kiosk.portal_token);
+  const days = await Promise.all(
+    weekDates().map(async ({ date, weekday }) => {
+      const list = await ms.portalClassList(token, date);
+      return list.map((c) => ({ c, weekday }));
+    })
   );
-  seen.forEach((r) => add(r.class_name));
+  const classes = days.flat();
+  weekCache.set(locationId, { classes, expiresAt: Date.now() + WEEK_TTL_MS });
+  return classes;
+}
+
+// Every class name a director may want to map, each with its sections (a
+// weekday and time, keyed appointment:times): a week of the schedule, every
+// class the kiosk has checked a ninja into, and anything already mapped.
+async function classNamesFor(pool, locationId) {
+  const names = new Map();
+  const nameFor = (t) => {
+    const title = String(t || '').trim();
+    if (!title) return null;
+    const key = title.toLowerCase();
+    if (!names.has(key)) names.set(key, { title, sections: new Map() });
+    return names.get(key);
+  };
+  const addSection = (name, sectionKey, startTime, weekday) => {
+    if (!name || !sectionKey) return;
+    const s = name.sections.get(sectionKey) || { key: sectionKey, startTime: '', weekdays: new Set() };
+    if (startTime && !s.startTime) s.startTime = startTime;
+    if (weekday != null) s.weekdays.add(weekday);
+    name.sections.set(sectionKey, s);
+  };
+
   try {
-    const kiosk = await loadKiosk(pool, locationId);
-    if (kiosk && kiosk.status === 'connected') {
-      const classes = await ms.portalClassList(ms.decryptCookie(kiosk.portal_token), todayDate());
-      classes.forEach((c) => add(c.class_appointment_title));
+    for (const { c, weekday } of await weekOfClasses(pool, locationId)) {
+      // Drop-ins have no occurrence and never reach the kiosk.
+      if (!String(c.class_appointment_occurrence_id || '')) continue;
+      addSection(
+        nameFor(c.class_appointment_title),
+        `${c.class_appointment_id}:${c.class_appointment_times_id}`,
+        String(c.start_time || '').trim(),
+        weekday
+      );
     }
   } catch (err) {
-    // The log alone is still a useful list.
+    // The check-in log alone is still a useful list.
     console.error('Kiosk class names schedule read failed:', err.message);
   }
-  return titles;
+
+  const { rows: seen } = await pool.query(
+    `SELECT class_name, class_key, MAX(start_time) AS start_time,
+            array_agg(DISTINCT EXTRACT(DOW FROM created_at AT TIME ZONE 'America/Los_Angeles')::int) AS weekdays
+       FROM mystudio_kiosk_checkins
+      WHERE location_id = $1 AND class_name IS NOT NULL
+        AND created_at > now() - interval '180 days'
+      GROUP BY class_name, class_key`,
+    [locationId]
+  );
+  for (const r of seen) {
+    const name = nameFor(r.class_name);
+    for (const w of r.weekdays || []) addSection(name, sectionKeyOf(r.class_key), r.start_time, w);
+  }
+  return names;
+}
+
+function sectionLabel(s) {
+  const days = [...s.weekdays].sort((a, b) => a - b).map((w) => WEEKDAYS[w]).join(', ');
+  const time = String(s.startTime || '').replace(/^0(\d)/, '$1');
+  return [days, time].filter(Boolean).join(' ') || 'Another time';
 }
 
 async function classMappingsShape(pool, locationId) {
-  const titles = await classTitlesFor(pool, locationId);
-  const [{ rows: mapped }, { rows: clubs }] = await Promise.all([
-    pool.query(
-      'SELECT class_title, program, club_id FROM mystudio_class_mappings WHERE location_id = $1',
-      [locationId]
-    ),
+  const [names, mappings, { rows: clubs }] = await Promise.all([
+    classNamesFor(pool, locationId),
+    loadMappings(pool, locationId),
     pool.query(
       `SELECT id, name FROM club_definitions
         WHERE location_id = $1 OR location_id IS NULL
@@ -611,18 +672,44 @@ async function classMappingsShape(pool, locationId) {
       [locationId]
     ),
   ]);
-  const byTitle = new Map(mapped.map((m) => [m.class_title.trim().toLowerCase(), m]));
-  mapped.forEach((m) => { if (!titles.has(m.class_title.trim().toLowerCase())) titles.set(m.class_title.trim().toLowerCase(), m.class_title); });
+  for (const row of mappings.titles.values()) {
+    const key = row.class_title.trim().toLowerCase();
+    if (!names.has(key)) names.set(key, { title: row.class_title, sections: new Map() });
+  }
+  for (const row of mappings.sections.values()) {
+    const key = row.class_title.trim().toLowerCase();
+    if (!names.has(key)) names.set(key, { title: row.class_title, sections: new Map() });
+    const name = names.get(key);
+    if (!name.sections.has(row.section_key)) {
+      name.sections.set(row.section_key, { key: row.section_key, startTime: '', weekdays: new Set() });
+    }
+  }
 
-  const classes = [...titles.entries()]
-    .map(([key, title]) => {
-      const m = byTitle.get(key);
+  const classes = [...names.values()]
+    .map(({ title, sections }) => {
+      const row = mappings.titles.get(title.toLowerCase());
+      const auto = ms.programForClass(title);
       return {
         title,
-        program: m ? m.program : null,
-        clubId: m ? m.club_id : null,
+        programs: row ? programsOf(row) : null,
+        clubId: row ? row.club_id : null,
         // What the kiosk does with this name when nobody has mapped it.
-        automatic: ms.programForClass(title),
+        automatic: auto,
+        looksLikeClub: ms.isClubClass(title),
+        sections: [...sections.values()]
+          .map((s) => {
+            const m = mappings.sections.get(s.key);
+            return {
+              key: s.key,
+              label: sectionLabel(s),
+              // Monday first, then by start time; a time MyStudio did not send sorts last.
+              sort: Math.min(...[...s.weekdays].map((w) => (w + 6) % 7), 7) * 1440 + Math.min(ms.toMinutes(s.startTime), 1439),
+              programs: m ? m.programs : null,
+              clubId: m ? m.club_id : null,
+            };
+          })
+          .sort((a, b) => a.sort - b.sort)
+          .map(({ sort, ...s }) => s),
       };
     })
     .sort((a, b) => a.title.localeCompare(b.title));
@@ -640,20 +727,25 @@ router.get('/class-mappings', requireManager, async (req, res) => {
   }
 });
 
-// PUT /api/kiosk/class-mappings  { title, program?, clubId? }
+// PUT /api/kiosk/class-mappings  { title, sectionKey?, programs?, clubId? }
 //
-// Neither program nor clubId clears the mapping.
+// With a sectionKey it sets one weekday and time of the class; without, the
+// class name as a whole. Neither programs nor clubId clears it.
 router.put('/class-mappings', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   const locationId = req.session.activeLocationId;
   const body = req.body || {};
   const title = String(body.title || '').trim();
-  const program = body.program == null || body.program === '' ? null : String(body.program);
+  const sectionKey = body.sectionKey == null || body.sectionKey === '' ? null : String(body.sectionKey);
+  const programs = Array.isArray(body.programs) && body.programs.length ? [...new Set(body.programs.map(String))] : null;
   const clubId = body.clubId == null || body.clubId === '' ? null : Number(body.clubId);
 
   if (!title || title.length > 120) return res.status(400).json({ error: 'Pick a class name.' });
-  if (program && clubId) return res.status(400).json({ error: 'Pick a program or a club, not both.' });
-  if (program && !ms.PROGRAMS.includes(program)) return res.status(400).json({ error: 'Pick a program.' });
+  if (sectionKey && !/^\d{1,20}:\d{1,20}$/.test(sectionKey)) return res.status(400).json({ error: 'Pick a class time.' });
+  if (programs && clubId !== null) return res.status(400).json({ error: 'Pick a program or a club, not both.' });
+  if (programs && (programs.length > 5 || !programs.every((p) => ms.PROGRAMS.includes(p)))) {
+    return res.status(400).json({ error: 'Pick a program.' });
+  }
 
   try {
     if (clubId !== null) {
@@ -664,20 +756,38 @@ router.put('/class-mappings', requireManager, requireOwnLocation, async (req, re
       );
       if (!rows[0]) return res.status(400).json({ error: 'Pick a club.' });
     }
+    const clear = !programs && clubId === null;
 
-    if (!program && clubId === null) {
+    if (sectionKey) {
+      if (clear) {
+        await pool.query(
+          'DELETE FROM mystudio_class_section_mappings WHERE location_id = $1 AND section_key = $2',
+          [locationId, sectionKey]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO mystudio_class_section_mappings (location_id, section_key, class_title, programs, club_id, updated_by)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (location_id, section_key)
+           DO UPDATE SET class_title = EXCLUDED.class_title, programs = EXCLUDED.programs,
+                         club_id = EXCLUDED.club_id, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+          [locationId, sectionKey, title, programs, clubId, req.session.userId]
+        );
+      }
+    } else if (clear) {
       await pool.query(
         'DELETE FROM mystudio_class_mappings WHERE location_id = $1 AND lower(class_title) = lower($2)',
         [locationId, title]
       );
     } else {
+      // `program` holds the first choice for code that only reads that column.
       await pool.query(
-        `INSERT INTO mystudio_class_mappings (location_id, class_title, program, club_id, updated_by)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO mystudio_class_mappings (location_id, class_title, program, programs, club_id, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (location_id, lower(class_title))
-         DO UPDATE SET program = EXCLUDED.program, club_id = EXCLUDED.club_id,
+         DO UPDATE SET program = EXCLUDED.program, programs = EXCLUDED.programs, club_id = EXCLUDED.club_id,
                        updated_by = EXCLUDED.updated_by, updated_at = now()`,
-        [locationId, title, program, clubId, req.session.userId]
+        [locationId, title, programs ? programs[0] : null, programs, clubId, req.session.userId]
       );
     }
     res.json(await classMappingsShape(pool, locationId));
@@ -981,8 +1091,8 @@ router.post('/checkin', requireKiosk, async (req, res) => {
   // exact-match rule. A class mapped to a club goes into that club instead.
   let board = { studentId: null, assignmentId: null, stoodInFor: null, clubSessionId: null };
   try {
-    const target = await resolveClass(pool, locationId, outcome.className);
-    const booking = { ...outcome, program: target.program, isClub: target.isClub };
+    const target = await resolveClass(pool, locationId, outcome.className, sectionKeyOf(classKey));
+    const booking = { ...outcome, programs: target.programs, isClub: target.isClub };
     board = target.clubName
       ? { ...board, ...(await addKioskCheckInToClub(pool, locationId, booking, target.clubName)) }
       : { ...board, ...(await addKioskCheckInToBoard(pool, locationId, booking)) };

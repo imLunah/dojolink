@@ -1141,6 +1141,9 @@ function normalizeParticipant(p, cls) {
     className: String(cls.class_appointment_title || '').trim(),
     startTime: String(cls.start_time || '').trim(),
     program: programForClass(cls.class_appointment_title),
+    // The class at its weekday and time, which a director can map apart from
+    // its name (lib/classMappings.js).
+    sectionKey: `${cls.class_appointment_id}:${cls.class_appointment_times_id}`,
     // Shown, but never offered as a check-in. See isClubClass.
     isClub: isClubClass(cls.class_appointment_title),
   };

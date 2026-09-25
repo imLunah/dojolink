@@ -73,12 +73,29 @@ function ClassWindowSetting({ minutes, onSave }) {
   );
 }
 
-// What each MyStudio class name is at this center. Centers name classes
-// their own way ("Robotics", "CREATE - Coding", "CLUBS: Minecraft") and the
-// kiosk only places a name that is exactly a program's, so the rest landed on
+// What each MyStudio class is at this center. Centers name classes their
+// own way ("Robotics", "CREATE - Coding", "CLUBS: Minecraft") and the kiosk
+// only places a name that is exactly a program's, so the rest landed on
 // Today's Board with no program. A class mapped to a club puts the ninja in
-// today's session of that club instead of on the board.
-// See server/lib/classMappings.js.
+// today's session of that club instead of on the board. A club that runs on
+// more than one day can send each day to its own club, since centers keep
+// each day's group of kids as a club of its own. See server/lib/classMappings.js.
+
+// A choice of programs: the ninja gets the one they are enrolled in.
+const PROGRAM_CHOICES = [
+  { label: 'Robotics or AI Academy', programs: ['Robotics Academy', 'AI Academy'] },
+];
+
+const selectClass = 'w-64 max-w-full flex-shrink-0 rounded-lg border border-ninja-border bg-white px-2.5 py-1.5 font-ninja text-sm text-ninja-navy focus:outline-none focus:border-ninja-blue';
+
+const encodePrograms = (programs) => `p:${programs.join('|')}`;
+
+function parseValue(value) {
+  if (value.startsWith('c:')) return { programs: null, clubId: Number(value.slice(2)) };
+  if (value.startsWith('p:')) return { programs: value.slice(2).split('|'), clubId: null };
+  return { programs: null, clubId: null };
+}
+
 function ClassNames() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -87,24 +104,29 @@ function ClassNames() {
     api.get('/kiosk/class-mappings').then(setData).catch((err) => setError(err.message));
   }, []);
 
-  const valueOf = (c) => (c.clubId ? `c:${c.clubId}` : c.program ? `p:${c.program}` : c.automatic ? `p:${c.automatic}` : '');
+  const valueOf = (m, automatic) => (m.clubId
+    ? `c:${m.clubId}`
+    : m.programs?.length ? encodePrograms(m.programs) : automatic ? `p:${automatic}` : '');
 
-  const save = async (c, value) => {
-    const program = value.startsWith('p:') ? value.slice(2) : null;
-    const clubId = value.startsWith('c:') ? Number(value.slice(2)) : null;
+  // Optimistic: the picker moves at once and goes back if the save fails.
+  const save = async (c, value, sectionKey = null) => {
+    const { programs, clubId } = parseValue(value);
     // Picking the program the name already matches on its own is the same as
     // no mapping, so it clears rather than storing a copy of the rule.
-    const clear = !value || (program && program === c.automatic);
+    const clear = !value || (!sectionKey && programs?.length === 1 && programs[0] === c.automatic);
+    const next = clear ? { programs: null, clubId: null } : { programs, clubId };
     const before = data;
     setData({
       ...data,
-      classes: data.classes.map((x) => (x.title === c.title
-        ? { ...x, program: clear ? null : program, clubId: clear ? null : clubId }
-        : x)),
+      classes: data.classes.map((x) => {
+        if (x.title !== c.title) return x;
+        if (!sectionKey) return { ...x, ...next };
+        return { ...x, sections: x.sections.map((sec) => (sec.key === sectionKey ? { ...sec, ...next } : sec)) };
+      }),
     });
     setError('');
     try {
-      setData(await api.put('/kiosk/class-mappings', clear ? { title: c.title } : { title: c.title, program, clubId }));
+      setData(await api.put('/kiosk/class-mappings', { title: c.title, sectionKey, ...(clear ? {} : next) }));
     } catch (err) {
       setData(before);
       setError(err.message);
@@ -114,32 +136,61 @@ function ClassNames() {
   if (!data && !error) return null;
   if (data && !data.classes.length) return null;
 
+  const clubOptions = data?.clubs.length > 0 && (
+    <optgroup label="Clubs">
+      {data.clubs.map((club) => <option key={club.id} value={`c:${club.id}`}>{club.name}</option>)}
+    </optgroup>
+  );
+
   return (
     <section className={`${CARD} p-5 space-y-3`}>
       <h2 className="font-ninja font-extrabold text-base text-ninja-navy">MyStudio class names</h2>
       {data && (
         <ul className="divide-y divide-ninja-border">
-          {data.classes.map((c) => (
-            <li key={c.title} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-              <span className="font-ninja text-sm font-bold text-ninja-navy min-w-0 break-words">{c.title}</span>
-              <select
-                aria-label={`What ${c.title} is`}
-                value={valueOf(c)}
-                onChange={(e) => save(c, e.target.value)}
-                className="w-48 rounded-lg border border-ninja-border bg-white px-2.5 py-1.5 font-ninja text-sm text-ninja-navy focus:outline-none focus:border-ninja-blue"
-              >
-                {!c.automatic && <option value="">Not set</option>}
-                <optgroup label="Programs">
-                  {data.programs.map((p) => <option key={p} value={`p:${p}`}>{p}</option>)}
-                </optgroup>
-                {data.clubs.length > 0 && (
-                  <optgroup label="Clubs">
-                    {data.clubs.map((club) => <option key={club.id} value={`c:${club.id}`}>{club.name}</option>)}
-                  </optgroup>
+          {data.classes.map((c) => {
+            // A club's days are only worth listing when there is more than one.
+            const byDay = c.sections.length > 1 && (c.clubId || c.looksLikeClub);
+            return (
+              <li key={c.title} className="py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-ninja text-sm font-bold text-ninja-navy min-w-0 break-words">{c.title}</span>
+                  <select
+                    aria-label={`What ${c.title} is`}
+                    value={valueOf(c, c.automatic)}
+                    onChange={(e) => save(c, e.target.value)}
+                    className={selectClass}
+                  >
+                    {!c.automatic && <option value="">Not set</option>}
+                    <optgroup label="Programs">
+                      {data.programs.map((p) => <option key={p} value={`p:${p}`}>{p}</option>)}
+                      {PROGRAM_CHOICES.map((choice) => (
+                        <option key={choice.label} value={encodePrograms(choice.programs)}>{choice.label}</option>
+                      ))}
+                    </optgroup>
+                    {clubOptions}
+                  </select>
+                </div>
+                {byDay && (
+                  <ul className="mt-2 space-y-2 pl-4">
+                    {c.sections.map((sec) => (
+                      <li key={sec.key} className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-ninja text-sm text-ninja-muted min-w-0">{sec.label}</span>
+                        <select
+                          aria-label={`What ${c.title} on ${sec.label} is`}
+                          value={valueOf(sec, null)}
+                          onChange={(e) => save(c, e.target.value, sec.key)}
+                          className={selectClass}
+                        >
+                          <option value="">Same as above</option>
+                          {clubOptions}
+                        </select>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </select>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}
