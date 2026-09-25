@@ -20,6 +20,9 @@ const EASE = [0.23, 1, 0.32, 1];
 // one's name on screen. A half-finished search or class pick goes back after
 // a stretch with no taps.
 const AUTO_BACK_S = 10;
+// Longer when the finished screen is offering the ninja's other classes, so
+// a family has time to read the list before it goes.
+const AUTO_BACK_MORE_S = 20;
 const IDLE_MS = 30000;
 const AUTO_BACK_STEPS = new Set(['done', 'undone', 'error']);
 const RESULT_STEPS = new Set(['confirm', 'working', 'done', 'undone', 'error']);
@@ -139,6 +142,9 @@ export default function KioskPage() {
   const homeStep = useRef('search');
   const [secondsLeft, setSecondsLeft] = useState(AUTO_BACK_S);
   const [outcome, setOutcome] = useState(null);
+  // The ninja's other classes today that they are not checked in to yet,
+  // offered on the finished screen. Null until read.
+  const [moreClasses, setMoreClasses] = useState(null);
   const inputRef = useRef(null);
   const searchSeq = useRef(0);
 
@@ -159,6 +165,7 @@ export default function KioskPage() {
     setPicked(null);
     setMode('checkin');
     setOutcome(null);
+    setMoreClasses(null);
     setRoster(null);
     setRosterQuery('');
     setConfirmFrom(null);
@@ -199,9 +206,10 @@ export default function KioskPage() {
   // The count lives in the interval, not in state: a screen that timed out
   // used to leave secondsLeft at 0, and the next result screen read that 0 on
   // its first render and closed itself before anyone saw it.
+  const offeringMore = step === 'done' && Boolean(moreClasses?.length);
   useLayoutEffect(() => {
     if (!AUTO_BACK_STEPS.has(step)) return undefined;
-    let left = AUTO_BACK_S;
+    let left = offeringMore ? AUTO_BACK_MORE_S : AUTO_BACK_S;
     setSecondsLeft(left);
     const id = setInterval(() => {
       left -= 1;
@@ -209,7 +217,7 @@ export default function KioskPage() {
       else setSecondsLeft(left);
     }, 1000);
     return () => clearInterval(id);
-  }, [step, reset]);
+  }, [step, reset, offeringMore]);
 
   useEffect(() => {
     if (step === 'classes' || step === 'roster' || step === 'confirm' || (step === 'search' && query)) {
@@ -287,18 +295,40 @@ export default function KioskPage() {
     }
   };
 
-  const confirm = async () => {
-    if (!picked || !member) return;
+  // After a check-in, the same child's other classes today, read fresh so a
+  // class they were just booked into shows as checked in and drops out. A
+  // failed read just means no offer; the check-in itself already worked.
+  const loadMoreClasses = async (kid, justDone) => {
+    setMoreClasses(null);
+    try {
+      const data = await api.get(`/kiosk/classes?participantId=${encodeURIComponent(kid.participantId)}`);
+      setMoreClasses((data.classes || []).filter((c) => !c.checkedIn && c.classKey !== justDone));
+    } catch {
+      setMoreClasses([]);
+    }
+  };
+
+  const checkIn = async (c) => {
+    setPicked(c);
+    setMode('checkin');
     setStep('working');
     try {
-      const body = { participantId: member.participantId, classKey: picked.classKey };
-      if (mode === 'undo') {
-        setOutcome(await api.post('/kiosk/undo', body));
-        setStep('undone');
-      } else {
-        setOutcome(await api.post('/kiosk/checkin', body));
-        setStep('done');
-      }
+      setOutcome(await api.post('/kiosk/checkin', { participantId: member.participantId, classKey: c.classKey }));
+      setStep('done');
+      loadMoreClasses(member, c.classKey);
+    } catch (err) {
+      setOutcome({ error: err.message });
+      setStep('error');
+    }
+  };
+
+  const confirm = async () => {
+    if (!picked || !member) return;
+    if (mode !== 'undo') { checkIn(picked); return; }
+    setStep('working');
+    try {
+      setOutcome(await api.post('/kiosk/undo', { participantId: member.participantId, classKey: picked.classKey }));
+      setStep('undone');
     } catch (err) {
       setOutcome({ error: err.message });
       setStep('error');
@@ -614,16 +644,42 @@ export default function KioskPage() {
             )}
 
             {step === 'done' && outcome && (
-              <Screen k="done" center>
-                <div className="bg-white border border-ninja-border rounded-3xl px-10 py-12 text-center" role="status">
-                  <span className="mx-auto w-24 h-24 rounded-full flex items-center justify-center bg-ninja-blue text-white">
-                    <CheckIcon size={52} strokeWidth={3} aria-hidden />
+              <Screen k={`done-${picked?.classKey || ''}`} center>
+                <div className={`bg-white border border-ninja-border rounded-3xl px-10 text-center flex flex-col min-h-0 ${offeringMore ? 'py-8' : 'py-12'}`} role="status">
+                  <span className={`mx-auto flex-shrink-0 rounded-full flex items-center justify-center bg-ninja-blue text-white ${offeringMore ? 'w-16 h-16' : 'w-24 h-24'}`}>
+                    <CheckIcon size={offeringMore ? 36 : 52} strokeWidth={3} aria-hidden />
                   </span>
-                  <p className="mt-6 font-ninja font-extrabold text-5xl text-ninja-navy">
+                  <p className={`font-ninja font-extrabold text-ninja-navy ${offeringMore ? 'mt-4 text-4xl' : 'mt-6 text-5xl'}`}>
                     {outcome.already ? `${outcome.firstName} is already checked in` : `${outcome.firstName} is checked in`}
                   </p>
                   <p className="mt-3 font-ninja text-2xl text-ninja-muted">{outcome.className} · {fmtTime(outcome.startTime)}</p>
-                  <div className="mt-10 flex justify-center gap-4">
+                  {/* A ninja staying for a second class checks in to it from
+                      here, one tap, without finding their name again. */}
+                  <AnimatePresence initial={false}>
+                    {offeringMore && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                        transition={{ duration: 0.3, ease: EASE }}
+                        className="min-h-0 flex flex-col overflow-hidden"
+                      >
+                        <p className="mt-8 font-ninja font-bold text-xl text-ninja-navy">
+                          Staying for another class?
+                        </p>
+                        <div className="mt-3 min-h-0 max-h-56 overflow-y-auto overscroll-contain space-y-2 text-left">
+                          {moreClasses.map((c) => (
+                            <button
+                              key={c.classKey} type="button" onClick={() => checkIn(c)}
+                              className="w-full flex items-center justify-between gap-4 rounded-2xl border border-ninja-border bg-white px-5 py-4 text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.98]"
+                            >
+                              <ClassLabel startTime={c.startTime} className={c.className} />
+                              <span className="ml-auto flex-shrink-0 font-ninja text-base font-bold text-ninja-blue-ink">Check in</span>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div className={`${offeringMore ? 'mt-8' : 'mt-10'} flex-shrink-0 flex justify-center gap-4`}>
                     {!outcome.already && picked && (
                       <button type="button" onClick={() => askUndo({ ...picked, className: outcome.className, startTime: outcome.startTime })}
                         className="font-ninja text-2xl font-bold px-12 py-6 rounded-2xl border border-ninja-border text-ninja-navy">
