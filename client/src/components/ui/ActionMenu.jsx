@@ -173,10 +173,15 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
                 initial={reduce ? false : { scale: 0.3 }}
                 animate={{ scale: 1 }}
                 exit={reduce ? { opacity: 0 } : { scale: 0.3, transition: { duration: 0.18, delay: 0.08, ease: [0.4, 0, 1, 1] } }}
-                transition={{ type: 'spring', stiffness: 520, damping: 30 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 46 }}
               />
             </Liquid.Item>
-            <Liquid.Item morph={{ shape: true, contentBlur: 0, bounce: 0.35, speed: 1.3 }}>
+            {/* Critically damped: the library's default size spring rings for
+                half a second after every resize, which on a menu whose
+                buttons were just pressed reads as the panel shaking. The
+                droplet lead is cut down for the same reason. Both open
+                springs above are damped to settle without overshoot too. */}
+            <Liquid.Item morph={{ shape: true, contentBlur: 0, bounce: 0, speed: 1.3, advanced: { travel: 10, roundness: 0.5 } }}>
               <motion.div
                 ref={panelRef}
                 id={panelId}
@@ -188,7 +193,7 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
                 initial={reduce ? { opacity: 0 } : { scale: 0.2, y: -(triggerBox.h * 0.6) }}
                 animate={reduce ? { opacity: 1 } : { scale: 1, y: 0 }}
                 exit={reduce ? { opacity: 0 } : { scale: 0.2, y: -(triggerBox.h * 0.6), transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } }}
-                transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 41 }}
                 className="pointer-events-auto relative overflow-hidden min-w-[9.5rem] p-1"
               >
                 {/* The words fade, never the surface: the goo is the surface. */}
