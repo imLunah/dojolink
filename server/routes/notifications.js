@@ -109,11 +109,37 @@ const FEED_SQL = `
   LIMIT ${LIST_LIMIT}
 `;
 
+// Admins are also told about every new bug report and feature idea. A ticket
+// has no addressee, so its read state is the ticket's own `seen_at`, shared by
+// every admin: once one has opened it, it is dealt with. Tickets belong to no
+// center, so these are not scoped to the active one.
+const isAdmin = (req) => req.session.role === 'admin';
+
+const TICKET_FEED_SQL = `
+  SELECT 'ticket' AS kind, t.id, t.created_at, t.seen_at AS read_at, t.description AS body,
+         t.reporter_name AS author_name, NULL AS author_pic, t.type AS place,
+         NULL::int AS task_id, NULL::int AS student_id, NULL::int AS log_id,
+         NULL::int AS session_id, NULL::text AS club_name, NULL::json AS mentions
+    FROM feedback_tickets t
+   WHERE t.seen_at IS NULL OR t.created_at > now() - interval '${READ_WINDOW_DAYS} days'
+   ORDER BY (t.seen_at IS NULL) DESC, t.created_at DESC
+   LIMIT ${LIST_LIMIT}`;
+
+const byUnreadThenNewest = (a, b) =>
+  (a.read_at ? 1 : 0) - (b.read_at ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at);
+
 // GET /api/notifications — the list, unread first, plus the unread count.
 router.get('/', requireSensei, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const { rows } = await pool.query(FEED_SQL, [req.session.userId, req.session.activeLocationId]);
+    let { rows } = await pool.query(FEED_SQL, [req.session.userId, req.session.activeLocationId]);
+    let ticketUnread = 0;
+    if (isAdmin(req)) {
+      const { rows: tickets } = await pool.query(TICKET_FEED_SQL);
+      rows = [...rows, ...tickets].sort(byUnreadThenNewest).slice(0, LIST_LIMIT);
+      const { rows: [c] } = await pool.query('SELECT COUNT(*) AS n FROM feedback_tickets WHERE seen_at IS NULL');
+      ticketUnread = Number(c.n);
+    }
     const { rows: count } = await pool.query(
       `SELECT
          (SELECT COUNT(*) FROM director_task_comment_mentions m ${scoped('task', '$2')} WHERE m.user_id = $1 AND m.read_at IS NULL)
@@ -123,7 +149,7 @@ router.get('/', requireSensei, async (req, res) => {
        AS unread`,
       [req.session.userId, req.session.activeLocationId]
     );
-    res.json({ items: rows, unread: Number(count[0].unread) });
+    res.json({ items: rows, unread: Number(count[0].unread) + ticketUnread });
   } catch (err) {
     console.error('Notifications fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch notifications' });
@@ -146,6 +172,10 @@ router.post('/read-all', requireSensei, requireOwnLocation, async (req, res) => 
       );
       read += rowCount;
     }
+    if (isAdmin(req)) {
+      const { rowCount } = await pool.query('UPDATE feedback_tickets SET seen_at = now() WHERE seen_at IS NULL');
+      read += rowCount;
+    }
     res.json({ read });
   } catch (err) {
     console.error('Notifications read-all error:', err);
@@ -157,11 +187,17 @@ router.post('/read-all', requireSensei, requireOwnLocation, async (req, res) => 
 // their own, and only for a mention at this center.
 router.post('/:kind/:id/read', requireSensei, requireOwnLocation, async (req, res) => {
   const { kind } = req.params;
-  if (!Object.prototype.hasOwnProperty.call(SCOPES, kind)) return res.status(400).json({ error: 'Unknown notification' });
+  const isTicket = kind === 'ticket' && isAdmin(req);
+  if (!isTicket && !Object.prototype.hasOwnProperty.call(SCOPES, kind)) return res.status(400).json({ error: 'Unknown notification' });
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Unknown notification' });
   const pool = req.app.get('db');
   try {
+    if (isTicket) {
+      const { rowCount } = await pool.query('UPDATE feedback_tickets SET seen_at = COALESCE(seen_at, now()) WHERE id = $1', [id]);
+      if (!rowCount) return res.status(404).json({ error: 'Notification not found' });
+      return res.json({ ok: true });
+    }
     const idCol = SCOPES[kind].idColumn || 'id';
     const { rows } = await pool.query(
       `UPDATE ${SCOPES[kind].table} SET read_at = COALESCE(read_at, now())

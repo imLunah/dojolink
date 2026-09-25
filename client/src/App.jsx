@@ -66,6 +66,7 @@ const CurriculumPage = lazy(() => import('./pages/admin/CurriculumPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 // Lazy — pulls in lottie; keep it out of the main bundle (only new accounts / revisits load it).
 const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'));
 const AppearancePage = lazy(() => import('./pages/AppearancePage'));
@@ -165,6 +166,7 @@ export default function App() {
             {/* Curriculum Roadmap */}
             <Route path="/curriculum-roadmap" element={<ProtectedRoute role="sensei"><CurriculumRoadmapPage /></ProtectedRoute>} />
             <Route path="/changelog" element={<ProtectedRoute role="sensei"><ChangelogPage /></ProtectedRoute>} />
+            <Route path="/feedback" element={<ProtectedRoute role="sensei"><FeedbackPage /></ProtectedRoute>} />
             <Route path="/welcome" element={<ProtectedRoute role="sensei"><WelcomePage /></ProtectedRoute>} />
             <Route path="/getting-started" element={<ProtectedRoute role="sensei"><GettingStartedPage /></ProtectedRoute>} />
 
