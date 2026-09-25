@@ -339,7 +339,7 @@ export const DOCS = [
         blocks: [
           { p: 'The bell collects everything that needs you: someone mentioned you in a reply or a task comment, or added you to a task. A red number shows how many you have not opened.' },
           { list: [
-            'On a computer, the bell is next to your name at the bottom of the sidebar, or in the top bar if you use that layout.',
+            'On a computer, the bell is at the top of the sidebar beside the DojoLink logo, or in the top bar if you use that layout.',
             'On a phone, it is at the top of the dashboard.',
           ] },
           { p: 'Select a notification to go straight to it: the task opens, the ninja\'s profile scrolls to the log, or the club session opens. It is marked read when you open it. **Mark all as read** clears the rest. The bell shows the center you have selected, so switch centers to see mentions from another one.' },

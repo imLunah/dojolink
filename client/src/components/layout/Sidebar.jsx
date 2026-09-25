@@ -185,8 +185,10 @@ export default function Sidebar({ onOpenBug }) {
       </button>
 
       {/* Logo */}
-      <div className={`py-5 border-b border-ninja-border overflow-hidden ${collapsed ? 'px-2 flex justify-center' : 'px-5'}`}>
-        <Link to="/" className="block outline-none" aria-label="DojoLink">
+      {/* The bell sits with the logo, where apps keep notifications, rather than
+          in the account row at the foot, which it crowded. */}
+      <div className={`py-5 border-b border-ninja-border overflow-hidden ${collapsed ? 'px-2 flex flex-col items-center gap-2' : 'pl-5 pr-3 flex items-center justify-between gap-2'}`}>
+        <Link to="/" className="block outline-none min-w-0" aria-label="DojoLink">
           {/* The rail already showed the mark a moment ago, and the two states
               are the same header: repeating it beside the name says the bird
               twice. Collapsed is the mark alone, expanded is the name alone.
@@ -195,6 +197,7 @@ export default function Sidebar({ onOpenBug }) {
             ? <Logo variant="mark" className="h-9 text-ninja-navy" />
             : <Logo variant="wordmark" className="h-7 text-ninja-navy" />}
         </Link>
+        <NotificationBell />
       </div>
 
       {/* Center switcher (hidden on the icon rail) */}
@@ -285,9 +288,7 @@ export default function Sidebar({ onOpenBug }) {
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label="Account menu"
-            // The name and role came off the row to give the bell and log out
-            // room; the name is still one hover away.
-            title={user?.displayName || 'Account'}
+            title={collapsed ? (user?.displayName || 'Account') : undefined}
             className={`flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity ${collapsed ? 'rounded-full' : 'flex-1 min-w-0 rounded-xl'}`}
           >
             {user?.profilePicUrl ? (
@@ -297,8 +298,10 @@ export default function Sidebar({ onOpenBug }) {
                 {initials}
               </div>
             )}
+            {!collapsed && (
+              <span className="flex-1 min-w-0 font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</span>
+            )}
           </button>
-          <NotificationBell />
           <button
             onClick={handleLogout}
             title="Log out"
