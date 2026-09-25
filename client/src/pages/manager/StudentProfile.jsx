@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import BirthdayConfetti, { isBirthdayToday } from '../../components/shared/BirthdayConfetti';
 import { motion } from 'framer-motion';
-import { ChevronRightIcon } from 'lucide-react';
+import { ChevronRightIcon, PencilIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import BeltIcon from '../../components/ui/BeltIcon';
@@ -66,12 +66,22 @@ function StudentAvatar({ student, size = 'md', canEditSticker, onEditSticker, de
     <button
       type="button"
       onClick={onEditSticker}
-      className="relative flex-shrink-0"
+      className="sticker-edit relative flex-shrink-0 rounded-full transition-transform duration-150 hover:scale-105"
       title="Code.AI sticker"
-      aria-label="Set Code.AI sticker"
+      aria-label={sticker ? 'Change Code.AI sticker' : 'Set Code.AI sticker'}
     >
       {circle}
-      {!sticker && (
+      {sticker ? (
+        // The same pencil the class icon on Today's Board wears: it says the
+        // picture is a control. Shown on hover where there is hover, and
+        // always on a touch screen, which has none to wait for.
+        <span
+          aria-hidden
+          className="sticker-pencil absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 rounded-full bg-white border border-ninja-border text-ninja-navy shadow-sm"
+        >
+          <PencilIcon size={11} strokeWidth={2.25} />
+        </span>
+      ) : (
         <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-ninja-blue text-white flex items-center justify-center text-xs font-bold leading-none border-2 border-white">
           +
         </span>

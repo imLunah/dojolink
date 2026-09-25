@@ -416,6 +416,11 @@ textarea:focus-visible {
   .comment:hover .comment-actions,
   .comment-actions:focus-within,
   .comment-actions:has([aria-expanded='true']) { opacity: 1; }
+  /* The pencil on a ninja's sticker avatar: out of sight until the avatar is
+     pointed at or focused. Outside this block (touch) it simply shows. */
+  .sticker-pencil { opacity: 0; transform: scale(0.75); transition: opacity 150ms ease, transform 150ms ease; }
+  .sticker-edit:hover .sticker-pencil,
+  .sticker-edit:focus-visible .sticker-pencil { opacity: 1; transform: scale(1); }
 }
 
 /* ── Interaction feedback (Emil Kowalski design-eng) ──
