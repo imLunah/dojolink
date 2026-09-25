@@ -16,7 +16,8 @@ export default function CheckInClubModal({ isOpen, onClose, onCheckedIn }) {
       setClubName('');
       setSessionDate(today());
       setError('');
-      api.get('/clubs/definitions').then(setClubs).catch(() => {});
+      // Archived clubs keep their history but take no new sessions.
+      api.get('/clubs/definitions').then((defs) => setClubs(defs.filter((d) => !d.archived_at))).catch(() => {});
     }
   }, [isOpen]);
 

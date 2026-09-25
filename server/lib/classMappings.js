@@ -46,14 +46,15 @@ async function loadMappings(pool, locationId) {
     pool.query(
       `SELECT m.class_title, m.program, m.programs, m.club_id, cd.name AS club_name
          FROM mystudio_class_mappings m
-         LEFT JOIN club_definitions cd ON cd.id = m.club_id
+         -- An archived club no longer takes check-ins; the mapping falls through.
+         LEFT JOIN club_definitions cd ON cd.id = m.club_id AND cd.archived_at IS NULL
         WHERE m.location_id = $1`,
       [locationId]
     ),
     pool.query(
       `SELECT s.section_key, s.class_title, s.programs, s.club_id, cd.name AS club_name
          FROM mystudio_class_section_mappings s
-         LEFT JOIN club_definitions cd ON cd.id = s.club_id
+         LEFT JOIN club_definitions cd ON cd.id = s.club_id AND cd.archived_at IS NULL
         WHERE s.location_id = $1`,
       [locationId]
     ),

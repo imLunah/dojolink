@@ -25,10 +25,14 @@ function canEditPost(req, createdBy) {
   return createdBy != null && createdBy === req.session.userId;
 }
 
-async function getValidClubNames(pool, locationId) {
+// Archived clubs still count for reading and tidying their own history; only
+// logging a new session asks for running clubs.
+async function getValidClubNames(pool, locationId, { runningOnly = false } = {}) {
   const { rows } = await pool.query(
-    'SELECT name FROM club_definitions WHERE location_id = $1 OR location_id IS NULL',
-    [locationId]
+    `SELECT name FROM club_definitions
+      WHERE (location_id = $1 OR location_id IS NULL)
+        AND ($2::boolean = false OR archived_at IS NULL)`,
+    [locationId, runningOnly]
   );
   return new Set(rows.map((r) => r.name));
 }
@@ -69,6 +73,7 @@ router.get('/definitions', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT cd.id, cd.name, cd.slug, cd.description, cd.color_key, cd.location_id, cd.created_at, cd.schedule, cd.cover_image_url,
+              cd.archived_at,
               u.display_name AS creator_name
        FROM club_definitions cd
        LEFT JOIN users u ON cd.created_by = u.id
@@ -173,6 +178,34 @@ router.patch('/definitions/:id/cover-image', requireManager, requireOwnLocation,
   }
 });
 
+// PATCH /api/clubs/definitions/:id/archive  { archived }
+//
+// Archives a club that has stopped running, or brings it back. Everything it
+// has logged stays; it only stops being offered for new sessions.
+router.patch('/definitions/:id/archive', requireManager, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const archived = req.body && req.body.archived;
+  if (typeof archived !== 'boolean') return res.status(400).json({ error: 'Say whether to archive the club.' });
+  try {
+    const { rows: existing } = await pool.query(
+      'SELECT id, location_id FROM club_definitions WHERE id = $1',
+      [req.params.id]
+    );
+    if (!existing[0]) return res.status(404).json({ error: 'Club not found' });
+    if (existing[0].location_id === null) return res.status(403).json({ error: 'Cannot archive a built-in club' });
+    if (existing[0].location_id !== req.session.activeLocationId) return res.status(403).json({ error: 'Forbidden' });
+    const { rows } = await pool.query(
+      `UPDATE club_definitions SET archived_at = CASE WHEN $1 THEN COALESCE(archived_at, now()) ELSE NULL END
+        WHERE id = $2 RETURNING *`,
+      [archived, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Club archive error:', err);
+    res.status(500).json({ error: 'Failed to archive club' });
+  }
+});
+
 // DELETE /api/clubs/definitions/:id — manager deletes a custom club
 router.delete('/definitions/:id', requireManager, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
@@ -225,7 +258,7 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
 
   if (!club_name) return res.status(400).json({ error: 'Club name is required' });
 
-  const validClubs = await getValidClubNames(pool, req.session.activeLocationId);
+  const validClubs = await getValidClubNames(pool, req.session.activeLocationId, { runningOnly: true });
   if (!validClubs.has(club_name)) return res.status(400).json({ error: 'Invalid club name' });
 
   const today = new Date().toISOString().split('T')[0];

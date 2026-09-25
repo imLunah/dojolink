@@ -667,7 +667,7 @@ async function classMappingsShape(pool, locationId) {
     loadMappings(pool, locationId),
     pool.query(
       `SELECT id, name FROM club_definitions
-        WHERE location_id = $1 OR location_id IS NULL
+        WHERE (location_id = $1 OR location_id IS NULL) AND archived_at IS NULL
         ORDER BY name`,
       [locationId]
     ),
@@ -692,7 +692,8 @@ async function classMappingsShape(pool, locationId) {
       return {
         title,
         programs: row ? programsOf(row) : null,
-        clubId: row ? row.club_id : null,
+        // An archived club reads as unset: it no longer takes check-ins.
+        clubId: row && row.club_name ? row.club_id : null,
         // What the kiosk does with this name when nobody has mapped it.
         automatic: auto,
         looksLikeClub: ms.isClubClass(title),
@@ -705,7 +706,7 @@ async function classMappingsShape(pool, locationId) {
               // Monday first, then by start time; a time MyStudio did not send sorts last.
               sort: Math.min(...[...s.weekdays].map((w) => (w + 6) % 7), 7) * 1440 + Math.min(ms.toMinutes(s.startTime), 1439),
               programs: m ? m.programs : null,
-              clubId: m ? m.club_id : null,
+              clubId: m && m.club_name ? m.club_id : null,
             };
           })
           .sort((a, b) => a.sort - b.sort)

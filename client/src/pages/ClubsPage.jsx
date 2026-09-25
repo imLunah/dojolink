@@ -12,11 +12,11 @@ import { uploadToSigned } from '../lib/supabase';
 import { CARD } from '../lib/surfaces';
 import { SkeletonCards } from '../components/ui/Skeleton';
 import { TrashIcon, CameraIcon } from '../components/ui/icons';
-import { ClockIcon, PencilIcon } from 'lucide-react';
+import { ArchiveIcon, ClockIcon, PencilIcon } from 'lucide-react';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-function ClubCard({ club, onClick, onDelete, onEdit, canManage }) {
+function ClubCard({ club, onClick, onDelete, onEdit, onArchive, canManage }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [coverError, setCoverError] = useState(false);
@@ -91,6 +91,10 @@ function ClubCard({ club, onClick, onDelete, onEdit, canManage }) {
               <button onClick={(e) => { e.stopPropagation(); onEdit(club); }} title="Edit club"
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-white bg-black/25 hover:bg-black/40 backdrop-blur-sm p-1.5 rounded-lg">
                 <PencilIcon className="w-4 h-4" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); onArchive(club); }} title="Archive club" aria-label="Archive club"
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-white bg-black/25 hover:bg-black/40 backdrop-blur-sm p-1.5 rounded-lg">
+                <ArchiveIcon className="w-4 h-4" />
               </button>
               <button onClick={() => setConfirming(true)} title="Delete club"
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-white bg-black/25 hover:bg-ninja-red backdrop-blur-sm p-1.5 rounded-lg">
@@ -388,6 +392,60 @@ function CreateClubModal({ onCreated, onClose }) {
   );
 }
 
+// Clubs that have stopped running. Their sessions and board stay, so each one
+// still opens; Restore puts it back in the list and the pickers, and Delete
+// (behind its own confirm) is still here for a club made by mistake.
+function ArchivedClubs({ clubs, onOpen, onRestore, onDelete }) {
+  const [confirmId, setConfirmId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const run = async (id, fn) => {
+    setBusyId(id);
+    try { await fn(); } finally { setBusyId(null); setConfirmId(null); }
+  };
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-ninja font-extrabold text-lg text-ninja-navy">Archived</h2>
+      <ul className={`${CARD} divide-y divide-ninja-border`}>
+        {clubs.map((club) => (
+          <li key={club.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <button type="button" onClick={() => onOpen(club)}
+              className="min-w-0 text-left font-ninja font-bold text-ninja-navy hover:text-ninja-blue transition-colors truncate">
+              {club.name}
+            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {confirmId === club.id ? (
+                <>
+                  <button type="button" disabled={busyId === club.id} onClick={() => run(club.id, () => onDelete(club.id))}
+                    className="text-sm font-ninja font-semibold text-white bg-ninja-red px-3 py-1.5 rounded-lg disabled:opacity-50">
+                    {busyId === club.id ? 'Deleting…' : 'Delete'}
+                  </button>
+                  <button type="button" onClick={() => setConfirmId(null)}
+                    className="text-sm font-ninja font-semibold text-ninja-navy border border-ninja-border px-3 py-1.5 rounded-lg">
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" disabled={busyId === club.id} onClick={() => run(club.id, () => onRestore(club))}
+                    className="text-sm font-ninja font-semibold text-ninja-navy border border-ninja-border px-3 py-1.5 rounded-lg hover:bg-ninja-bg transition-colors disabled:opacity-50">
+                    Restore
+                  </button>
+                  <button type="button" onClick={() => setConfirmId(club.id)} title="Delete club" aria-label={`Delete ${club.name}`}
+                    className="text-ninja-muted hover:text-ninja-red p-1.5 rounded-lg transition-colors">
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function ClubsPage() {
   const navigate = useNavigate();
   const { user, isReadOnly, viewAs } = useAuth();
@@ -399,10 +457,25 @@ export default function ClubsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingClub, setEditingClub] = useState(null);
 
+  const [error, setError] = useState('');
+
   const handleDeleteClub = async (id) => {
     await api.delete(`/clubs/definitions/${id}`);
     setClubs((prev) => prev.filter((c) => c.id !== id));
   };
+
+  const setArchived = async (club, archived) => {
+    setError('');
+    try {
+      const updated = await api.patch(`/clubs/definitions/${club.id}/archive`, { archived });
+      setClubs((prev) => prev.map((c) => (c.id === updated.id ? { ...c, archived_at: updated.archived_at } : c)));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const running = clubs.filter((c) => !c.archived_at);
+  const archived = clubs.filter((c) => c.archived_at);
 
   useEffect(() => {
     api.get('/clubs/definitions')
@@ -428,14 +501,14 @@ export default function ClubsPage() {
 
         {loading ? (
           <SkeletonCards count={6} label="Loading clubs" />
-        ) : clubs.length === 0 ? (
+        ) : running.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
             <img src="/CodeNinjasIcon.svg" alt="" className="w-12 h-12 mx-auto mb-3 opacity-20" />
             <p className="text-ninja-muted font-ninja italic">No clubs yet.</p>
           </motion.div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {clubs.map((club, i) => (
+            {running.map((club, i) => (
               <motion.div
                 key={club.id}
                 className="h-full"
@@ -449,10 +522,22 @@ export default function ClubsPage() {
                   canManage={isManager && !isReadOnly && !!club.location_id}
                   onDelete={handleDeleteClub}
                   onEdit={setEditingClub}
+                  onArchive={(c) => setArchived(c, true)}
                 />
               </motion.div>
             ))}
           </div>
+        )}
+
+        {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}
+
+        {!loading && isManager && archived.length > 0 && (
+          <ArchivedClubs
+            clubs={archived}
+            onOpen={(club) => navigate(`/clubs/${club.slug}`)}
+            onRestore={(club) => setArchived(club, false)}
+            onDelete={handleDeleteClub}
+          />
         )}
       </div>
 

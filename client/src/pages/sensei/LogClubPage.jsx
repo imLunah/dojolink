@@ -46,7 +46,8 @@ export default function LogClubPage() {
       .finally(() => setLoadingStudents(false));
 
     api.get('/clubs').then(setRecentSessions).catch(() => {});
-    api.get('/clubs/definitions').then(setClubs).catch(() => {});
+    // Archived clubs keep their history but take no new sessions.
+    api.get('/clubs/definitions').then((defs) => setClubs(defs.filter((d) => !d.archived_at))).catch(() => {});
   }, []);
 
   // Filter recent sessions for selected club
