@@ -44,17 +44,18 @@ function whatOf(n) {
   return `mentioned you on a ${n.place} session`;
 }
 
-// The preview reads as a sentence, not as markup: each person mentioned shows
-// as their username without the @, however the tag was written (older ones
-// carry "@Display Name"). Longest first, so "@Sam Lee" is not cut to "@Sam".
+// The preview is what was said, without the mentions in it: the line above
+// already says who was mentioned. Tags written either way ("@username", or the
+// older "@Display Name") are taken out, longest first so "@Sam Lee" is not
+// cut to "@Sam". A message that was only a mention has no preview at all.
 function plain(body, mentions) {
   let text = body || '';
   const tags = (mentions || [])
-    .flatMap((m) => [[m.display_name, m.username], [m.username, m.username]])
-    .filter(([from, to]) => from && to)
-    .sort((a, b) => b[0].length - a[0].length);
-  for (const [from, to] of tags) text = text.split(`@${from}`).join(to);
-  return text.replace(/(^|\s)@(?=\S)/g, '$1');
+    .flatMap((m) => [m.display_name, m.username])
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  for (const tag of tags) text = text.split(`@${tag}`).join('');
+  return text.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
 }
 
 export default function NotificationBell({ className = '' }) {
@@ -209,7 +210,7 @@ export default function NotificationBell({ className = '' }) {
                     <span className="block font-ninja text-sm text-ninja-navy leading-snug">
                       <span className="font-bold">{n.author_name || 'Someone'}</span> {whatOf(n)}
                     </span>
-                    {n.body && (
+                    {plain(n.body, n.mentions) && (
                       <span className="block font-ninja text-xs text-ninja-muted mt-0.5 line-clamp-2 break-words">{plain(n.body, n.mentions)}</span>
                     )}
                     <span className="block font-ninja text-[11px] text-ninja-muted mt-1">{ago(n.created_at)}</span>
