@@ -27,6 +27,20 @@ const SHOT_URL_TTL = 60 * 60;
 const STATUSES = ['new', 'aware', 'planned', 'in_progress', 'resolved', 'wont_fix'];
 const CLOSED = ['resolved', 'wont_fix'];
 
+// Short-lived links for every screenshot in a list. A failed signature costs
+// that one picture, not the list.
+async function withScreenshots(rows) {
+  if (!storage.isConfigured()) return rows.map(({ screenshot_path, ...r }) => ({ ...r, screenshot_url: null }));
+  return Promise.all(rows.map(async ({ screenshot_path, ...r }) => {
+    if (!screenshot_path) return { ...r, screenshot_url: null };
+    try {
+      return { ...r, screenshot_url: await storage.createSignedReadUrl(BUCKET, screenshot_path, SHOT_URL_TTL) };
+    } catch {
+      return { ...r, screenshot_url: null };
+    }
+  }));
+}
+
 const clip = (v, max) => (v == null ? null : String(v).trim().slice(0, max) || null);
 
 function requireAnySession(req, res, next) {
@@ -128,12 +142,12 @@ router.get('/mine', requireAnySession, async (req, res) => {
   const { sql, params } = mineClause(req);
   try {
     const { rows } = await pool.query(
-      `SELECT id, type, category, description, status, title, created_at, updated_at, closed_at
+      `SELECT id, type, category, description, status, title, screenshot_path, created_at, updated_at, closed_at
          FROM feedback_tickets WHERE ${sql}
         ORDER BY created_at DESC LIMIT 100`,
       params
     );
-    res.json(rows);
+    res.json(await withScreenshots(rows));
   } catch (err) {
     console.error('Ticket mine error:', err.message);
     res.status(500).json({ error: 'Failed to load your reports' });
@@ -172,12 +186,12 @@ router.get('/admin', requireAdmin, async (req, res) => {
   const pool = req.app.get('db');
   try {
     const { rows } = await pool.query(
-      `SELECT ${ADMIN_COLUMNS}
+      `SELECT ${ADMIN_COLUMNS}, t.screenshot_path
          FROM feedback_tickets t LEFT JOIN locations l ON l.id = t.location_id
         ORDER BY t.created_at DESC
         LIMIT 500`
     );
-    res.json(rows);
+    res.json(await withScreenshots(rows));
   } catch (err) {
     console.error('Ticket admin list error:', err.message);
     res.status(500).json({ error: 'Failed to load tickets' });

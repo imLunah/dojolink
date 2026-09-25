@@ -9,7 +9,7 @@ import TicketStatus from '../components/shared/TicketStatus';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { CARD } from '../lib/surfaces';
-import { STATUS, STATUS_ORDER, isClosed, ticketName, shortDate } from '../lib/tickets';
+import { STATUS, STATUS_ORDER, isClosed, shortDate } from '../lib/tickets';
 
 // Issues & roadmap: every bug report and feature idea, as tickets.
 //
@@ -76,26 +76,30 @@ export default function FeedbackPage() {
   };
 
   const loading = tickets === null || (tab === 'mine' && mine === null);
+  const open = isAdmin ? (t) => setParam('ticket', t.id) : null;
+  // Admins see everything a reporter sent on every card; anyone else sees the
+  // full report only on their own.
+  const detail = isAdmin || tab === 'mine';
 
   let body;
   if (loading) {
-    body = <div className="p-4"><SkeletonList rows={4} label="Loading tickets" /></div>;
+    body = <div className={`${CARD} p-5`}><SkeletonList rows={4} label="Loading tickets" /></div>;
   } else if (tab === 'inbox') {
-    body = <Rows items={inbox} empty="Nothing waiting. New reports land here." onOpen={(t) => setParam('ticket', t.id)} inbox />;
+    body = <ByMonth items={inbox} dateOf={(t) => t.created_at} empty="Nothing waiting. New reports land here." detail onOpen={open} />;
   } else if (tab === 'mine') {
-    body = <Rows items={mine} empty="You haven't sent any reports yet." mine onOpen={isAdmin ? (t) => setParam('ticket', t.id) : null} />;
+    body = <ByMonth items={mine} dateOf={(t) => t.created_at} empty="You haven't sent any reports yet." detail onOpen={open} />;
   } else if (tab === 'closed') {
-    const items = triaged.filter((t) => isClosed(t.status))
-      .sort((a, b) => new Date(b.closed_at || b.updated_at) - new Date(a.closed_at || a.updated_at));
-    body = <Rows items={items} empty="Nothing closed yet." showType onOpen={isAdmin ? (t) => setParam('ticket', t.id) : null} />;
+    const items = triaged.filter((t) => isClosed(t.status));
+    body = <ByMonth items={items} dateOf={(t) => t.closed_at || t.updated_at} empty="Nothing closed yet." detail={detail} onOpen={open} />;
   } else {
     const type = tab === 'bugs' ? 'bug' : 'feature';
     const items = triaged.filter((t) => t.type === type && !isClosed(t.status)).sort(byStatusThenRecent);
     body = (
-      <Grouped
+      <ByStatus
         items={items}
         empty={type === 'bug' ? 'No known issues right now.' : 'Nothing on the roadmap yet.'}
-        onOpen={isAdmin ? (t) => setParam('ticket', t.id) : null}
+        detail={detail}
+        onOpen={open}
       />
     );
   }
@@ -106,7 +110,7 @@ export default function FeedbackPage() {
   // loaded again. Only the list below animates on a tab change.
   return (
     <Layout motionKey="feedback">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <motion.header
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -116,7 +120,7 @@ export default function FeedbackPage() {
           <h1 className="text-2xl font-black font-ninja text-ninja-navy">Issues &amp; roadmap</h1>
         </motion.header>
 
-        <nav aria-label="Tickets" className="no-scrollbar mb-4 flex overflow-x-auto rounded-xl border border-ninja-border bg-ninja-bg p-1">
+        <nav aria-label="Tickets" className="no-scrollbar mb-6 flex overflow-x-auto rounded-xl border border-ninja-border bg-ninja-bg p-1 lg:max-w-3xl">
           {tabs.map((t) => {
             const active = t.key === tab;
             return (
@@ -146,16 +150,15 @@ export default function FeedbackPage() {
           })}
         </nav>
 
-        <div className={`${CARD} overflow-hidden`}>
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {body}
-          </motion.div>
-        </div>
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          className="space-y-8"
+        >
+          {body}
+        </motion.div>
       </div>
 
       {isAdmin && (
@@ -170,71 +173,171 @@ export default function FeedbackPage() {
   );
 }
 
-// Open tickets, grouped under their status.
-function Grouped({ items, empty, onOpen }) {
+// A heading between groups: a hairline with the name in it.
+function Divider({ children }) {
+  return (
+    <div className="flex items-center gap-4 mb-4">
+      <span aria-hidden="true" className="h-px flex-1 bg-ninja-border" />
+      <h2 className="flex items-center gap-2 font-ninja text-base font-bold text-ninja-muted whitespace-nowrap">{children}</h2>
+      <span aria-hidden="true" className="h-px flex-1 bg-ninja-border" />
+    </div>
+  );
+}
+
+function Cards({ items, detail, onOpen }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      {items.map((t) => <TicketCard key={t.id} t={t} detail={detail} onOpen={onOpen} />)}
+    </div>
+  );
+}
+
+// Newest month first, newest ticket first inside it.
+function ByMonth({ items, dateOf, empty, detail, onOpen }) {
+  if (!items?.length) return <Empty text={empty} />;
+  const sorted = [...items].sort((a, b) => new Date(dateOf(b)) - new Date(dateOf(a)));
+  const groups = [];
+  for (const t of sorted) {
+    const label = new Date(dateOf(t)).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (groups.at(-1)?.label !== label) groups.push({ label, items: [] });
+    groups.at(-1).items.push(t);
+  }
+  return groups.map((g) => (
+    <section key={g.label}>
+      <Divider>{g.label}</Divider>
+      <Cards items={g.items} detail={detail} onOpen={onOpen} />
+    </section>
+  ));
+}
+
+// Open tickets, grouped under their status, furthest along first.
+function ByStatus({ items, empty, detail, onOpen }) {
   if (!items.length) return <Empty text={empty} />;
   return OPEN_ORDER.map((status) => {
     const group = items.filter((t) => t.status === status);
     if (!group.length) return null;
     return (
-      <section key={status} className="border-b border-ninja-border last:border-b-0">
-        <h2 className="flex items-center gap-2 px-4 pt-3 pb-1">
-          <TicketStatus status={status} />
-          <span className="font-ninja text-xs text-ninja-muted">{group.length}</span>
-        </h2>
-        <Rows items={group} onOpen={onOpen} hideStatus />
+      <section key={status}>
+        <Divider>
+          <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: STATUS[status].dot }} />
+          {STATUS[status].label}
+          <span className="font-semibold">({group.length})</span>
+        </Divider>
+        <Cards items={group} detail={detail} onOpen={onOpen} />
       </section>
     );
   });
 }
 
-function Rows({ items, empty, onOpen, inbox = false, mine = false, showType = false, hideStatus = false }) {
-  if (!items?.length) return <Empty text={empty} />;
+// One ticket, with as much of the report as this reader may see.
+function TicketCard({ t, detail, onOpen }) {
+  const [expanded, setExpanded] = useState(false);
+  const heading = t.title || t.category || (t.type === 'feature' ? 'Feature idea' : 'Bug report');
+  const long = (t.description || '').length > 420;
+  const sent = new Date(t.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const unread = t.seen_at === null;
+
+  const facts = detail
+    ? [
+        ['Type', t.type === 'feature' ? 'Feature idea' : 'Bug'],
+        // An untriaged ticket already wears its category as the heading.
+        t.title && ['Category', t.category],
+        t.reporter_name !== undefined && ['From', [t.reporter_name || 'Unknown', roleLabel(t.reporter_role)].filter(Boolean).join(', ')],
+        t.location_name && ['Center', t.location_name],
+        ['Sent', sent],
+        t.page_url && ['Page', pathOf(t.page_url)],
+        t.user_agent && ['Device', deviceOf(t.user_agent, t.screen_size)],
+        Array.isArray(t.console_errors) && t.console_errors.length > 0 && ['Errors', `${t.console_errors.length} in the console`],
+      ].filter(Boolean)
+    : [
+        ['Type', t.type === 'feature' ? 'Feature idea' : 'Bug'],
+        ['Category', t.category],
+        ['Updated', shortDate(t.updated_at)],
+      ];
+
   return (
-    <ul className="divide-y divide-ninja-border">
-      {items.map((t) => {
-        const content = (
-          <>
-            {(inbox || showType || mine) && (
-              <span className="mt-0.5 text-ninja-muted flex-shrink-0"><TypeIcon type={t.type} /></span>
-            )}
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2">
-                {inbox && !t.seen_at && <span aria-label="Unread" className="w-2 h-2 rounded-full bg-ninja-blue flex-shrink-0" />}
-                <span className={`block font-ninja text-sm text-ninja-navy break-words ${inbox ? 'line-clamp-2' : 'font-semibold'}`}>
-                  {inbox ? t.description : ticketName(t)}
-                </span>
-              </span>
-              {mine && t.title && (
-                <span className="block font-ninja text-xs text-ninja-muted mt-1 line-clamp-2 break-words">{t.description}</span>
-              )}
-              <span className="block font-ninja text-xs text-ninja-muted mt-1">
-                {inbox
-                  ? [t.reporter_name || 'Unknown', roleLabel(t.reporter_role), t.location_name, shortDate(t.created_at)].filter(Boolean).join(' · ')
-                  : [t.category, shortDate(mine ? t.created_at : t.updated_at)].filter(Boolean).join(' · ')}
-              </span>
-            </span>
-            {!hideStatus && !inbox && <TicketStatus status={t.status} className="mt-0.5" />}
-          </>
-        );
-        return (
-          <li key={t.id}>
-            {onOpen ? (
-              <button type="button" onClick={() => onOpen(t)} className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-ninja-bg">
-                {content}
+    <article className={`${CARD} overflow-hidden flex flex-col`}>
+      <div className="p-5 space-y-4">
+        <header className="flex items-start gap-3">
+          <span className="mt-1 text-ninja-muted flex-shrink-0"><TypeIcon type={t.type} className="w-5 h-5" /></span>
+          <h3 className="flex-1 min-w-0 font-ninja text-lg font-bold text-ninja-navy leading-snug break-words">
+            {unread && <span aria-label="Unread" className="inline-block align-middle mr-2 w-2 h-2 rounded-full bg-ninja-blue" />}
+            {heading}
+          </h3>
+          <TicketStatus status={t.status} className="mt-1.5" />
+        </header>
+
+        {detail && t.description && (
+          <div>
+            <p className={`font-ninja text-[15px] text-ninja-navy leading-relaxed whitespace-pre-wrap break-words ${long && !expanded ? 'line-clamp-6' : ''}`}>
+              {t.description}
+            </p>
+            {long && (
+              <button type="button" onClick={() => setExpanded((e) => !e)} className="mt-1 font-ninja text-sm font-bold text-ninja-blue hover:text-ninja-blue-hover">
+                {expanded ? 'Show less' : 'Show more'}
               </button>
-            ) : (
-              <div className="flex items-start gap-3 px-4 py-3">{content}</div>
             )}
-          </li>
-        );
-      })}
-    </ul>
+          </div>
+        )}
+
+        <dl className="grid grid-cols-[76px,1fr] gap-x-3 gap-y-1 font-ninja text-[13px]">
+          {facts.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-ninja-muted">{k}</dt>
+              <dd className="text-ninja-navy break-words min-w-0">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {detail && t.screenshot_url && (
+        <a href={t.screenshot_url} target="_blank" rel="noreferrer" className="block border-t border-ninja-border bg-ninja-bg" aria-label="Open the screenshot full size">
+          <img src={t.screenshot_url} alt="Screenshot sent with the report" loading="lazy" className="w-full max-h-96 object-contain object-top" />
+        </a>
+      )}
+
+      {onOpen && (
+        <footer className="border-t border-ninja-border px-5 py-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => onOpen(t)}
+            className="rounded-lg border border-ninja-border px-3 py-1.5 font-ninja text-sm font-bold text-ninja-navy hover:bg-ninja-bg transition-colors"
+          >
+            {t.status === 'new' ? 'Triage' : 'Edit'}
+          </button>
+        </footer>
+      )}
+    </article>
   );
 }
 
 function Empty({ text }) {
-  return <p className="px-4 py-10 text-center font-ninja text-sm text-ninja-muted">{text}</p>;
+  return <p className={`${CARD} px-4 py-10 text-center font-ninja text-sm text-ninja-muted`}>{text}</p>;
+}
+
+function pathOf(url) {
+  try {
+    const u = new URL(url);
+    return `${u.pathname}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
+// "Chrome 140 on macOS, 1512×823" from a user agent. Rough on purpose: the
+// full string is in the ticket dialog.
+function deviceOf(ua, screen) {
+  const browser =
+    (/Edg\/(\d+)/.exec(ua) && `Edge ${/Edg\/(\d+)/.exec(ua)[1]}`) ||
+    (/CriOS\/(\d+)/.exec(ua) && `Chrome ${/CriOS\/(\d+)/.exec(ua)[1]}`) ||
+    (/Chrome\/(\d+)/.exec(ua) && `Chrome ${/Chrome\/(\d+)/.exec(ua)[1]}`) ||
+    (/Firefox\/(\d+)/.exec(ua) && `Firefox ${/Firefox\/(\d+)/.exec(ua)[1]}`) ||
+    (/Version\/(\d+)[\d.]* .*Safari/.exec(ua) && `Safari ${/Version\/(\d+)/.exec(ua)[1]}`) ||
+    'Browser';
+  const os =
+    (/iPad/.test(ua) && 'iPad') || (/iPhone/.test(ua) && 'iPhone') || (/Android/.test(ua) && 'Android') ||
+    (/Mac OS X/.test(ua) && 'macOS') || (/Windows/.test(ua) && 'Windows') || (/CrOS/.test(ua) && 'ChromeOS') || null;
+  return [os ? `${browser} on ${os}` : browser, screen].filter(Boolean).join(', ');
 }
 
 function roleLabel(role) {
