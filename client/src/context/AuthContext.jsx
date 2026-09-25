@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { invalidateCurriculumCache } from './CurriculumContext';
 import { getHomePath } from '../lib/navTabs';
+import { clearReportCache } from '../lib/reportCache';
 import SessionTimeoutModal from '../components/ui/SessionTimeoutModal';
 
 export const AuthContext = createContext(null);
@@ -35,6 +36,11 @@ export function AuthProvider({ children }) {
       .catch(() => { setUser(null); setSessionHint(false); })
       .finally(() => setLoading(false));
   }, []);
+
+  // Cached reports belong to whoever fetched them. Any change of signed-in
+  // user (sign-out, an expired session, a different director signing in)
+  // drops them.
+  useEffect(() => { clearReportCache(); }, [user?.id]);
 
   // Listen for 401s fired by api/client.js — only show modal if already logged
   // in, and only for a request that was on the staff side. A parent-portal 401

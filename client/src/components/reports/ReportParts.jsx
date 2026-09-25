@@ -7,6 +7,7 @@ import { ChartContainer } from '../ui/chart';
 import { Skeleton } from '../ui/Skeleton';
 import { api } from '../../api/client';
 import { REPORT_CARD } from '../../lib/surfaces';
+import { reportCache } from '../../lib/reportCache';
 import CountUp from '../reactbits/CountUp';
 
 // The pieces every Reports tab is built from. Reports is styled as an analytics
@@ -100,7 +101,6 @@ export function useReportFilters() {
 // The key carries every filter, so a cached answer can never sit under a
 // different period's title; a change of filters is a new key and loads fresh.
 const REPORT_TTL = 60_000;
-const reportCache = new Map();
 
 function fresh(path) {
   const hit = reportCache.get(path);

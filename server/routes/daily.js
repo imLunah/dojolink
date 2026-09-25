@@ -189,7 +189,13 @@ router.patch('/:id/program', requireSensei, requireOwnLocation, async (req, res)
     );
     if (!enrollmentRows[0]) return res.status(400).json({ error: 'Ninja not enrolled in this program' });
 
-    await pool.query('UPDATE daily_assignments SET program = $1 WHERE id = $2', [program, id]);
+    // completed is checked again here: a log saved since the read above owns
+    // its class now.
+    const { rowCount } = await pool.query(
+      'UPDATE daily_assignments SET program = $1 WHERE id = $2 AND completed = false',
+      [program, id]
+    );
+    if (!rowCount) return res.status(409).json({ error: 'Already logged' });
 
     const { rows } = await pool.query(ASSIGNMENT_SELECT + ' WHERE da.id = $1', [id]);
     res.json(rows[0]);

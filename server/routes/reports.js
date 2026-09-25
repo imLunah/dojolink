@@ -415,9 +415,8 @@ router.get('/students', requireManager, handle('student report', async (req, res
 }));
 
 // GET /api/reports/progress — the Progress tab: belt-ups, and the sessions
-// each sensei logged. The sensei table is a workload picture, not a ranking:
-// a sensei on the JR table logs shorter, simpler sessions than one on Brown
-// belt, and the page does not sort it by anything but name.
+// each sensei logged. Rows go out in name order; the page ranks them (most
+// sessions first, clubs run break a tie) and gives the top three a medal.
 router.get('/progress', requireManager, handle('progress report', async (req, res) => {
   const pool = req.app.get('db');
   const f = await readFilters(req);
