@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
+import NotificationBell from '../shared/NotificationBell';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
 import { LogOutIcon, UserIcon, ChevronDownIcon, CircleHelpIcon } from 'lucide-react';
@@ -124,6 +125,7 @@ export default function TopNav({ onOpenBug }) {
           </span>
         ))}
 
+        <NotificationBell />
         <ThemeToggle />
 
         <div ref={menuRef} className="relative">

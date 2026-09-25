@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import '../styles/markdown.css';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 
@@ -330,8 +330,24 @@ function SessionsSection({ sessions, memberCount, slug, navigate, isManager, isR
   const [expanded, setExpanded] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [quickView, setQuickView] = useState(null);
+  // The id, not a copy of the session: the quick view has to show replies and
+  // reactions changed while it is open, and those land in `sessions`.
+  const [quickViewId, setQuickViewId] = useState(null);
+  const quickView = quickViewId ? sessions?.find((x) => x.id === quickViewId) ?? null : null;
+  const setQuickView = (session) => setQuickViewId(session ? session.id : null);
   const [replyingId, setReplyingId] = useState(null);
+
+  // ?session=ID opens that session's quick view once the list has it: a
+  // notification links here. The param is dropped after, so closing it stays
+  // closed on a refresh or a back.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedSession = Number(searchParams.get('session'));
+  useEffect(() => {
+    if (!linkedSession || !sessions?.length) return;
+    const found = sessions.find((x) => x.id === linkedSession);
+    if (found) setQuickView(found);
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('session'); return next; }, { replace: true });
+  }, [linkedSession, sessions]);
   const [rowErrors, setRowErrors] = useState({});
   const todayStr = today();
   const shown = expanded ? sessions : sessions.slice(0, 4);

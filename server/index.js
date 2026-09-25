@@ -154,6 +154,7 @@ app.use('/api/curriculum', require('./routes/curriculum'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/director-tasks', require('./routes/directorTasks'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/event-listings', require('./routes/eventListings'));
 app.use('/api/releases', require('./routes/releases'));

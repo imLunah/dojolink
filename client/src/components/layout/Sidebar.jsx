@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
+import NotificationBell from '../shared/NotificationBell';
 import { LogOutIcon, CircleHelpIcon, UserIcon } from 'lucide-react';
 import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
@@ -301,6 +302,7 @@ export default function Sidebar({ onOpenBug }) {
               </div>
             )}
           </button>
+          <NotificationBell />
           <button
             onClick={handleLogout}
             title="Log out"

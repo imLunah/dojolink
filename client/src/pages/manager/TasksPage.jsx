@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeftIcon, LayoutGridIcon, ListIcon, PlusIcon } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
@@ -96,6 +96,18 @@ export default function TasksPage({ mode = 'manager' }) {
   }, [mineOnly, showArchived]);
 
   useEffect(load, [load, user?.activeLocation?.id]);
+
+  // ?task=ID opens that card once the board has it: a notification links here.
+  // The param is dropped after, so a refresh or the back button does not
+  // reopen a card that was closed.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedTask = Number(searchParams.get('task'));
+  useEffect(() => {
+    if (!linkedTask || loading) return;
+    const task = tasks.find((t) => t.id === linkedTask);
+    if (task) openEditor({ task });
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('task'); return next; }, { replace: true });
+  }, [linkedTask, loading, tasks]);
 
   const loadMentions = useCallback(() => {
     api.get('/director-tasks/mentions')

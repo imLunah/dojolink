@@ -13,6 +13,7 @@ import {
   TabletSmartphoneIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
+import NotificationBell from '../../components/shared/NotificationBell';
 import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
 import EventCalendar from '../../components/manager/EventCalendar';
 import TasksQuickLink from '../../components/manager/TasksQuickLink';
@@ -967,11 +968,16 @@ export default function DirectorDashboard() {
             page title in its own elevated surface was what turned this page into
             a stack of five identical boxes. A page title is allowed to sit on
             the page. */}
-        <motion.header {...fadeUp(0)}>
-          <p className="font-ninja text-sm text-ninja-muted">{formatDate(todayStr)}</p>
-          <h1 className="mt-1 text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight text-balance">
-            {greeting}{firstName && ', '}<span className="text-ninja-blue">{firstName}</span>
-          </h1>
+        <motion.header {...fadeUp(0)} className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-ninja text-sm text-ninja-muted">{formatDate(todayStr)}</p>
+            <h1 className="mt-1 text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight text-balance">
+              {greeting}{firstName && ', '}<span className="text-ninja-blue">{firstName}</span>
+            </h1>
+          </div>
+          {/* Phones have no sidebar or top bar to carry the bell, and this is
+              the page they land on. */}
+          <div className="lg:hidden flex-shrink-0"><NotificationBell /></div>
         </motion.header>
 
         {/* MyStudio-home shape: a narrow rail of doors and today's timetable on

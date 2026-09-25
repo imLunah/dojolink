@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { PencilIcon, ReplyIcon } from 'lucide-react';
 import { formatDate, today } from '../../utils/dateUtils';
 import { STATUSES } from '../../utils/beltConfig';
@@ -348,6 +348,17 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
 
   const visible = filter ? logs.filter((l) => l.program === filter) : logs;
 
+  // #log-ID scrolls that entry into view once it has rendered: a notification
+  // links here. The profile draws a phone and a desktop layout, so the entry
+  // may exist twice; the one with a layout box is the one on screen.
+  const { hash } = useLocation();
+  const linkedLog = /^#log-(\d+)$/.exec(hash)?.[1];
+  useEffect(() => {
+    if (!linkedLog) return;
+    const row = [...document.querySelectorAll(`[data-log-id="${linkedLog}"]`)].find((el) => el.offsetParent !== null);
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [linkedLog, logs.length]);
+
   const handleCommentAdded = (logId, comment) => {
     setLocalComments((prev) => ({
       ...prev,
@@ -501,7 +512,8 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                     // rule, and the next session starts a new band.
                     <div
                       key={log.id}
-                      className={`group px-4 ${edge.startsGroup ? 'pt-3' : 'pt-1.5'} ${edge.endsGroup ? 'pb-3' : 'pb-0'} rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
+                      data-log-id={log.id}
+                      className={`group scroll-mt-24 px-4 ${edge.startsGroup ? 'pt-3' : 'pt-1.5'} ${edge.endsGroup ? 'pb-3' : 'pb-0'} rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
                         edge.startsGroup && i > 0 ? 'border-t border-ninja-border/60' : ''
                       }`}
                     >
