@@ -285,7 +285,9 @@ export default function Sidebar({ onOpenBug }) {
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label="Account menu"
-            title={collapsed ? 'Account' : undefined}
+            // The name and role came off the row to give the bell and log out
+            // room; the name is still one hover away.
+            title={user?.displayName || 'Account'}
             className={`flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity ${collapsed ? 'rounded-full' : 'flex-1 min-w-0 rounded-xl'}`}
           >
             {user?.profilePicUrl ? (
@@ -293,12 +295,6 @@ export default function Sidebar({ onOpenBug }) {
             ) : (
               <div className="w-8 h-8 rounded-full bg-ninja-blue flex items-center justify-center text-white font-ninja font-bold text-xs flex-shrink-0">
                 {initials}
-              </div>
-            )}
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</p>
-                <p className="font-ninja text-ninja-muted text-xs capitalize">{user?.role === 'manager' ? 'Center Director' : user?.role === 'admin' ? 'Admin' : user?.role}</p>
               </div>
             )}
           </button>
