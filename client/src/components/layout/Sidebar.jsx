@@ -185,10 +185,8 @@ export default function Sidebar({ onOpenBug }) {
       </button>
 
       {/* Logo */}
-      {/* The bell sits with the logo, where apps keep notifications, rather than
-          in the account row at the foot, which it crowded. */}
-      <div className={`py-5 border-b border-ninja-border overflow-hidden ${collapsed ? 'px-2 flex flex-col items-center gap-2' : 'pl-5 pr-3 flex items-center justify-between gap-2'}`}>
-        <Link to="/" className="block outline-none min-w-0" aria-label="DojoLink">
+      <div className={`py-5 border-b border-ninja-border overflow-hidden ${collapsed ? 'px-2 flex justify-center' : 'px-5'}`}>
+        <Link to="/" className="block outline-none" aria-label="DojoLink">
           {/* The rail already showed the mark a moment ago, and the two states
               are the same header: repeating it beside the name says the bird
               twice. Collapsed is the mark alone, expanded is the name alone.
@@ -197,7 +195,6 @@ export default function Sidebar({ onOpenBug }) {
             ? <Logo variant="mark" className="h-9 text-ninja-navy" />
             : <Logo variant="wordmark" className="h-7 text-ninja-navy" />}
         </Link>
-        <NotificationBell />
       </div>
 
       {/* Center switcher (hidden on the icon rail) */}
@@ -281,7 +278,9 @@ export default function Sidebar({ onOpenBug }) {
 
       {/* User card */}
       <div className="p-3 border-t border-ninja-border">
-        <div ref={menuRef} className={`relative ${collapsed ? 'flex flex-col items-center gap-2 py-1' : 'flex items-center gap-2.5 px-2 py-2'}`}>
+        {/* Tight gaps so the name keeps most of the row beside the bell and
+            log out; the avatar-to-name gap lives inside the account button. */}
+        <div ref={menuRef} className={`relative ${collapsed ? 'flex flex-col items-center gap-2 py-1' : 'flex items-center gap-1 px-1 py-2'}`}>
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
@@ -302,6 +301,7 @@ export default function Sidebar({ onOpenBug }) {
               <span className="flex-1 min-w-0 font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</span>
             )}
           </button>
+          <NotificationBell compact />
           <button
             onClick={handleLogout}
             title="Log out"

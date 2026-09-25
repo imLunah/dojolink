@@ -58,7 +58,7 @@ function plain(body, mentions) {
   return text.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
 }
 
-export default function NotificationBell({ className = '' }) {
+export default function NotificationBell({ className = '', compact = false }) {
   const { user, viewAs } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState(null);
@@ -152,7 +152,7 @@ export default function NotificationBell({ className = '' }) {
         title="Notifications"
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={`relative flex items-center justify-center w-9 h-9 rounded-full transition-colors duration-150 hover:bg-ninja-bg ${
+        className={`relative flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-9 h-9'} rounded-full transition-colors duration-150 hover:bg-ninja-bg ${
           open ? 'bg-ninja-bg text-ninja-navy' : 'text-ninja-muted hover:text-ninja-navy'
         } ${className}`}
       >
