@@ -33,17 +33,16 @@ const TABS = [
 // of every period makes each one look like it tailed off. The calendar months
 // are what they say, and "This month" does include today.
 //
-// Six months and a year are whole weeks too (26 and 52), so every weekday is
-// counted the same number of times. All time starts on the first day any
-// center has data in DojoLink.
+// Six months is whole weeks too (26), so every weekday is counted the same
+// number of times. All time starts on the first day any center has data in
+// DojoLink. There is no "Last year" until May 2027: before then it covers the
+// same days as All time.
 const DOJOLINK_START = '2026-05-09';
-const WEEKS = { '4w': 4, '8w': 8, '12w': 12, '6m': 26, '1y': 52 };
+const WEEKS = { '4w': 4, '12w': 12, '6m': 26 };
 const PERIODS = [
   { value: '4w', label: 'Last 4 weeks' },
-  { value: '8w', label: 'Last 8 weeks' },
   { value: '12w', label: 'Last 12 weeks' },
   { value: '6m', label: 'Last 6 months' },
-  { value: '1y', label: 'Last year' },
   { value: 'month', label: 'This month' },
   { value: 'lastmonth', label: 'Last month' },
   { value: 'all', label: 'All time' },
