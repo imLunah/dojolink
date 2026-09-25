@@ -11,6 +11,7 @@ import {
   CalendarDaysIcon,
   ChevronRightIcon,
   TabletSmartphoneIcon,
+  MilestoneIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import NotificationBell from '../../components/shared/NotificationBell';
@@ -741,6 +742,12 @@ function QuickLinksCard({ isManager }) {
             <span className="truncate">{l.label}</span>
           </Link>
         ))}
+        {/* Last and full width: the label is too long for half the rail, and
+            both roles have an odd number of doors before it. */}
+        <Link to="/feedback" className={`${QUICK_BTN} col-span-2`}>
+          <MilestoneIcon className={QUICK_ICON} />
+          <span className="truncate">Issues &amp; roadmap</span>
+        </Link>
       </nav>
     </section>
   );

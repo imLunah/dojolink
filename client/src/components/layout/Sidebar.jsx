@@ -105,8 +105,6 @@ export const senseiLinks = [
   // Keep curriculum one press away during a session; this is where senseis
   // reach lesson resources and completion codes.
   { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
-  // Senseis have no dashboard flyout, so the ticket list gets a row.
-  { to: '/feedback', label: 'Issues & roadmap', Glyph: MilestoneIcon },
 ];
 
 export default function Sidebar({ onOpenBug }) {
