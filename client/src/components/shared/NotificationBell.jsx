@@ -7,11 +7,12 @@ import { useAuth } from '../../context/AuthContext';
 import { toSlug } from '../../utils/clubUtils';
 import useLiveRefresh from '../../lib/useLiveRefresh';
 import { SkeletonList } from '../ui/Skeleton';
+import { STATUS } from '../../lib/tickets';
 
 // The bell: every place somebody @mentioned you, whether on a task, a ninja's
 // log or a club session, and every task somebody put you on, with a red count
-// of what you have not opened. Admins also get every new bug report and
-// feature idea.
+// of what you have not opened. Anyone who sent a bug report or feature idea
+// hears when it moves, and admins also get every new one.
 // Pressing one marks it read and takes you to it.
 //
 // The list comes from /api/notifications, which reads the mention rows each
@@ -39,6 +40,7 @@ function ago(iso) {
 
 // What happened, after the person's name.
 function whatOf(n) {
+  if (n.kind === 'ticket_status') return `moved your report "${n.place}" to ${STATUS[n.status]?.label || n.status}`;
   if (n.kind === 'ticket') return n.place === 'feature' ? 'suggested a feature' : 'reported a bug';
   if (n.kind === 'assign') return `assigned you to the task "${n.place}"`;
   if (n.kind === 'task') return `mentioned you on the task "${n.place}"`;
@@ -127,6 +129,7 @@ export default function NotificationBell({ className = '', compact = false, chil
 
   const linkFor = (n) => {
     if (n.kind === 'ticket') return `/feedback?ticket=${n.id}`;
+    if (n.kind === 'ticket_status') return '/feedback?tab=mine';
     if (n.kind === 'task' || n.kind === 'assign') return `${isManager ? '/manager/tasks' : '/sensei/tasks'}?task=${n.task_id}`;
     if (n.kind === 'log') return `/manager/students/${n.student_id}#log-${n.log_id}`;
     return `/clubs/${toSlug(n.club_name)}?session=${n.session_id}`;

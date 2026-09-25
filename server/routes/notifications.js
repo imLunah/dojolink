@@ -125,6 +125,28 @@ const TICKET_FEED_SQL = `
    ORDER BY (t.seen_at IS NULL) DESC, t.created_at DESC
    LIMIT ${LIST_LIMIT}`;
 
+// Anyone on staff who sent a ticket hears when an admin moves it along. The
+// ticket row is the notification (057): when its status last changed, who
+// changed it, and when the reporter read that. An admin moving their own
+// ticket is not news to them.
+const STATUS_FEED_SQL = `
+  SELECT 'ticket_status' AS kind, t.id, t.status_changed_at AS created_at, t.reporter_read_at AS read_at,
+         NULL AS body, u.display_name AS author_name, u.profile_pic_url AS author_pic,
+         COALESCE(t.title, 'your report') AS place, t.status,
+         NULL::int AS task_id, NULL::int AS student_id, NULL::int AS log_id,
+         NULL::int AS session_id, NULL::text AS club_name, NULL::json AS mentions
+    FROM feedback_tickets t
+    LEFT JOIN users u ON u.id = t.status_changed_by
+   WHERE t.reporter_user_id = $1
+     AND t.status_changed_at IS NOT NULL
+     AND t.status_changed_by IS DISTINCT FROM t.reporter_user_id
+     AND (t.reporter_read_at IS NULL OR t.status_changed_at > now() - interval '${READ_WINDOW_DAYS} days')
+   ORDER BY (t.reporter_read_at IS NULL) DESC, t.status_changed_at DESC
+   LIMIT ${LIST_LIMIT}`;
+
+const STATUS_UNREAD_WHERE = `reporter_user_id = $1 AND status_changed_at IS NOT NULL
+  AND status_changed_by IS DISTINCT FROM reporter_user_id AND reporter_read_at IS NULL`;
+
 const byUnreadThenNewest = (a, b) =>
   (a.read_at ? 1 : 0) - (b.read_at ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at);
 
@@ -133,13 +155,17 @@ router.get('/', requireSensei, async (req, res) => {
   const pool = req.app.get('db');
   try {
     let { rows } = await pool.query(FEED_SQL, [req.session.userId, req.session.activeLocationId]);
-    let ticketUnread = 0;
+    const { rows: statusRows } = await pool.query(STATUS_FEED_SQL, [req.session.userId]);
+    const { rows: [sc] } = await pool.query(`SELECT COUNT(*) AS n FROM feedback_tickets WHERE ${STATUS_UNREAD_WHERE}`, [req.session.userId]);
+    let ticketUnread = Number(sc.n);
+    rows = [...rows, ...statusRows];
     if (isAdmin(req)) {
       const { rows: tickets } = await pool.query(TICKET_FEED_SQL);
-      rows = [...rows, ...tickets].sort(byUnreadThenNewest).slice(0, LIST_LIMIT);
+      rows = [...rows, ...tickets];
       const { rows: [c] } = await pool.query('SELECT COUNT(*) AS n FROM feedback_tickets WHERE seen_at IS NULL');
-      ticketUnread = Number(c.n);
+      ticketUnread += Number(c.n);
     }
+    rows = rows.sort(byUnreadThenNewest).slice(0, LIST_LIMIT);
     const { rows: count } = await pool.query(
       `SELECT
          (SELECT COUNT(*) FROM director_task_comment_mentions m ${scoped('task', '$2')} WHERE m.user_id = $1 AND m.read_at IS NULL)
@@ -172,6 +198,12 @@ router.post('/read-all', requireSensei, requireOwnLocation, async (req, res) => 
       );
       read += rowCount;
     }
+    {
+      const { rowCount } = await pool.query(
+        `UPDATE feedback_tickets SET reporter_read_at = now() WHERE ${STATUS_UNREAD_WHERE}`, [req.session.userId]
+      );
+      read += rowCount;
+    }
     if (isAdmin(req)) {
       const { rowCount } = await pool.query('UPDATE feedback_tickets SET seen_at = now() WHERE seen_at IS NULL');
       read += rowCount;
@@ -188,11 +220,21 @@ router.post('/read-all', requireSensei, requireOwnLocation, async (req, res) => 
 router.post('/:kind/:id/read', requireSensei, requireOwnLocation, async (req, res) => {
   const { kind } = req.params;
   const isTicket = kind === 'ticket' && isAdmin(req);
-  if (!isTicket && !Object.prototype.hasOwnProperty.call(SCOPES, kind)) return res.status(400).json({ error: 'Unknown notification' });
+  const isTicketStatus = kind === 'ticket_status';
+  if (!isTicket && !isTicketStatus && !Object.prototype.hasOwnProperty.call(SCOPES, kind)) return res.status(400).json({ error: 'Unknown notification' });
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Unknown notification' });
   const pool = req.app.get('db');
   try {
+    if (isTicketStatus) {
+      const { rowCount } = await pool.query(
+        `UPDATE feedback_tickets SET reporter_read_at = COALESCE(reporter_read_at, now())
+          WHERE id = $1 AND reporter_user_id = $2 AND status_changed_at IS NOT NULL`,
+        [id, req.session.userId]
+      );
+      if (!rowCount) return res.status(404).json({ error: 'Notification not found' });
+      return res.json({ ok: true });
+    }
     if (isTicket) {
       const { rowCount } = await pool.query('UPDATE feedback_tickets SET seen_at = COALESCE(seen_at, now()) WHERE id = $1', [id]);
       if (!rowCount) return res.status(404).json({ error: 'Notification not found' });

@@ -238,13 +238,19 @@ router.patch('/:id', requireAdmin, async (req, res) => {
     if (nextStatus !== 'new' && !nextTitle) {
       return res.status(400).json({ error: 'Give it a title before it leaves the inbox.' });
     }
+    // A move to a real status rings the reporter's bell (notifications.js).
+    // Retitling alone does not, and nor does sending it back to the inbox.
+    const notify = nextStatus !== current.status && nextStatus !== 'new';
     const { rows: [row] } = await pool.query(
       `UPDATE feedback_tickets
           SET title = $2, status = $3, updated_at = now(), seen_at = COALESCE(seen_at, now()),
-              closed_at = CASE WHEN $3 = ANY($4::text[]) THEN COALESCE(closed_at, now()) ELSE NULL END
+              closed_at = CASE WHEN $3 = ANY($4::text[]) THEN COALESCE(closed_at, now()) ELSE NULL END,
+              status_changed_at = CASE WHEN $5 THEN now() ELSE status_changed_at END,
+              status_changed_by = CASE WHEN $5 THEN $6::int ELSE status_changed_by END,
+              reporter_read_at  = CASE WHEN $5 THEN NULL ELSE reporter_read_at END
         WHERE id = $1
         RETURNING id`,
-      [id, nextTitle, nextStatus, CLOSED]
+      [id, nextTitle, nextStatus, CLOSED, notify, req.session.userId]
     );
     const { rows: [full] } = await pool.query(
       `SELECT ${ADMIN_COLUMNS} FROM feedback_tickets t LEFT JOIN locations l ON l.id = t.location_id WHERE t.id = $1`,

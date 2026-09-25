@@ -7,7 +7,7 @@ import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
 import NotificationBell from '../shared/NotificationBell';
 import { LogOutIcon, CircleHelpIcon, UserIcon, BellIcon } from 'lucide-react';
-import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
+import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon, MilestoneIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 const EXPANDED_W = 224; // matches w-56
@@ -53,6 +53,7 @@ export const managerLinks = [
       { to: '/manager/reports', label: 'Reports', Glyph: ChartNoAxesColumnIncreasingIcon },
       { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
       { to: '/changelog', label: "What's New", Glyph: GiftIcon },
+      { to: '/feedback', label: 'Issues & roadmap', Glyph: MilestoneIcon },
     ],
   },
   { to: '/manager/dashboard', label: "Today's Board", icon: 'today' },
@@ -104,6 +105,8 @@ export const senseiLinks = [
   // Keep curriculum one press away during a session; this is where senseis
   // reach lesson resources and completion codes.
   { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
+  // Senseis have no dashboard flyout, so the ticket list gets a row.
+  { to: '/feedback', label: 'Issues & roadmap', Glyph: MilestoneIcon },
 ];
 
 export default function Sidebar({ onOpenBug }) {
