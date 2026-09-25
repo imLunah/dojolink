@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, HandHeartIcon } from 'lucide-react';
 import {
   ACCENT, Card, Empty, ErrorLine, Loading, Toggle, WEEKDAY_NAMES, WEEKDAY_SHORT,
   addDays, centerToday, hourLabel, hourShort, localDate, median, plural, useReport, useReportFilters,
 } from '../../../components/reports/ReportParts';
 import { Skeleton } from '../../../components/ui/Skeleton';
+import { SUPPORT_INK } from '../../../lib/support';
 
 // The Attendance tab is for staffing. Its unit is the hour, and its headline
 // number is how many ninjas were in the room at once, because that is what a
@@ -46,12 +47,15 @@ function summarize(data) {
     for (let h = open[0]; h < open[1]; h += 1) {
       const peaks = days.map((d) => byDay.get(d)?.get(h)?.peak || 0);
       const arrivals = days.map((d) => byDay.get(d)?.get(h)?.arrivals || 0);
+      const support = days.map((d) => byDay.get(d)?.get(h)?.support || 0);
       hours.push({
         hour: h,
         peak: median(peaks),
         peakMax: Math.max(0, ...peaks),
         arrivals: median(arrivals),
         arrivalsMax: Math.max(0, ...arrivals),
+        support: median(support),
+        supportMax: Math.max(0, ...support),
       });
     }
     const allDays = [...new Set([...days, ...club.keys()])].filter((d) => localDate(d).getDay() === wd);
@@ -69,18 +73,25 @@ function summarize(data) {
   return out;
 }
 
-function HeatCell({ value, max, title }) {
+// A cell is the usual number in the room at once. When some of them usually
+// need extra support, that count sits under it beside the support glyph.
+function HeatCell({ value, support = 0, max, title }) {
   const t = max > 0 ? value / max : 0;
   return (
     <div
       title={title}
-      className="flex h-10 items-center justify-center rounded-lg text-[13px] font-semibold tabular-nums"
+      className="flex h-12 flex-col items-center justify-center rounded-lg text-[13px] font-semibold leading-tight tabular-nums"
       style={{
         backgroundColor: value > 0 ? `rgb(var(--ninja-blue) / ${0.1 + t * 0.9})` : 'rgb(var(--ninja-border) / 0.45)',
         color: t > 0.55 ? '#ffffff' : 'rgb(var(--ninja-navy))',
       }}
     >
       {value}
+      {support > 0 && (
+        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold opacity-85">
+          <HandHeartIcon size={10} strokeWidth={2.5} aria-hidden="true" />{support}
+        </span>
+      )}
     </div>
   );
 }
@@ -106,9 +117,10 @@ function Heatmap({ stats, max }) {
                 <HeatCell
                   key={`${wd}-${h.hour}`}
                   value={s.days ? v : 0}
+                  support={s.days ? h.support : 0}
                   max={max}
                   title={s.days
-                    ? `${WEEKDAY_NAMES[wd]} ${hourLabel(h.hour)}: usually ${v} in the room at once, up to ${h.peakMax}, over ${plural(s.days, 'day')}`
+                    ? `${WEEKDAY_NAMES[wd]} ${hourLabel(h.hour)}: usually ${v} in the room at once, up to ${h.peakMax}, over ${plural(s.days, 'day')}${h.supportMax > 0 ? `. Needing extra support: usually ${h.support}, up to ${h.supportMax}` : ''}`
                     : `${WEEKDAY_NAMES[wd]}: no check-ins in this period`}
                 />
               );
@@ -133,8 +145,18 @@ function HeatmapCard({ data, error, title, sub }) {
     ? Math.max(0, ...Object.values(stats).flatMap((s) => s.hours.map((h) => h.peak)))
     : 0;
   const any = stats && Object.values(stats).some((s) => s.days > 0);
+  const anySupport = stats && Object.values(stats).some((s) => s.days > 0 && s.hours.some((h) => h.support > 0));
   return (
-    <Card title={title} sub={sub}>
+    <Card
+      title={title}
+      sub={sub}
+      action={anySupport && (
+        <span className="inline-flex items-center gap-1 text-xs text-ninja-muted">
+          <HandHeartIcon size={13} strokeWidth={2.25} style={{ color: SUPPORT_INK }} aria-hidden="true" />
+          Need extra support
+        </span>
+      )}
+    >
       {error ? <ErrorLine>{error}</ErrorLine>
         : !stats ? <Skeleton className="h-64 rounded-xl" />
           : !any ? <Empty>No check-ins in this period.</Empty>
@@ -146,7 +168,7 @@ function HeatmapCard({ data, error, title, sub }) {
 // One hour of the detail. Over a period the bar is solid to the usual day and
 // pale out to the busiest, so the gap between them is the part a schedule has
 // to absorb.
-function HourStat({ hour, peak, peakMax, arrivals, arrivalsMax, scale, pattern, index }) {
+function HourStat({ hour, peak, peakMax, arrivals, arrivalsMax, support = 0, supportMax = 0, scale, pattern, index }) {
   const pctOf = (n) => (scale > 0 ? `${Math.max((n / scale) * 100, n > 0 ? 2 : 0)}%` : '0%');
   const ease = { duration: 0.6, delay: Math.min(index * 0.05, 0.3), ease: [0.22, 1, 0.36, 1] };
   return (
@@ -167,6 +189,12 @@ function HourStat({ hour, peak, peakMax, arrivals, arrivalsMax, scale, pattern, 
       <p className="mt-2 text-xs tabular-nums text-ninja-muted">
         {pattern ? `${arrivals} arrived, up to ${arrivalsMax}` : `${arrivals} arrived`}
       </p>
+      {supportMax > 0 && (
+        <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium tabular-nums" style={{ color: SUPPORT_INK }}>
+          <HandHeartIcon size={12} strokeWidth={2.25} aria-hidden="true" />
+          {pattern ? `${support} need extra support, up to ${supportMax}` : `${support} need extra support`}
+        </p>
+      )}
     </div>
   );
 }
@@ -206,7 +234,7 @@ function HourDetail({ periodData, centerId, centerPicker }) {
       if (open && one.data.days.length) {
         for (let h = open[0]; h < open[1]; h += 1) {
           const r = byHour.get(h);
-          rows.push({ hour: h, peak: r?.peak || 0, peakMax: r?.peak || 0, arrivals: r?.arrivals || 0, arrivalsMax: r?.arrivals || 0 });
+          rows.push({ hour: h, peak: r?.peak || 0, peakMax: r?.peak || 0, arrivals: r?.arrivals || 0, arrivalsMax: r?.arrivals || 0, support: r?.support || 0, supportMax: r?.support || 0 });
         }
       }
       const clubCount = (one.data.clubOnly || []).reduce((s, r) => s + r.count, 0);

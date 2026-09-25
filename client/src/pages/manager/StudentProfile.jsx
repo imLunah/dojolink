@@ -9,6 +9,7 @@ import BeltIcon from '../../components/ui/BeltIcon';
 import Button from '../../components/ui/Button';
 import ProgressHistory from '../../components/shared/ProgressHistory';
 import PinnedNote from '../../components/shared/PinnedNote';
+import SupportMark from '../../components/shared/SupportMark';
 import EditStudentModal from '../../components/manager/EditStudentModal';
 import StickerPickerModal from '../../components/shared/StickerPickerModal';
 import { stickerUrl, stickerLabel } from '../../utils/stickers';
@@ -647,6 +648,16 @@ export default function StudentProfile() {
                 </p>
               </div>
             </div>
+            {(!isReadOnly || student.support) && (
+              <div className="mt-3 flex">
+                <SupportMark
+                  studentId={student.id}
+                  reason={student.support?.reason}
+                  readOnly={isReadOnly}
+                  onChange={(reason) => setStudent((prev) => ({ ...prev, support: reason ? { ...prev.support, reason } : null }))}
+                />
+              </div>
+            )}
           </motion.div>
 
           {/* Pinned Note — first so senseis can't miss it. Parent note folded in. */}
@@ -734,6 +745,12 @@ export default function StudentProfile() {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              <SupportMark
+                studentId={student.id}
+                reason={student.support?.reason}
+                readOnly={isReadOnly}
+                onChange={(reason) => setStudent((prev) => ({ ...prev, support: reason ? { ...prev.support, reason } : null }))}
+              />
               {isManager && !isReadOnly && (
                 <button
                   onClick={() => setShowEdit(true)}

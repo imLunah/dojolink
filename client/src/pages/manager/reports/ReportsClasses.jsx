@@ -173,12 +173,13 @@ export default function ReportsClasses() {
           <Table
             rowKey={(r) => nameOf(r.cls)}
             rows={rows}
-            minWidth={720}
+            minWidth={820}
             empty="No check-ins in this period."
             columns={[
               { key: 'name', label: 'Program', render: (r) => <span className="font-medium">{nameOf(r.cls)}</span> },
               { key: 'enrolled', label: 'Enrolled', align: 'right', render: (r) => (r.cls ? r.enrolled : '') },
               { key: 'ninjas', label: 'Came', align: 'right' },
+              { key: 'support', label: 'Need extra support', align: 'right', render: (r) => r.support || '' },
               { key: 'came', label: 'Share who came', align: 'right', render: (r) => (r.cls && r.enrolled ? pct(Math.min(r.ninjas, r.enrolled), r.enrolled) : '') },
               {
                 key: 'cur',

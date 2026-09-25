@@ -249,6 +249,10 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
 //              five-minute slots. This is the staffing number: a 3:40 arrival
 //              is still at a table at 4:30 and arrivals alone never show it.
 //
+// support — the most ninjas marked "needs extra support" in the room at once
+//              during the hour. The mark is read as it stands today, so a
+//              ninja marked this week counts on the days they came before it.
+//
 // Rows whose check-in happened on a different day than their session (added
 // after the fact) are left out: that timestamp says when someone typed.
 //
@@ -291,7 +295,8 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
 
   const { rows } = await pool.query(`
     WITH checkins AS (
-      SELECT da.student_id, da.session_date, da.checked_in_at AT TIME ZONE $2 AS t
+      SELECT da.student_id, da.session_date, da.checked_in_at AT TIME ZONE $2 AS t,
+             EXISTS (SELECT 1 FROM student_support ss WHERE ss.student_id = da.student_id) AS support
       FROM daily_assignments da
       WHERE ${where}
         AND ($4::text IS NULL OR da.program = $4::text)
@@ -299,7 +304,7 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
         AND ${inScope('da.student_id')}
     ),
     raw AS (
-      SELECT session_date, MIN(t) AS arrived,
+      SELECT session_date, BOOL_OR(support) AS support, MIN(t) AS arrived,
              GREATEST(MAX(t), MIN(t) + (COUNT(*) - 1) * INTERVAL '1 hour') + INTERVAL '1 hour' AS left_at,
              session_date + ${openHourSql('session_date', 0)} * INTERVAL '1 hour' AS opens,
              session_date + ${openHourSql('session_date', 1)} * INTERVAL '1 hour' AS closes
@@ -307,13 +312,13 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
       GROUP BY student_id, session_date
     ),
     visits AS (
-      SELECT session_date, arrived, opens, closes,
+      SELECT session_date, support, arrived, opens, closes,
              GREATEST(arrived, opens) AS from_t, LEAST(left_at, closes) AS to_t
       FROM raw
       WHERE opens IS NOT NULL
     ),
     slots AS (
-      SELECT v.session_date, slot
+      SELECT v.session_date, v.support, slot
       FROM visits v,
            generate_series(
              date_trunc('hour', v.from_t) + FLOOR(EXTRACT(MINUTE FROM v.from_t) / 5) * INTERVAL '5 minutes',
@@ -323,8 +328,8 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
       WHERE v.to_t > v.from_t
     ),
     peaks AS (
-      SELECT session_date, EXTRACT(HOUR FROM slot)::int AS hour, MAX(n)::int AS peak
-      FROM (SELECT session_date, slot, COUNT(*) AS n FROM slots GROUP BY 1, 2) c
+      SELECT session_date, EXTRACT(HOUR FROM slot)::int AS hour, MAX(n)::int AS peak, MAX(s)::int AS support
+      FROM (SELECT session_date, slot, COUNT(*) AS n, COUNT(*) FILTER (WHERE support) AS s FROM slots GROUP BY 1, 2) c
       GROUP BY 1, 2
     ),
     arrivals AS (
@@ -337,7 +342,7 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
     )
     SELECT to_char(COALESCE(p.session_date, a.session_date), 'YYYY-MM-DD') AS day,
            COALESCE(p.hour, a.hour) AS hour,
-           COALESCE(a.arrivals, 0) AS arrivals, COALESCE(p.peak, 0) AS peak
+           COALESCE(a.arrivals, 0) AS arrivals, COALESCE(p.peak, 0) AS peak, COALESCE(p.support, 0) AS support
     FROM peaks p
     FULL JOIN arrivals a ON a.session_date = p.session_date AND a.hour = p.hour
     ORDER BY 1, 2
@@ -357,7 +362,7 @@ router.get('/students', requireManager, handle('student report', async (req, res
                        JOIN locations l ON l.id = sl2.location_id
                        WHERE sl2.student_id = s.id AND sl2.location_id = ANY($1::int[]))`;
 
-  const [roster, enrollment, belts, frequency, inactive] = await Promise.all([
+  const [roster, enrollment, belts, frequency, inactive, support] = await Promise.all([
     pool.query(`
       SELECT COUNT(*)::int AS count FROM students s
       WHERE s.active = true AND ${inScope('s.id')}
@@ -401,6 +406,23 @@ router.get('/students', requireManager, handle('student report', async (req, res
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
       ORDER BY last_seen DESC NULLS LAST, s.full_name
     `, [f.centerIds, f.program, centerToday()]),
+    // Ninjas marked "needs extra support", with the reason and when they last
+    // came, so a director can see who is marked and review it.
+    pool.query(`
+      SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers, ss.reason,
+             to_char(ss.set_at, 'YYYY-MM-DD') AS set_on, u.display_name AS set_by_name,
+             to_char(GREATEST(
+               (SELECT MAX(da.session_date) FROM daily_assignments da WHERE da.student_id = s.id),
+               (SELECT MAX(cs.session_date) FROM club_attendees ca JOIN club_sessions cs ON ca.club_session_id = cs.id
+                  WHERE ca.student_id = s.id)
+             ), 'YYYY-MM-DD') AS last_seen
+      FROM student_support ss
+      JOIN students s ON s.id = ss.student_id
+      LEFT JOIN users u ON u.id = ss.set_by
+      WHERE s.active = true AND ${inScope('s.id')}
+        AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM student_programs sp WHERE sp.student_id = s.id AND sp.program = $2::text))
+      ORDER BY s.full_name
+    `, [f.centerIds, f.program]),
   ]);
 
   res.json({
@@ -411,6 +433,7 @@ router.get('/students', requireManager, handle('student report', async (req, res
     belts: belts.rows,
     visitsPerNinja: frequency.rows.map((r) => r.visits),
     inactive: inactive.rows,
+    support: support.rows,
   });
 }));
 
@@ -531,7 +554,9 @@ router.get('/classes', requireManager, handle('classes report', async (req, res)
         SELECT cls,
           COUNT(*) FILTER (WHERE day >= $4::date)::int AS cur,
           COUNT(*) FILTER (WHERE day < $4::date)::int AS prev,
-          COUNT(DISTINCT student_id) FILTER (WHERE day >= $4::date)::int AS ninjas
+          COUNT(DISTINCT student_id) FILTER (WHERE day >= $4::date)::int AS ninjas,
+          COUNT(DISTINCT student_id) FILTER (WHERE day >= $4::date
+            AND EXISTS (SELECT 1 FROM student_support ss WHERE ss.student_id = v.student_id))::int AS support
         FROM v WHERE cls <> 'Clubs' GROUP BY cls
       ),
       enrolled AS (
@@ -541,7 +566,7 @@ router.get('/classes', requireManager, handle('classes report', async (req, res)
         GROUP BY sp.program
       )
       SELECT COALESCE(v.cls, e.cls) AS cls, COALESCE(v.cur, 0) AS cur, COALESCE(v.prev, 0) AS prev,
-             COALESCE(v.ninjas, 0) AS ninjas, COALESCE(e.enrolled, 0) AS enrolled
+             COALESCE(v.ninjas, 0) AS ninjas, COALESCE(v.support, 0) AS support, COALESCE(e.enrolled, 0) AS enrolled
       FROM visits v FULL JOIN enrolled e ON e.cls = v.cls
     `, base),
     pool.query(`

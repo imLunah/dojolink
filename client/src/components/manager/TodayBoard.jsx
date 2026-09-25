@@ -11,6 +11,7 @@ import { ProgramAvatar } from '../ui/ProgramBadge';
 import ActionMenu, { MenuItem } from '../ui/ActionMenu';
 import { isBirthdayToday } from '../shared/BirthdayConfetti';
 import { MARKDOWN_COMPONENTS, Pin } from '../shared/PinnedNote';
+import SupportMark from '../shared/SupportMark';
 
 // Sticky-note marker that reveals the ninja's pinned note on hover or click.
 // Filled amber square with a folded corner + text lines — reads as "note" at a
@@ -230,6 +231,11 @@ export default function TodayBoard({
   const { isReadOnly } = useAuth();
   const showRemove = canRemove && !isReadOnly;
   const navigate = useNavigate();
+  // The support mark belongs to the ninja, so every row of theirs on the
+  // board takes the new value.
+  const setSupport = (group, reason) => {
+    group.assignments.forEach((a) => onUpdate?.({ ...a, support_reason: reason }));
+  };
   const [confirmId, setConfirmId] = useState(null);
   const todayStr = today();
 
@@ -388,6 +394,13 @@ export default function TodayBoard({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    <SupportMark
+                      compact
+                      studentId={group.student_id}
+                      reason={group.support_reason}
+                      readOnly={isReadOnly}
+                      onChange={(reason) => setSupport(group, reason)}
+                    />
                     {showRemove && (
                       confirmId === group.student_id ? (
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -494,6 +507,13 @@ export default function TodayBoard({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 mt-1">
+                  <SupportMark
+                    compact
+                    studentId={group.student_id}
+                    reason={group.support_reason}
+                    readOnly={isReadOnly}
+                    onChange={(reason) => setSupport(group, reason)}
+                  />
                   {showRemove && (
                     confirmId === group.student_id ? (
                       <div className="flex items-center gap-1">

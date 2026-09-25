@@ -20,6 +20,7 @@ const ASSIGNMENT_SELECT = `
     s.birthday,
     s.pinned_note,
     s.special_instructions,
+    (SELECT ss.reason FROM student_support ss WHERE ss.student_id = s.id) AS support_reason,
     sp.belt_level,
     sp.belt_sublevel,
     sp.current_project,

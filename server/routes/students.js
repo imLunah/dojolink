@@ -186,7 +186,9 @@ router.get('/:id', requireAuth, async (req, res) => {
       ? new Date(assignmentRows[0].session_date).toISOString().split('T')[0]
       : null;
 
-    res.json({ ...student, progress_logs: progressLogs, club_sessions: clubSessions, pending_checkin_date });
+    const support = await readSupport(pool, id);
+
+    res.json({ ...student, progress_logs: progressLogs, club_sessions: clubSessions, pending_checkin_date, support });
   } catch (err) {
     console.error('Error fetching student:', err);
     res.status(500).json({ error: 'Failed to fetch student' });
@@ -413,6 +415,52 @@ router.patch('/:id/note', requireSensei, requireOwnLocation, async (req, res) =>
   } catch (err) {
     console.error('Error updating pinned note:', err);
     res.status(500).json({ error: 'Failed to update note' });
+  }
+});
+
+// "Needs extra support" (migration 052): a staff-only mark on a ninja who
+// needs a sensei beside them more than most, so Reports can show when those
+// ninjas are in the room. Any sensei at the center may set or clear it, from
+// the profile or the check-in board. It lives in its own table so it can never
+// ride along on an s.* select into the parent portal or the kiosk.
+const SUPPORT_REASONS = ['one_to_one', 'settling_in', 'focus', 'learning'];
+
+async function readSupport(pool, studentId) {
+  const { rows } = await pool.query(`
+    SELECT ss.reason, ss.set_at, u.display_name AS set_by_name
+    FROM student_support ss LEFT JOIN users u ON u.id = ss.set_by
+    WHERE ss.student_id = $1
+  `, [studentId]);
+  return rows[0] || null;
+}
+
+// PUT /api/students/:id/support  { reason }  — reason null clears the mark.
+router.put('/:id/support', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const id = Number(req.params.id);
+  const { reason } = req.body;
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid student' });
+  if (reason != null && !SUPPORT_REASONS.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' });
+  }
+  try {
+    const { rows } = await pool.query(
+      'SELECT 1 FROM students s WHERE s.id = $1 AND s.active = true AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)',
+      [id, req.session.activeLocationId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
+    if (reason == null) {
+      await pool.query('DELETE FROM student_support WHERE student_id = $1', [id]);
+    } else {
+      await pool.query(`
+        INSERT INTO student_support (student_id, reason, set_by, set_at) VALUES ($1, $2, $3, now())
+        ON CONFLICT (student_id) DO UPDATE SET reason = EXCLUDED.reason, set_by = EXCLUDED.set_by, set_at = now()
+      `, [id, reason, req.session.userId]);
+    }
+    res.json({ support: await readSupport(pool, id) });
+  } catch (err) {
+    console.error('Error updating support:', err);
+    res.status(500).json({ error: 'Failed to update support' });
   }
 });
 

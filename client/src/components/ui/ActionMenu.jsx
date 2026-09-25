@@ -12,7 +12,7 @@ import { MoreHorizontalIcon } from 'lucide-react';
 // its own confirm step without the menu closing underneath it.
 // `trigger` replaces the "..." glyph when the thing being pressed is itself the
 // subject of the menu (a class icon opening the list of classes).
-export default function ActionMenu({ children, label = 'Actions', align = 'right', className = '', onClosed, trigger, triggerClassName }) {
+export default function ActionMenu({ children, label = 'Actions', align = 'right', className = '', onClosed, trigger, triggerClassName, triggerStyle }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
@@ -72,6 +72,7 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        style={triggerStyle}
         className={triggerClassName ?? `p-1.5 rounded-full transition-colors duration-150 hover:text-ninja-navy hover:bg-ninja-bg ${
           open ? 'text-ninja-navy bg-ninja-bg' : 'text-ninja-muted'
         }`}
