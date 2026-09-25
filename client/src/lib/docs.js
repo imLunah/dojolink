@@ -610,7 +610,8 @@ export const DOCS = [
       {
         title: 'When it runs out',
         blocks: [
-          { p: 'MyStudio sign-ins expire. When yours does, Today\'s Board says so and links straight to the panel. Sign in again and enter the new code.' },
+          { p: 'MyStudio asks for a new code about once a month. In between, DojoLink signs itself back in with your saved password each day, so there is nothing to do.' },
+          { p: 'When a code is needed, Today\'s Board says so and links straight to the panel. Sign in again and enter the new code. If you choose **Forget saved password**, DojoLink can no longer sign itself in, and you will be asked for a code every day.' },
         ],
       },
     ],

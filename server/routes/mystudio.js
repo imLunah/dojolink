@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
+const { keepSignedIn, canRenew } = require('../lib/mystudioSession');
 const { addMembership } = require('../lib/studentScope');
 
 // Experimental: read today's booked roster out of the studio management system
@@ -25,7 +26,7 @@ async function loadConnection(pool, locationId) {
   const { rows } = await pool.query(
     `SELECT c.id, c.location_id, c.company_id, c.company_name, c.session_cookie,
             c.status, c.last_verified_at, c.last_synced_at,
-            c.login_email, c.login_secret, c.login_saved_at,
+            c.login_email, c.login_secret, c.login_saved_at, c.remembered_until,
             c.feature_booked, c.feature_import, c.feature_kiosk,
             u.display_name AS connected_by_name
        FROM mystudio_connections c
@@ -50,6 +51,13 @@ function expiryOf(conn) {
   }
 }
 
+// When somebody next has to type a code: the remembered device's end for a
+// center that renews itself, otherwise the session's own.
+function codeNeededBy(conn, sessionExpires) {
+  const at = canRenew(conn) ? new Date(conn.remembered_until) : sessionExpires;
+  return at ? at.toISOString() : null;
+}
+
 // What the client is allowed to know about a connection.
 //
 // login_secret is absent by construction rather than by deletion: nothing that
@@ -60,11 +68,14 @@ function publicShape(conn) {
   // Read off the stored token rather than a column, so it cannot drift from the
   // credential it describes. Null means unreadable, which the UI shows as
   // nothing rather than as trouble.
-  const expiresAt = expiryOf(conn);
+  //
+  // A center that renews itself runs out when the remembered device does, not
+  // when today's session does, because that is when somebody has to act.
+  const sessionExpires = expiryOf(conn);
   return {
     connected: true,
-    status: expiresAt && expiresAt <= new Date() ? 'expired' : conn.status,
-    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    status: sessionExpires && sessionExpires <= new Date() ? 'expired' : conn.status,
+    expiresAt: codeNeededBy(conn, sessionExpires),
     companyName: conn.company_name,
     companyId: conn.company_id,
     connectedByName: conn.connected_by_name || null,
@@ -83,20 +94,27 @@ function publicShape(conn) {
 
 const SAVE_RETURNING = `RETURNING id, location_id, company_id, company_name, status,
                  last_verified_at, last_synced_at, login_email, login_secret,
-                 feature_booked, feature_import, feature_kiosk`;
+                 remembered_until, feature_booked, feature_import, feature_kiosk`;
 
 // One place that writes a connection, used by both ways of making one.
 //
 // `login` is only present when the credential came from a sign-in here. Passing
 // it null leaves any saved password untouched, so reconnecting with a pasted
 // cookie does not silently forget the password that makes renewals quick.
-async function saveConnection(pool, { locationId, userId, companyId, companyName, cookie, login }) {
+//
+// `rememberedUntil` always overwrites: a pasted cookie carries no device this
+// server can use, so it resets to NULL and the connection stops renewing itself.
+async function saveConnection(
+  pool,
+  { locationId, userId, companyId, companyName, cookie, login, rememberedUntil = null }
+) {
   const { rows } = await pool.query(
     `INSERT INTO mystudio_connections
        (location_id, connected_by, company_id, company_name, session_cookie,
-        status, last_verified_at, login_email, login_secret, login_saved_at)
+        status, last_verified_at, login_email, login_secret, login_saved_at,
+        remembered_until)
      VALUES ($1, $2, $3, $4, $5, 'connected', now(), $6, $7,
-             CASE WHEN $7::text IS NULL THEN NULL ELSE now() END)
+             CASE WHEN $7::text IS NULL THEN NULL ELSE now() END, $8)
      ON CONFLICT (location_id) DO UPDATE SET
        connected_by = EXCLUDED.connected_by,
        company_id = EXCLUDED.company_id,
@@ -109,7 +127,8 @@ async function saveConnection(pool, { locationId, userId, companyId, companyName
        login_saved_at = CASE
          WHEN EXCLUDED.login_secret IS NULL THEN mystudio_connections.login_saved_at
          ELSE now()
-       END
+       END,
+       remembered_until = EXCLUDED.remembered_until
      ${SAVE_RETURNING}`,
     [
       locationId,
@@ -119,6 +138,7 @@ async function saveConnection(pool, { locationId, userId, companyId, companyName
       ms.encryptCookie(cookie),
       login ? login.email : null,
       login ? ms.encryptCookie(login.password) : null,
+      rememberedUntil,
     ]
   );
   return rows[0];
@@ -252,7 +272,7 @@ function clearPending(req) {
 router.get('/status', requireManager, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const conn = await loadConnection(pool, req.session.activeLocationId);
+    const conn = await keepSignedIn(pool, await loadConnection(pool, req.session.activeLocationId));
     const pending = readPending(req);
     res.json({
       configured: ms.isConfigured(),
@@ -436,6 +456,7 @@ router.post('/login/verify', requireManager, requireOwnLocation, async (req, res
       companyName: verified.companyName,
       cookie: signedIn.cookie,
       login: { email, password },
+      rememberedUntil: signedIn.rememberedUntil,
     });
 
     // Used, so it goes. The password lives in the row now, encrypted.
@@ -504,7 +525,7 @@ router.get('/today', requireSensei, async (req, res) => {
   }
 
   try {
-    const conn = await loadConnection(pool, locationId);
+    const conn = await keepSignedIn(pool, await loadConnection(pool, locationId));
     // Not connected is a normal state, not a failure. Centers that never
     // connect should see nothing rather than an error.
     if (!conn) return res.json({ connected: false, expected: [] });
@@ -641,7 +662,7 @@ router.get('/today', requireSensei, async (req, res) => {
         configured: true,
         status: 'connected',
         companyName: conn.company_name,
-        expiresAt: expiresAt ? expiresAt.toISOString() : null,
+        expiresAt: codeNeededBy(conn, expiresAt),
         date: pulled.date,
         classCount: pulled.classCount,
         bookedClassCount: pulled.bookedClassCount,
@@ -676,7 +697,7 @@ router.get('/today', requireSensei, async (req, res) => {
       companyName: conn.company_name,
       // Recomputed: a rotation would have moved it, and this is the response
       // the board decides on.
-      expiresAt: (session.rotated ? ms.readCookieExpiry(session.cookie) : expiresAt)?.toISOString() || null,
+      expiresAt: codeNeededBy(conn, session.rotated ? ms.readCookieExpiry(session.cookie) : expiresAt),
       date: pulled.date,
       classCount: pulled.classCount,
       bookedClassCount: pulled.bookedClassCount,
@@ -778,7 +799,7 @@ router.post('/import', requireManager, requireOwnLocation, async (req, res) => {
   const date = todayDate();
 
   try {
-    const conn = await loadConnection(pool, locationId);
+    const conn = await keepSignedIn(pool, await loadConnection(pool, locationId));
     if (!conn) return res.status(400).json({ error: 'This center is not connected to MyStudio.' });
     if (!ms.isConfigured()) {
       return res.status(503).json({ error: 'MyStudio is not set up on the server yet.' });

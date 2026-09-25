@@ -857,8 +857,8 @@ function DailySchedule({ feed, date, onAdded, existingStudentIds, readOnly, canC
       ) : expired ? (
         <ScheduleBlocked title="The MyStudio connection ran out">
           {canConnect ? (
-            // Sign in right here. The credential lasts a day at a time, so
-            // this is a weekly errand rather than a one-off repair.
+            // Sign in right here. With a saved password the server renews
+            // the session itself for 30 days, so this is a monthly errand.
             <MyStudioReconnect onConnected={() => feed.reload?.()} />
           ) : (
             <p className="font-ninja text-sm text-ninja-muted">

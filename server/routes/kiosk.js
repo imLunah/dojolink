@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireManager, requireOwnLocation, requireKiosk, kioskLocationId } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
+const { keepSignedIn } = require('../lib/mystudioSession');
 const { addToBoard } = require('../lib/boardCheckIn');
 
 // The check-in kiosk.
@@ -117,10 +118,16 @@ async function savedLogin(pool, locationId) {
 // reads it: the stored status, and the expiry the credential states itself.
 async function connectionState(pool, locationId) {
   const { rows } = await pool.query(
-    'SELECT status, session_cookie, feature_kiosk FROM mystudio_connections WHERE location_id = $1',
+    `SELECT id, location_id, company_id, status, session_cookie, feature_kiosk,
+            login_email, login_secret, remembered_until
+       FROM mystudio_connections WHERE location_id = $1`,
     [locationId]
   );
-  const conn = rows[0];
+  // Renewed here as well, or a kiosk would go dark at the counter every day
+  // until somebody opened the board.
+  const conn = rows[0] && rows[0].feature_kiosk !== false
+    ? await keepSignedIn(pool, rows[0])
+    : rows[0];
   if (!conn) return 'none';
   if (conn.feature_kiosk === false) return 'off';
   if (conn.status === 'expired') return 'expired';

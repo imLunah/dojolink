@@ -730,3 +730,46 @@ describe('check-in kiosk', () => {
     expect(ms.cleanPortalToken('not-a-real-token/test+value==')).toBe('not-a-real-token/test+value==');
   });
 });
+
+describe('remembered device', () => {
+  const jar = {
+    ms_trace_id: 'trace',
+    c_u_id_42_sessid: 'sess',
+    c_u_id_42: 'uid',
+    PHPSESSID: 'php',
+    kc_refresh: 'tok-r',
+  };
+
+  it('picks out only the thirty day pair', () => {
+    expect(ms.rememberedDevice(jar)).toEqual({ c_u_id_42_sessid: 'sess', c_u_id_42: 'uid' });
+    expect(ms.rememberedDevice({ PHPSESSID: 'php' })).toBeNull();
+  });
+
+  it('forgets the pair and keeps everything else', () => {
+    expect(ms.forgetDevice(jar)).toEqual({ ms_trace_id: 'trace', PHPSESSID: 'php', kc_refresh: 'tok-r' });
+  });
+
+  it('reads when the device stops being remembered from Max-Age', () => {
+    const before = Date.now();
+    const at = ms.readRememberedUntil([
+      'c_u_id_42_sessid=sess; Path=/; Expires=Sun, 25 Oct 2026 18:39:19 GMT; Max-Age=2592000',
+      'c_u_id_42=uid; Path=/; Expires=Sun, 25 Oct 2026 18:39:19 GMT; Max-Age=2592000',
+      'PHPSESSID=php; Path=/; Max-Age=15552000',
+    ]);
+    const days = (at - before) / 86400000;
+    expect(days).toBeGreaterThan(29.99);
+    expect(days).toBeLessThan(30.01);
+  });
+
+  it('falls back to Expires, and is null when nothing was remembered', () => {
+    const at = ms.readRememberedUntil(['c_u_id_42=uid; Path=/; Expires=Sun, 25 Oct 2026 18:39:19 GMT']);
+    expect(at.toISOString()).toBe('2026-10-25T18:39:19.000Z');
+    expect(ms.readRememberedUntil(['PHPSESSID=php; Max-Age=15552000'])).toBeNull();
+  });
+
+  it('asks for a code rather than signing in when there is no device to send', async () => {
+    await expect(
+      ms.renewSignIn({ email: 'a@example.invalid', password: 'x', cookie: 'PHPSESSID=php' })
+    ).resolves.toEqual({ needsCode: true });
+  });
+});
