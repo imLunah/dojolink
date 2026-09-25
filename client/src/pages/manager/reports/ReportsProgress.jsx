@@ -9,9 +9,31 @@ import {
 
 // The Progress tab: are ninjas moving up, and who is doing the teaching.
 //
-// The sensei table is a workload picture, not a league table. A sensei on the
-// JR table logs shorter, simpler sessions than one on a Brown belt, so it is
-// sorted by name and nothing on it is ranked or coloured good or bad.
+// The sensei table is ranked, most sessions logged first (clubs run break a
+// tie), and the top three wear a medal. The owner asked for the ranking.
+
+// Gold, silver, bronze: a disc with its place on it, printed in fixed ink so
+// it reads the same in both themes.
+const MEDALS = [
+  { face: 'linear-gradient(135deg, #fde68a 0%, #f59e0b 55%, #b45309 100%)', ink: '#78350f', name: 'First' },
+  { face: 'linear-gradient(135deg, #f1f5f9 0%, #94a3b8 55%, #64748b 100%)', ink: '#1e293b', name: 'Second' },
+  { face: 'linear-gradient(135deg, #fed7aa 0%, #c2703d 55%, #7c3f1d 100%)', ink: '#431407', name: 'Third' },
+];
+
+function RankMedal({ place }) {
+  const m = MEDALS[place];
+  if (!m) return <span className="inline-block w-6 shrink-0" aria-hidden="true" />;
+  return (
+    <span
+      className="rank-medal inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold shadow-sm"
+      style={{ background: m.face, color: m.ink, '--glint-delay': `${place * 0.25}s` }}
+      role="img"
+      aria-label={`${m.name} place`}
+    >
+      {place + 1}
+    </span>
+  );
+}
 
 function WeekTooltip({ active, payload, noun }) {
   if (!active || !payload?.length) return null;
@@ -65,6 +87,15 @@ export default function ReportsProgress() {
   const sessions = weeks.reduce((s, w) => s + w.sessions, 0);
   const ninjasMoved = new Set(data.beltUps.map((b) => b.student_id)).size;
   const multi = data.beltUps.some((b) => b.centers);
+  // Most sessions first, clubs run breaking a tie. A tie on both shares the
+  // place, so two senseis level at the top both wear gold.
+  const ranked = [...data.senseis]
+    .sort((a, b) => b.sessions - a.sessions || b.clubs - a.clubs
+      || String(a.display_name ?? '').localeCompare(String(b.display_name ?? '')))
+    .map((r, _, all) => {
+      const first = all.findIndex((o) => o.sessions === r.sessions && o.clubs === r.clubs);
+      return { ...r, place: r.sessions + r.clubs > 0 ? first : -1 };
+    });
 
   return (
     <>
@@ -104,11 +135,20 @@ export default function ReportsProgress() {
         <Card title="Sessions by sensei">
           <Table
             rowKey={(r) => r.sensei_id ?? 'deleted'}
-            rows={data.senseis}
+            rows={ranked}
             maxHeight={420}
             empty="No sessions logged or clubs run in this period."
             columns={[
-              { key: 'name', label: 'Sensei', render: (r) => <span className="font-medium">{authorName(r.display_name)}</span> },
+              {
+                key: 'name',
+                label: 'Sensei',
+                render: (r) => (
+                  <span className="flex items-center gap-2.5">
+                    <RankMedal place={r.place} />
+                    <span className="font-medium">{authorName(r.display_name)}</span>
+                  </span>
+                ),
+              },
               { key: 'sessions', label: 'Sessions', align: 'right' },
               { key: 'clubs', label: 'Clubs run', align: 'right' },
               { key: 'ninjas', label: 'Ninjas', align: 'right' },
