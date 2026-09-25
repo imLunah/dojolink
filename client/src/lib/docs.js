@@ -44,7 +44,7 @@ export const DOCS = [
             'A ninja arrives and gets checked in on [Today\'s Board](/docs/todays-board), by a sensei or at the [check-in kiosk](/docs/kiosk).',
             'During class the sensei opens the ninja and [logs the session](/docs/logging-progress): notes, belt, level and project.',
             'The ninja\'s belt journey moves forward, and their family sees it in the [Parent Portal](/docs/parent-portal).',
-            'At the end of the week the director checks [Reports](/docs/reports) to see who came, who moved up and who stopped coming.',
+            'At the end of the week the director checks [Reports](/docs/reports) to see who came, who moved up and who has not been in for a while.',
           ] },
         ],
       },
@@ -453,8 +453,8 @@ export const DOCS = [
     slug: 'reports',
     group: 'directors',
     title: 'Reports',
-    lede: 'Who came, when the room is busiest, who moved up a belt, and who has stopped coming.',
-    image: { src: '/docs/reports-overview.jpg', alt: 'The Reports overview with ninjas who came, visits, belt-ups and stopped coming, and a daily chart' },
+    lede: 'Who came, when the room is busiest, who moved up a belt, and who has not been in for 30 days or more.',
+    image: { src: '/docs/reports-overview.jpg', alt: 'The Reports overview with ninjas who came, visits, belt-ups and ninjas not seen in 30+ days, and a daily chart' },
     sections: [
       {
         title: 'Filters',
@@ -469,7 +469,7 @@ export const DOCS = [
           { list: [
             '**Overview**: the headline numbers against the period before, ninjas each day, and a usual weekday.',
             '**Attendance**: how many ninjas are in the room at once, by weekday and hour. Useful for staffing.',
-            '**Students**: roster size, how often ninjas come, who stopped coming, and enrollment by program and belt.',
+            '**Students**: roster size, how often ninjas come, who has not been seen in 30+ days, and enrollment by program and belt.',
             '**Progress**: belt-ups, sessions logged each week, and sessions logged by each sensei.',
           ] },
           { img: '/docs/reports-attendance.jpg', alt: 'The Attendance tab heatmap of ninjas in the room at once by weekday and hour' },
@@ -482,10 +482,10 @@ export const DOCS = [
           { list: [
             'A **visit** is a ninja at a center on a day, from the board or a club.',
             'A **belt-up** is the first log at a new belt, when the ninja already had logs at a lower one.',
-            '**Stopped coming** lists ninjas who came in the period before and not in this one.',
+            '**Not seen in 30+ days** lists ninjas on the roster with no visit or club in the last 30 days, counted from today, most recently seen first.',
             'A comparison is only shown when there is data for the whole previous period.',
           ] },
-          { img: '/docs/reports-students.jpg', alt: 'The Students tab with roster counts, the stopped coming list and how often ninjas come' },
+          { img: '/docs/reports-students.jpg', alt: 'The Students tab with roster counts, the not seen list and how often ninjas come' },
         ],
       },
     ],

@@ -167,7 +167,7 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
   const base = [f.centerIds, f.prevFrom, f.to, f.program, f.from];
   const visits2 = visitsSql({ from: '$2', to: '$3', program: '$4' });
 
-  const [daily, seen, beltUps, roster, inactive, lapsed, since, perCenter] = await Promise.all([
+  const [daily, seen, beltUps, roster, inactive, since, perCenter] = await Promise.all([
     pool.query(`
       SELECT to_char(v.day, 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
       FROM (${visits2}) v
@@ -198,17 +198,6 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
         AND NOT EXISTS (SELECT 1 FROM club_attendees ca JOIN club_sessions cs ON ca.club_session_id = cs.id
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
     `, [f.centerIds, f.program, centerToday()]),
-    // Stopped coming: came before (for the filtered program, if one is set)
-    // and has not been in since for ANYTHING. Moving from CREATE to Robotics
-    // is not stopping, so the "since" half never takes the program filter.
-    pool.query(`
-      WITH v AS (${visits2}),
-      anyv AS (${visitsSql({ from: '$5', to: '$3', program: 'NULL' })})
-      SELECT COUNT(*)::int AS count FROM students s
-      WHERE s.active = true
-        AND EXISTS (SELECT 1 FROM v WHERE v.student_id = s.id AND v.day < $5::date)
-        AND NOT EXISTS (SELECT 1 FROM anyv WHERE anyv.student_id = s.id)
-    `, base),
     dataSince(pool, f.centerIds),
     f.centerIds.length > 1 ? pool.query(`
       SELECT l.id, l.name,
@@ -235,7 +224,6 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
       beltUps: beltUps.rows[0],
       roster: roster.rows[0].count,
       inactive30: inactive.rows[0].count,
-      lapsed: lapsed.rows[0].count,
     },
     perCenter: perCenter ? perCenter.rows : null,
   });
@@ -369,7 +357,7 @@ router.get('/students', requireManager, handle('student report', async (req, res
                        JOIN locations l ON l.id = sl2.location_id
                        WHERE sl2.student_id = s.id AND sl2.location_id = ANY($1::int[]))`;
 
-  const [roster, enrollment, belts, frequency, inactive, lapsed] = await Promise.all([
+  const [roster, enrollment, belts, frequency, inactive] = await Promise.all([
     pool.query(`
       SELECT COUNT(*)::int AS count FROM students s
       WHERE s.active = true AND ${inScope('s.id')}
@@ -393,6 +381,11 @@ router.get('/students', requireManager, handle('student report', async (req, res
       FROM (${visitsSql({ from: '$2', to: '$3', program: '$4' })}) v
       GROUP BY v.student_id
     `, [f.centerIds, f.from, f.to, f.program]),
+    // Not seen in 30+ days: on the roster, no visit or club in the last 30
+    // days, counted from today. The most recently seen come first, because a
+    // ninja gone five weeks is the call to make this week and one gone since
+    // May (or never seen) is a membership question. A program filter narrows
+    // the roster; any visit, in any class, counts as being seen.
     pool.query(`
       SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers,
              to_char(GREATEST(
@@ -406,25 +399,8 @@ router.get('/students', requireManager, handle('student report', async (req, res
         AND NOT EXISTS (SELECT 1 FROM daily_assignments da WHERE da.student_id = s.id AND da.session_date >= $3::date - 29)
         AND NOT EXISTS (SELECT 1 FROM club_attendees ca JOIN club_sessions cs ON ca.club_session_id = cs.id
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
-      ORDER BY last_seen ASC NULLS FIRST, s.full_name
+      ORDER BY last_seen DESC NULLS LAST, s.full_name
     `, [f.centerIds, f.program, centerToday()]),
-    // Came in the comparison period, did not come in this one. A club counts as
-    // coming, the same as a board check-in. With a program filter, "came" is
-    // for that program but "not since" is for anything: a ninja who moved
-    // from CREATE to Robotics has not stopped coming.
-    pool.query(`
-      WITH v AS (${visitsSql({ from: '$2', to: '$3', program: '$4' })}),
-      anyv AS (${visitsSql({ from: '$5', to: '$3', program: 'NULL' })})
-      SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers,
-             COUNT(*)::int AS prev_visits,
-             to_char(MAX(v.day), 'YYYY-MM-DD') AS last_seen
-      FROM students s
-      JOIN v ON v.student_id = s.id AND v.day < $5::date
-      WHERE s.active = true
-        AND NOT EXISTS (SELECT 1 FROM anyv WHERE anyv.student_id = s.id)
-      GROUP BY s.id
-      ORDER BY prev_visits DESC, s.full_name
-    `, [f.centerIds, f.prevFrom, f.to, f.program, f.from]),
   ]);
 
   res.json({
@@ -435,7 +411,6 @@ router.get('/students', requireManager, handle('student report', async (req, res
     belts: belts.rows,
     visitsPerNinja: frequency.rows.map((r) => r.visits),
     inactive: inactive.rows,
-    lapsed: lapsed.rows,
   });
 }));
 

@@ -216,10 +216,10 @@ export default function ReportsOverview() {
           footer={<CardLink to="/manager/reports/progress" />}
         />
         <Metric
-          label="Stopped coming"
-          value={showPrev ? kpis.lapsed : '-'}
-          tone={showPrev && kpis.lapsed > 0 ? 'text-ninja-red' : undefined}
-          compare={showPrev ? `came ${rangeLabel(period.prevFrom, period.prevTo)}, not since` : 'No earlier data to compare'}
+          label="Not seen in 30+ days"
+          value={kpis.inactive30}
+          tone={kpis.inactive30 > 0 ? 'text-ninja-red' : undefined}
+          compare="on the roster, no visit or club"
           footer={<CardLink to="/manager/reports/students" />}
         />
       </div>

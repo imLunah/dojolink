@@ -2,14 +2,14 @@ import { BELTS, PROGRAM_LOGOS } from '../../../utils/beltConfig';
 import BeltIcon from '../../../components/ui/BeltIcon';
 import {
   Card, CompositionBar, Empty, ErrorLine, Loading, Meters, Metric, NinjaCell, Table,
-  comparable, daysSince, initials, plural, rangeLabel, shortDate, useReport, useReportFilters,
+  daysSince, initials, plural, shortDate, useReport, useReportFilters,
 } from '../../../components/reports/ReportParts';
 
 // The Students tab: who the roster is, how often they actually come, and who
-// has gone quiet. The two quiet lists answer different questions and are kept
-// apart on purpose: "stopped coming" is a change (here last period, not this
-// one) and is the one to act on this week; "not seen in 30 days" is a state,
-// and includes ninjas who were never regulars.
+// has gone quiet. "Not seen in 30+ days" is the one list of who to call,
+// counted from today whatever the period, most recently seen first. It
+// replaced a separate "stopped coming" list that followed the period and
+// gave a different answer for the same question.
 
 const BELT_COLOR = Object.fromEntries(BELTS.map((b) => [b.name, b.color]));
 const BELT_ORDER = BELTS.map((b) => b.name);
@@ -93,12 +93,11 @@ export default function ReportsStudents() {
 
   const { period } = data;
   const came = data.visitsPerNinja.length;
-  const showLapsed = comparable(period, data.dataSince);
-  const multi = data.lapsed.some((r) => r.centers) || data.inactive.some((r) => r.centers);
+  const multi = data.inactive.some((r) => r.centers);
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Metric label="On the roster" value={data.roster} />
         <Metric
           label="Came in this period"
@@ -106,50 +105,30 @@ export default function ReportsStudents() {
           compare={data.roster ? `${Math.round((came / data.roster) * 100)}% of the roster` : null}
         />
         <Metric
-          label="Stopped coming"
-          value={showLapsed ? data.lapsed.length : '-'}
-          tone={showLapsed && data.lapsed.length > 0 ? 'text-ninja-red' : undefined}
-          compare={showLapsed ? `came ${rangeLabel(period.prevFrom, period.prevTo)}, not since` : 'No earlier data to compare'}
+          label="Not seen in 30+ days"
+          value={data.inactive.length}
+          tone={data.inactive.length > 0 ? 'text-ninja-red' : undefined}
+          compare="on the roster, no visit or club"
         />
-        <Metric label="Not seen in 30 days" value={data.inactive.length} compare="no visit or club" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card
-          title="Stopped coming"
-          sub={showLapsed ? `Came ${rangeLabel(period.prevFrom, period.prevTo)}, not since` : null}
-          className="xl:col-span-2"
-        >
-          {showLapsed ? (
-            <Table
-              rowKey={(r) => r.id}
-              rows={data.lapsed}
-              maxHeight={380}
-              empty="Everyone who came the period before came again."
-              columns={[
-                { key: 'name', label: 'Ninja', render: (r) => <NinjaCell id={r.id} name={r.full_name} sub={multi ? r.centers : null} /> },
-                { key: 'prev', label: 'Visits before', align: 'right', render: (r) => r.prev_visits },
-                { key: 'last', label: 'Last visit', align: 'right', render: (r) => shortDate(r.last_seen) },
-              ]}
-            />
-          ) : <Empty>DojoLink has no check-ins from before this period to compare with.</Empty>}
-        </Card>
-        <Frequency visits={data.visitsPerNinja} days={period.days} />
-        <Enrollment data={data.enrollment} />
-        <Belts data={data.belts} />
-        <Card title="Not seen in 30 days" sub="On the roster, no visit or club">
+        <Card title="Not seen in 30+ days" sub="On the roster, most recently seen first" className="xl:col-span-2">
           <Table
             rowKey={(r) => r.id}
             rows={data.inactive}
             maxHeight={380}
-            minWidth={280}
             empty="Everyone on the roster has come in the last 30 days."
             columns={[
               { key: 'name', label: 'Ninja', render: (r) => <NinjaCell id={r.id} name={r.full_name} sub={multi ? r.centers : null} /> },
-              { key: 'last', label: 'Last visit', align: 'right', render: (r) => (r.last_seen ? `${daysSince(r.last_seen)}d ago` : 'Never') },
+              { key: 'last', label: 'Last came', align: 'right', render: (r) => (r.last_seen ? shortDate(r.last_seen) : 'Never') },
+              { key: 'away', label: 'Days away', align: 'right', render: (r) => (r.last_seen ? daysSince(r.last_seen) : '') },
             ]}
           />
         </Card>
+        <Frequency visits={data.visitsPerNinja} days={period.days} />
+        <Enrollment data={data.enrollment} />
+        <Belts data={data.belts} />
       </div>
     </>
   );
