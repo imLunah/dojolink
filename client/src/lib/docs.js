@@ -110,6 +110,7 @@ export const DOCS = [
               ['Today\'s Board and check-in', 'Yes', 'Yes', 'Yes'],
               ['Log sessions and club sessions', 'Yes', 'Yes', 'Yes'],
               ['Ninja roster and profiles', 'View', 'Full', 'Full'],
+              ['Mark a ninja as needing extra support', 'Yes', 'Yes', 'Yes'],
               ['Curriculum and passcodes', 'Yes', 'Yes', 'Yes'],
               ['Center calendar', 'View', 'Edit', 'Edit'],
               ['Tasks', 'Their own', 'Whole center', 'Whole center'],
@@ -158,6 +159,7 @@ export const DOCS = [
             'The program chips filter the board to one program.',
             'The color around a card shows where it stands: **yellow** still needs a log, **red** is overdue from an earlier day, and **green** is logged.',
             'A note icon beside a name means there is a pinned note or a note from the parent. Hover or tap it to read.',
+            'A **rose hand-and-heart icon** means the ninja needs extra support. See below.',
             'The board refreshes itself every 30 seconds, so check-ins from the kiosk or another sensei appear without reloading.',
           ] },
         ],
@@ -172,6 +174,18 @@ export const DOCS = [
         title: 'Changing the class',
         blocks: [
           { p: 'Checked a ninja in under the wrong program? Hover over the program icon on their card until the pencil appears, select it, and pick the right class. Only classes the ninja is enrolled in are listed, and a class that is already logged cannot be changed.' },
+        ],
+      },
+      {
+        title: 'Marking a ninja who needs extra support',
+        blocks: [
+          { p: 'Some ninjas need a sensei beside them more than most. Marking them lets every sensei on the floor see it at a glance, and lets your Center Director show when the room needs more hands.' },
+          { steps: [
+            'On the ninja\'s card, select the **hand-and-heart icon** next to the ×. It is grey when the ninja is not marked.',
+            'Pick the reason: **Needs one-to-one help**, **New, still settling in**, **Focus or behaviour** or **Learning support**.',
+          ] },
+          { p: 'The icon turns rose. To change the reason or clear it, select the icon again and pick another reason or **Remove the mark**. You can do the same from the ninja\'s [profile](/docs/ninja-profiles).' },
+          { tip: 'The mark is for staff only. Families never see it in the Parent Portal. Remove it once a ninja no longer needs the extra help.' },
         ],
       },
       {
@@ -228,6 +242,7 @@ export const DOCS = [
         blocks: [
           { list: [
             '**Pinned note**: anything every sensei should know before working with this ninja. It also shows on their card on Today\'s Board.',
+            '**Needs extra support**: the button beside Edit and Log Session. It shows the reason when the ninja is marked.',
             '**Note from parent**: written by the family in the Parent Portal. It appears inside the pinned note card.',
             '**Belt journey**: every belt on the ladder, with how far the ninja is toward the next one.',
             '**Activity**: sessions over the last six months, including club sessions.',
@@ -239,6 +254,12 @@ export const DOCS = [
         title: 'Pinning a note',
         blocks: [
           { p: 'Select **Add note** on the pinned note card, write the note and save. Keep it short and useful to the next sensei. Pinned notes can use bold, lists and links.' },
+        ],
+      },
+      {
+        title: 'Needs extra support',
+        blocks: [
+          { p: 'Select **Needs extra support** at the top of the profile and pick a reason. The button then reads, for example, **Extra support: Settling in**. Select it again to change the reason or **Remove the mark**. It works the same as the icon on [Today\'s Board](/docs/todays-board), and only staff can see it.' },
         ],
       },
     ],
@@ -309,7 +330,7 @@ export const DOCS = [
             '**Quick links** to Tasks, Today\'s Board, Events, Reports, Curriculum and What\'s New.',
             '**Daily schedule**: today\'s classes and who is booked, when MyStudio is connected.',
             '**Calendar**: center events and ninja birthdays. Select **+ New event** or any day to add one.',
-            '**Check-ins**: how many ninjas came this week, with **View all** for longer ranges.',
+            '**Check-ins**: how many ninjas came this week, from the board or a club, with **View all** for longer ranges. It counts the same way as Reports, so the two always agree.',
           ] },
           { tip: 'Hover over **Dashboard** in the sidebar to jump straight to Events, Tasks, Reports, Curriculum or What\'s New.' },
         ],
@@ -475,9 +496,9 @@ export const DOCS = [
         blocks: [
           { list: [
             '**Overview**: ninjas who came, visits, belt-ups and ninjas not seen in 30+ days, each against the period before, plus ninjas each day and a usual weekday. With All centers picked, the centers are shown side by side.',
-            '**Attendance**: how many ninjas are in the room at once, by weekday and hour, then an hour-by-hour view of a usual day or one date. Useful for staffing.',
+            '**Attendance**: how many ninjas are in the room at once, by weekday and hour, then an hour-by-hour view of a usual day or one date, including how many of them need extra support. Useful for staffing.',
             '**Classes**: which programs and clubs the visits go to. For each program, how many are enrolled, how many came, and how often. For each club, sessions run, ninjas a session and when it last ran.',
-            '**Students**: roster size, how often ninjas come, who has not been seen in 30+ days, and enrollment by program and belt.',
+            '**Students**: roster size, how often ninjas come, who has not been seen in 30+ days, every ninja marked as needing extra support, and enrollment by program and belt.',
             '**Progress**: belt-ups, sessions logged each week, and sessions by sensei.',
           ] },
           { img: '/docs/reports-attendance.jpg', alt: 'The Attendance tab heatmap of ninjas in the room at once by weekday and hour' },
@@ -489,6 +510,20 @@ export const DOCS = [
           { img: '/docs/reports-classes.jpg', alt: 'The Classes tab with class visits, the busiest program, club visits and a table of programs' },
           { p: 'A visit on this tab is a ninja in one class on one day, so a ninja who did CREATE and Robotics Academy on the same afternoon counts once in each. That is why these totals can run higher than Visits on the Overview.' },
           { p: '**Share who came** is how many of the ninjas enrolled in a program came at least once in the period. A low number is worth a look.' },
+          { p: '**Need extra support** is how many of the ninjas who came to that program are marked as needing extra support.' },
+        ],
+      },
+      {
+        title: 'Ninjas who need extra support',
+        blocks: [
+          { p: 'When senseis mark ninjas as needing extra support (on [Today\'s Board](/docs/todays-board) or a [profile](/docs/ninja-profiles)), Reports shows when those ninjas are in the room. This is the way to show how much help the floor needs, not just how many ninjas are on it.' },
+          { list: [
+            '**Attendance heatmap**: each square shows the usual number of ninjas in the room at once, with the number needing extra support underneath beside a hand-and-heart icon. Hover a square for the usual and the most.',
+            '**Hour by hour**: each hour says how many need extra support, and on a usual day, up to how many.',
+            '**Classes**: a column for how many support ninjas came to each program.',
+            '**Students**: a list of every marked ninja, with the reason, who marked them and when, and when they last came. Use it to review marks and remove any that no longer apply.',
+          ] },
+          { tip: 'Reports uses each ninja\'s mark as it is today, so a ninja marked this week also counts on their earlier visits. Nothing shows until someone is marked.' },
         ],
       },
       {
