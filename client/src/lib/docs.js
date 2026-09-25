@@ -156,7 +156,8 @@ export const DOCS = [
           { list: [
             '**Logged today**, **Pending** and **Overdue** at the top count where every card stands. Overdue is a check-in from an earlier day that was never logged.',
             'The program chips filter the board to one program.',
-            'A yellow dot on a card means it still needs a log. A note icon beside a name means there is a pinned note or a note from the parent. Hover or tap it to read.',
+            'The color around a card shows where it stands: **yellow** still needs a log, **red** is overdue from an earlier day, and **green** is logged.',
+            'A note icon beside a name means there is a pinned note or a note from the parent. Hover or tap it to read.',
             'The board refreshes itself every 30 seconds, so check-ins from the kiosk or another sensei appear without reloading.',
           ] },
         ],
@@ -165,6 +166,12 @@ export const DOCS = [
         title: 'Booked in MyStudio',
         blocks: [
           { p: 'If your center has connected MyStudio, the people icon beside **Check In Ninja** shows who is booked today. Tap a name to check them in. See [MyStudio](/docs/mystudio).' },
+        ],
+      },
+      {
+        title: 'Changing the class',
+        blocks: [
+          { p: 'Checked a ninja in under the wrong program? Hover over the program icon on their card until the pencil appears, select it, and pick the right class. Only classes the ninja is enrolled in are listed, and a class that is already logged cannot be changed.' },
         ],
       },
       {
@@ -460,20 +467,35 @@ export const DOCS = [
         title: 'Filters',
         blocks: [
           { p: 'Pick a **center** (or All centers), a **period** and a **program** at the top. Every tab uses the same filters, and they stay in the page link, so you can bookmark or share a view.' },
-          { p: 'Rolling periods like Last 4 weeks end yesterday, so a half-finished today does not drag the numbers down.' },
+          { p: 'The periods are **Last 4 weeks**, **Last 12 weeks**, **Last 6 months**, **This month**, **Last month** and **All time**. Rolling periods end yesterday, so a half-finished today does not drag the numbers down. This month includes today.' },
         ],
       },
       {
-        title: 'The four tabs',
+        title: 'The five tabs',
         blocks: [
           { list: [
-            '**Overview**: the headline numbers against the period before, ninjas each day, and a usual weekday.',
-            '**Attendance**: how many ninjas are in the room at once, by weekday and hour. Useful for staffing.',
+            '**Overview**: ninjas who came, visits, belt-ups and ninjas not seen in 30+ days, each against the period before, plus ninjas each day and a usual weekday. With All centers picked, the centers are shown side by side.',
+            '**Attendance**: how many ninjas are in the room at once, by weekday and hour, then an hour-by-hour view of a usual day or one date. Useful for staffing.',
+            '**Classes**: which programs and clubs the visits go to. For each program, how many are enrolled, how many came, and how often. For each club, sessions run, ninjas a session and when it last ran.',
             '**Students**: roster size, how often ninjas come, who has not been seen in 30+ days, and enrollment by program and belt.',
-            '**Progress**: belt-ups, sessions logged each week, and sessions logged by each sensei.',
+            '**Progress**: belt-ups, sessions logged each week, and sessions by sensei.',
           ] },
           { img: '/docs/reports-attendance.jpg', alt: 'The Attendance tab heatmap of ninjas in the room at once by weekday and hour' },
-          { img: '/docs/reports-progress.jpg', alt: 'The Progress tab with sessions logged and belt-ups each week' },
+        ],
+      },
+      {
+        title: 'Classes',
+        blocks: [
+          { img: '/docs/reports-classes.jpg', alt: 'The Classes tab with class visits, the busiest program, club visits and a table of programs' },
+          { p: 'A visit on this tab is a ninja in one class on one day, so a ninja who did CREATE and Robotics Academy on the same afternoon counts once in each. That is why these totals can run higher than Visits on the Overview.' },
+          { p: '**Share who came** is how many of the ninjas enrolled in a program came at least once in the period. A low number is worth a look.' },
+        ],
+      },
+      {
+        title: 'Sessions by sensei',
+        blocks: [
+          { img: '/docs/reports-progress.jpg', alt: 'The Progress tab with belt-ups, sessions logged each week and the ranked sessions by sensei table' },
+          { p: 'On the Progress tab, senseis are ranked by sessions logged, with clubs run breaking a tie. The top three get a gold, silver and bronze medal. Senseis level on both numbers share a place.' },
         ],
       },
       {
@@ -484,6 +506,7 @@ export const DOCS = [
             'A **belt-up** is the first log at a new belt, when the ninja already had logs at a lower one.',
             '**Not seen in 30+ days** lists ninjas on the roster with no visit or club in the last 30 days, counted from today, most recently seen first.',
             'A comparison is only shown when there is data for the whole previous period.',
+            'Clubs have no time of day, so the hour-by-hour views count check-ins only and say how many ninjas came just for a club.',
           ] },
           { img: '/docs/reports-students.jpg', alt: 'The Students tab with roster counts, the not seen list and how often ninjas come' },
         ],
@@ -651,7 +674,7 @@ export const DOCS = [
         title: 'Settings',
         blocks: [
           { img: '/docs/parent-settings.jpg', alt: 'Parent settings on Your ninjas, with three ninja characters to pick from for each child' },
-          { p: 'Select your name at the bottom of the sidebar to open **Settings**. **Your ninjas** lets each of your kids pick the ninja character that shows on their profile. You can also edit your details or delete your account there.' },
+          { p: 'Select your name at the bottom of the sidebar to open **Settings**. **Your ninjas** lets each of your kids pick the ninja character that shows on their profile. See [Family settings](/docs/family-settings) for everything else there.' },
         ],
       },
     ],
@@ -675,6 +698,52 @@ export const DOCS = [
             'Ask at the front desk.',
             'Check the welcome email or flyer from your center.',
           ] },
+        ],
+      },
+    ],
+  },
+
+  {
+    slug: 'family-settings',
+    group: 'families',
+    title: 'Family settings',
+    lede: 'Change your name and email, pick each ninja\'s character, sign out, or delete your account.',
+    image: { src: '/docs/parent-settings.jpg', alt: 'Parent settings with Edit profile, Your ninjas and Delete account', narrow: false },
+    sections: [
+      {
+        title: 'Opening settings',
+        blocks: [
+          { p: 'Select your name at the bottom of the sidebar. On a phone, tap **Account** in the bar at the bottom of the screen.' },
+        ],
+      },
+      {
+        title: 'Edit profile',
+        blocks: [
+          { list: [
+            '**First and last name**, shown to the senseis beside your ninja.',
+            '**Email**. You sign in with this and your center code, so if you change it, use the new email next time.',
+            '**Relationship**, such as Mom, Dad or Guardian, for the front desk.',
+            '**Center code** is shown for reference. Only your center can change it.',
+          ] },
+          { p: 'Select **Save Changes** when you are done.' },
+        ],
+      },
+      {
+        title: 'Your ninjas',
+        blocks: [
+          { p: 'Each of your kids can pick one of three ninja characters. The one you pick shows on their profile and on their card on the home page, dressed in their current belt.' },
+        ],
+      },
+      {
+        title: 'Signing out',
+        blocks: [
+          { p: 'Use **Sign Out** in Settings, or the sign-out icon beside your name in the sidebar. If you ticked **Keep me signed in on this device**, sign out before handing the device to someone else.' },
+        ],
+      },
+      {
+        title: 'Deleting your account',
+        blocks: [
+          { p: 'Choose **Delete account** in Settings. See [Deleting your account](/docs/delete-account) for exactly what is removed and what stays.' },
         ],
       },
     ],
@@ -704,6 +773,63 @@ export const DOCS = [
           { p: 'Open **Account → Password**, enter your current password and the new one twice.' },
         ],
       },
+      {
+        title: 'The account menu',
+        blocks: [
+          { p: 'Select your avatar at the bottom of the sidebar, or at the right of the top bar, to open a small menu with **Account**, **Help Center** and **Send feedback**.' },
+        ],
+      },
+      {
+        title: 'Signing out',
+        blocks: [
+          { p: 'Use the sign-out icon beside your name at the bottom of the sidebar. With the top bar, choose **Log out** from the account menu. On a phone, open **Account** and select **Sign Out**. Always sign out on a shared computer or tablet.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'delete-account',
+    group: 'account',
+    title: 'Deleting your account',
+    lede: 'How staff and families delete their own DojoLink account, and what happens to their data.',
+    sections: [
+      {
+        title: 'Staff accounts',
+        blocks: [
+          { steps: [
+            'Open **Account** and choose **Delete account**.',
+            'Pick the reason you are leaving. You can add a note if you like.',
+            'Type your **username** and **password**.',
+            'Select **Delete my account**, then **Yes, delete my account** to confirm.',
+          ] },
+          { p: 'Your account is removed and you are signed out straight away. The sessions you logged stay on each ninja\'s history, with no name on them, so their progress is not lost.' },
+          { tip: 'Just leaving one center, or taking a break? Ask your Center Director to archive your account instead. Archiving can be undone; deleting cannot.' },
+        ],
+      },
+      {
+        title: 'Family accounts',
+        blocks: [
+          { img: '/docs/parent-delete.jpg', alt: 'Parent settings on Delete account, asking for a reason, the center code and the email' },
+          { steps: [
+            'In the Parent Portal, select your name at the bottom of the sidebar to open **Settings**.',
+            'Choose **Delete account** and pick a reason.',
+            'Type your **center code** and **email**.',
+            'Select **Delete my account**, then confirm.',
+          ] },
+          { p: 'This deletes your parent account and removes your name, email, phone number and any note for the senseis from your ninjas\' records. Your ninjas\' belts and progress stay with the center, because they belong to their classes.' },
+          { tip: 'To stop your ninjas\' records being kept at all, ask your Center Director. Only the center can remove a ninja from its roster.' },
+        ],
+      },
+      {
+        title: 'Things to know',
+        blocks: [
+          { list: [
+            'Deleting cannot be undone. To use DojoLink again, a staff member needs a new account from their Center Director. A family can sign in again only once the center adds their email back to a ninja.',
+            'The reason you choose is kept without your name, so we can learn why people leave.',
+            'Administrator accounts cannot be deleted from the Account page.',
+          ] },
+        ],
+      },
     ],
   },
   {
@@ -715,19 +841,81 @@ export const DOCS = [
       {
         title: 'Light and dark',
         blocks: [
-          { p: 'Use the sun icon at the bottom of the sidebar to switch between light and dark. On a phone, open **Account → Appearance**.' },
+          { p: 'Use the sun icon at the bottom of the sidebar to switch between light and dark. On a phone, open **Account** and use the **Dark mode** switch.' },
         ],
       },
       {
         title: 'Navigation layout',
         blocks: [
-          { p: 'Under **Account → Display**, choose between a sidebar and a top bar.' },
+          { p: 'Under **Account → Display**, choose **Tokyo** for a sidebar down the left or **Hokkaido** for a bar across the top.' },
+        ],
+      },
+      {
+        title: 'Accent color',
+        blocks: [
+          { p: 'Turn on **Account → Experimental**, then open **Theme & color** to pick an accent color for buttons and highlights. It only changes DojoLink on this device.' },
         ],
       },
       {
         title: 'Reduced motion',
         blocks: [
           { p: 'If your device is set to reduce motion, DojoLink turns off its animations to match.' },
+        ],
+      },
+    ],
+  },
+
+  {
+    slug: 'install',
+    group: 'account',
+    title: 'Adding DojoLink to your home screen',
+    lede: 'Open DojoLink like an app, full screen, from your phone, tablet or computer.',
+    sections: [
+      {
+        title: 'iPhone and iPad',
+        blocks: [
+          { steps: [
+            'Open DojoLink in **Safari**.',
+            'Tap the **Share** button.',
+            'Tap **Add to Home Screen**, then **Add**.',
+          ] },
+        ],
+      },
+      {
+        title: 'Android',
+        blocks: [
+          { steps: [
+            'Open DojoLink in **Chrome**.',
+            'Tap the **⋮** menu.',
+            'Tap **Add to Home screen** or **Install app**.',
+          ] },
+        ],
+      },
+      {
+        title: 'Computer',
+        blocks: [
+          { p: 'In Chrome or Edge, select the install icon at the right of the address bar, or open the browser menu and choose **Install DojoLink**.' },
+        ],
+      },
+      {
+        title: 'Getting updates',
+        blocks: [
+          { p: 'DojoLink updates itself. If something new is not showing yet, close the app fully and open it again.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'whats-new',
+    group: 'account',
+    title: 'What\'s New',
+    lede: 'Release notes for every DojoLink update.',
+    sections: [
+      {
+        title: 'Seeing what changed',
+        blocks: [
+          { p: 'When DojoLink is updated, the release notes pop up the next time you sign in. You only see each one once.' },
+          { p: 'To read them again, or catch up on older updates, open **What\'s New** from the dashboard\'s quick links or by hovering over **Dashboard** in the sidebar.' },
         ],
       },
     ],
@@ -748,6 +936,8 @@ export const DOCS = [
             { q: 'A ninja did two classes today.', a: 'Check them in once per class. Each class gets its own card and its own log.' },
             { q: 'The board still shows a ninja from yesterday.', a: 'That check-in was never logged, so it counts as overdue. Log it, or remove it if they did not come.' },
             { q: 'Can I log a project from a different belt?', a: 'Yes. Add another project to the log and choose its own belt and level.' },
+            { q: 'I checked a ninja in under the wrong class.', a: 'Hover over the program icon on their card, select the pencil and pick the right class. See [Today\'s Board](/docs/todays-board).' },
+            { q: 'How do I delete my account?', a: 'Open **Account → Delete account**. See [Deleting your account](/docs/delete-account).' },
           ] },
         ],
       },
@@ -758,6 +948,8 @@ export const DOCS = [
             { q: 'Do I need a password?', a: 'No. You sign in with your center code and the email your center has on file.' },
             { q: 'It says my code and email do not match.', a: 'Check the code for typos, then try any other email you might have given the center. If it still does not work, ask your Center Director which email is on file.' },
             { q: 'Why has my ninja\'s belt not changed?', a: 'The portal updates when a sensei logs a session. If something looks wrong, ask at the front desk.' },
+            { q: 'I changed my email. How do I sign in now?', a: 'Use your center code and the new email.' },
+            { q: 'How do I delete my account?', a: 'Open **Settings → Delete account**. Your ninjas\' progress stays with the center. See [Deleting your account](/docs/delete-account).' },
           ] },
         ],
       },
@@ -779,6 +971,46 @@ export const DOCS = [
             { q: 'Booked ninjas are not showing on Today\'s Board.', a: 'Your MyStudio sign-in has probably run out. Follow the link on the board to sign in again.' },
             { q: 'A photo or cover image will not upload.', a: 'Try a smaller JPG or PNG. If it keeps failing, report it with the steps below.' },
           ] },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'privacy-data',
+    group: 'help',
+    title: 'Privacy and your data',
+    lede: 'What DojoLink keeps, who can see it, and how to have it removed.',
+    sections: [
+      {
+        title: 'What is kept',
+        blocks: [
+          { list: [
+            '**Ninjas**: name, birthday, programs, belts, check-ins and the sessions logged for them.',
+            '**Families**: parent name, email, phone number, relationship and any note for the senseis.',
+            '**Staff**: name, username, avatar, the centers they work at, and the sessions they logged.',
+          ] },
+        ],
+      },
+      {
+        title: 'Who can see it',
+        blocks: [
+          { list: [
+            'Staff see the ninjas at the centers they work at. Each center is kept separate.',
+            'Families see only their own ninjas, and only at the center their code belongs to.',
+            'Families never see staff notes on the center calendar, and a parent\'s note is only shown to staff.',
+          ] },
+        ],
+      },
+      {
+        title: 'Removing your data',
+        blocks: [
+          { p: 'Staff and families can delete their own accounts. See [Deleting your account](/docs/delete-account). To have a ninja removed from a center\'s records, ask that center\'s director.' },
+        ],
+      },
+      {
+        title: 'The fine print',
+        blocks: [
+          { p: 'The full [Privacy Policy](/privacy), [Terms of Use](/terms) and [Accessibility statement](/accessibility) are linked at the bottom of the home page.' },
         ],
       },
     ],
@@ -833,6 +1065,8 @@ export const DOCS = [
               ['Log', 'The record of what a ninja did in a session.'],
               ['Visit', 'A ninja at a center on a given day.'],
               ['Belt-up', 'Moving up to the next belt.'],
+              ['Overdue', 'A check-in from an earlier day that was never logged.'],
+              ['Archive', 'Taking a ninja or sensei off the active list without losing their history. It can be undone.'],
               ['Center code', 'The short code families use to sign in.'],
             ],
           } },
