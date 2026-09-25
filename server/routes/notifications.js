@@ -41,10 +41,14 @@ const SCOPES = {
   },
   // Assignment rows have no id of their own (the key is task + person), so the
   // notification's id is the task's.
+  // Only assignments with a known assigner are notifications: rows from before
+  // 055 recorded nobody, and "Someone assigned you" says nothing. Those were
+  // all marked read by the migration and stay out of the list.
   assign: {
     table: 'director_task_assignees',
     idColumn: 'task_id',
-    join: `JOIN director_tasks t ON t.id = m.task_id AND t.archived_at IS NULL AND t.location_id = $LOC`,
+    join: `JOIN director_tasks t ON t.id = m.task_id AND t.archived_at IS NULL AND t.location_id = $LOC
+           AND m.assigned_by IS NOT NULL`,
   },
   club: {
     table: 'club_session_comment_mentions',
