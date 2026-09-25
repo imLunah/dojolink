@@ -614,6 +614,24 @@ export const DOCS = [
           { p: 'When a code is needed, Today\'s Board says so and links straight to the panel. Sign in again and enter the new code. If you choose **Forget saved password**, DojoLink can no longer sign itself in, and you will be asked for a code every day.' },
         ],
       },
+      {
+        title: 'Why the code is only needed once a month',
+        blocks: [
+          { p: 'A MyStudio sign-in lasts exactly 24 hours, and nothing can make it last longer. Signing in involves two separate things, and only one of them runs out after a day:' },
+          { list: [
+            '**The sign-in itself.** After you enter the code, MyStudio hands out a sign-in that is good for 24 hours. This is what used to run out every day.',
+            '**A remembered device.** Because DojoLink ticks **Remember for 30 days** on the code step, MyStudio also hands out two cookies that last 30 days. They tell MyStudio that this device entered a code recently.',
+          ] },
+          { p: 'Your own browser works the same way. When you sign in to MyStudio again, it sends those cookies along, and MyStudio skips the code.' },
+          { p: 'DojoLink now does what your browser does. It keeps the two cookies, and whenever the day\'s sign-in has run out or is about to, it signs in again with your saved password and those cookies. MyStudio recognises the device and lets it in without emailing a code. Today\'s Board, the roster import and the [kiosk](/docs/kiosk) all stay connected this way.' },
+          { p: 'A few things follow from this:' },
+          { list: [
+            '**The 30 days count from the last code you typed.** Signing in without a code does not restart them, so a code is needed about once a month.',
+            '**The date on the board is when the next code is due.** It is when the 30 days end, not when today\'s sign-in does.',
+            '**If MyStudio asks for a code anyway, DojoLink stops trying.** That happens when the 30 days are up or your MyStudio password has changed. DojoLink waits for you to sign in again rather than sending you a stream of code emails.',
+          ] },
+        ],
+      },
     ],
   },
   {
