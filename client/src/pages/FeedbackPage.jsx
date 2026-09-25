@@ -126,7 +126,7 @@ export default function FeedbackPage() {
               className="flex items-center gap-1.5 rounded-xl bg-ninja-blue px-4 py-2.5 font-ninja text-sm font-bold text-white hover:bg-ninja-blue-hover transition-colors flex-shrink-0"
             >
               <PlusIcon className="w-4 h-4" strokeWidth={2.4} aria-hidden="true" />
-              {tab === 'roadmap' ? 'Add to roadmap' : 'Add known issue'}
+              Add update
             </button>
           )}
         </motion.header>
