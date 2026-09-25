@@ -21,7 +21,8 @@ const CENTER_TZ = 'America/Los_Angeles';
 const PROGRAMS = ['CREATE', 'Robotics Academy', 'AI Academy', 'JR', 'VR Coding'];
 const BELT_ORDER = ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Purple', 'Brown', 'Red', 'Black', 'Bronze', 'Silver', 'Platinum', 'Gold'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_SPAN_DAYS = 366;
+// All time runs from 9 May 2026, so the cap only guards against nonsense.
+const MAX_SPAN_DAYS = 3660;
 
 // Opening hours, the same at every center: 3-7 PM on weekdays, 10 AM-2 PM on
 // Saturday, closed Sunday. Keyed by getDay()/EXTRACT(DOW), [open, close) in

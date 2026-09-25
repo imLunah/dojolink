@@ -32,17 +32,27 @@ const TABS = [
 // Rolling periods end YESTERDAY: today is half over, and a half day at the end
 // of every period makes each one look like it tailed off. The calendar months
 // are what they say, and "This month" does include today.
+//
+// Six months and a year are whole weeks too (26 and 52), so every weekday is
+// counted the same number of times. All time starts on the first day any
+// center has data in DojoLink.
+const DOJOLINK_START = '2026-05-09';
+const WEEKS = { '4w': 4, '8w': 8, '12w': 12, '6m': 26, '1y': 52 };
 const PERIODS = [
   { value: '4w', label: 'Last 4 weeks' },
   { value: '8w', label: 'Last 8 weeks' },
   { value: '12w', label: 'Last 12 weeks' },
+  { value: '6m', label: 'Last 6 months' },
+  { value: '1y', label: 'Last year' },
   { value: 'month', label: 'This month' },
   { value: 'lastmonth', label: 'Last month' },
+  { value: 'all', label: 'All time' },
 ];
 
 function periodRange(value, today) {
   const yesterday = addDays(today, -1);
-  const weeks = { '4w': 4, '8w': 8, '12w': 12 }[value];
+  if (value === 'all') return { from: DOJOLINK_START, to: yesterday };
+  const weeks = WEEKS[value];
   if (weeks) return { from: addDays(yesterday, -(weeks * 7 - 1)), to: yesterday };
   const t = localDate(today);
   if (value === 'month') return { from: isoDate(new Date(t.getFullYear(), t.getMonth(), 1)), to: today };
