@@ -184,6 +184,7 @@ function SessionReplyBox({ sessionId, onAdded, onClose }) {
 // thread, without leaving the page. Esc, backdrop click, or × to close.
 function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSession, onSessionChanged }) {
   const comments = session.comments || [];
+  const [replyTo, setReplyTo] = useState(null); // { person, key } from a reply's Reply
   const [reactions, setReactions] = useState(session.reactions || []);
   const [error, setError] = useState('');
 
@@ -301,9 +302,28 @@ function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSess
                     onSessionChanged?.(session.id, { comments: comments.map((x) => (x.id === c.id ? { ...x, reactions: next } : x)) });
                     return next;
                   }}
+                  onReply={(person) => setReplyTo({ person, key: Date.now() })}
                 />
               ))}
             </div>
+          )}
+
+          {/* The thread's own input, under it and always there, as a chat's is:
+              reading and answering happen in the same place. It stays open
+              after a send. Escape leaves the field rather than closing the
+              session around it. */}
+          {!isReadOnly && (
+            <ReplyBar
+              className={comments.length > 0 ? '' : 'border-t border-ninja-border pt-4'}
+              stayOpen
+              autoFocus={false}
+              mentionRequest={replyTo}
+              onClose={() => document.activeElement?.blur?.()}
+              onSend={async (body, mention_ids) => {
+                const created = await api.post(`/clubs/${session.id}/comments`, { body, mention_ids });
+                onSessionChanged?.(session.id, { comments: [...comments, created] });
+              }}
+            />
           )}
         </div>
 

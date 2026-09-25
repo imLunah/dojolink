@@ -27,6 +27,7 @@ function replyJson(kind, userParam) {
     'id', c.id,
     'user_id', c.user_id,
     'user_name', c.user_name,
+    'user_username', cu.username,
     'user_pic', cu.profile_pic_url,
     'body', c.body,
     'created_at', c.created_at,

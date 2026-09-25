@@ -18,6 +18,12 @@ import { EmojiPickerButton } from '../ui/Reactions';
 // the bar keeps what was typed until it succeeds.
 // `initialValue` and `initialMentions` open it on a reply already written,
 // which is how one is edited: the same bar, holding the reply, caret at the end.
+// `stayOpen` keeps it open after a send, focused for the next line, the way a
+// chat's input does; a thread is a conversation and should not have to be
+// reopened for every message in it. `autoFocus` is off for a bar that is
+// simply there under a thread, or every thread on a page would fight for it.
+// `mentionRequest` ({ person, key }) puts "@username" in from outside: a
+// reply's own Reply button, answering that person.
 
 // Fetched when a bar opens, not cached for the page: the list is the people
 // at the ACTIVE center, and a director can switch centers without a reload.
@@ -32,6 +38,7 @@ const initialsOf = (name) =>
 
 export default function ReplyBar({
   onSend, onClose, placeholder = 'Write a reply…', className = '', initialValue = '', initialMentions = [],
+  stayOpen = false, autoFocus = true, mentionRequest = null,
 }) {
   const [body, setBody] = useState(initialValue);
   const [saving, setSaving] = useState(false);
@@ -61,6 +68,22 @@ export default function ReplyBar({
   }, [mention, people]);
 
   useEffect(() => { setActive(0); }, [mention?.query]);
+
+  useEffect(() => {
+    if (!mentionRequest) return;
+    const el = inputRef.current;
+    const person = mentionRequest.person;
+    if (person?.username) {
+      const token = `@${person.username} `;
+      setBody((prev) => (prev.includes(token.trim()) ? prev : `${token}${prev}`));
+      setPicked((prev) => (prev.some((p) => p.id === person.id) ? prev : [...prev, person]));
+    }
+    requestAnimationFrame(() => {
+      el?.focus();
+      const end = el?.value.length ?? 0;
+      el?.setSelectionRange(end, end);
+    });
+  }, [mentionRequest?.key]);
 
   // Re-read whether the caret sits in an "@name" being typed.
   const track = (value, caret) => {
@@ -93,7 +116,8 @@ export default function ReplyBar({
       await onSend(text, mentionIds);
       setBody('');
       setPicked([]);
-      onClose?.();
+      if (stayOpen) requestAnimationFrame(() => inputRef.current?.focus());
+      else onClose?.();
     } catch (err) {
       setError(err?.message || 'Could not post that reply.');
     } finally {
@@ -166,7 +190,7 @@ export default function ReplyBar({
           ref={inputRef}
           type="text"
           value={body}
-          autoFocus
+          autoFocus={autoFocus}
           onChange={(e) => { setBody(e.target.value); track(e.target.value, e.target.selectionStart ?? e.target.value.length); }}
           onKeyDown={onKeyDown}
           onClick={(e) => track(body, e.currentTarget.selectionStart ?? body.length)}

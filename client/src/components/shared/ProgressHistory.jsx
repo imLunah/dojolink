@@ -260,10 +260,13 @@ function LogEditor({ log, programs, saving, error, onSave, onCancel }) {
 // Opened from the row's reply button rather than parked under every entry. A
 // permanently mounted box asks a question of every log you scroll past; most of
 // them do not need an answer.
-function CommentBox({ logId, onAdded, onClose }) {
+function CommentBox({ logId, onAdded, onClose, autoFocus, mentionRequest }) {
   return (
     <ReplyBar
       className="mt-3"
+      stayOpen
+      autoFocus={autoFocus}
+      mentionRequest={mentionRequest}
       onClose={onClose}
       onSend={async (body, mention_ids) => onAdded(await api.post(`/progress/${logId}/comments`, { body, mention_ids }))}
     />
@@ -329,6 +332,14 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
   const [commentErrors, setCommentErrors] = useState({});
   const [reactionErrors, setReactionErrors] = useState({});
   const [replyingId, setReplyingId] = useState(null);
+  // A request to put the cursor in a log's bar, optionally @mentioning
+  // somebody: from the row's Reply, or from a reply's own Reply. `key` makes
+  // pressing it twice count twice.
+  const [replyTo, setReplyTo] = useState(null); // { logId, person, key }
+  const answer = (logId, person = null) => {
+    setReplyingId(logId);
+    setReplyTo({ logId, person, key: Date.now() });
+  };
 
   // Optimistic, then corrected by the server's own count. A failure puts the
   // chips back rather than leaving a reaction that was never stored.
@@ -553,9 +564,11 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                 <StripButton
                                   icon={ReplyIcon}
                                   dismissesStrip
-                                  label={isReplying ? 'Cancel reply' : 'Reply'}
-                                  active={isReplying}
-                                  onClick={() => setReplyingId(isReplying ? null : log.id)}
+                                  label={isReplying && !allComments.length ? 'Cancel reply' : 'Reply'}
+                                  active={isReplying && !allComments.length}
+                                  // A thread already has its bar showing, so
+                                  // Reply takes you to it rather than toggling.
+                                  onClick={() => (isReplying && !allComments.length ? setReplyingId(null) : answer(log.id))}
                                 />
                               </>
                             )}
@@ -634,13 +647,19 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                               onEdit={(body, ids) => editComment(c.id, body, ids)}
                               onDelete={() => deleteComment(c.id)}
                               onReact={async (emoji) => (await api.post(`/progress/comments/${c.id}/reactions`, { emoji })).reactions}
+                              onReply={(person) => answer(log.id, person)}
                             />
                           ))}
                         </div>
                       )}
-                      {!isReadOnly && isReplying && (
+                      {/* Opened by Reply on a log with no thread yet. Once a
+                          log has replies it is a conversation, and the bar
+                          stays under it, as a chat's input does. */}
+                      {!isReadOnly && (isReplying || allComments.length > 0) && (
                         <CommentBox
                           logId={log.id}
+                          autoFocus={isReplying}
+                          mentionRequest={replyTo?.logId === log.id ? replyTo : null}
                           onAdded={(c) => handleCommentAdded(log.id, c)}
                           onClose={() => setReplyingId(null)}
                         />

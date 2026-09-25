@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { PencilIcon, TrashIcon } from 'lucide-react';
+import { PencilIcon, TrashIcon, ReplyIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { authorName } from '../../lib/authors';
 import ActionMenu, { MenuItem, MenuConfirm } from '../ui/ActionMenu';
-import { ReactionPicker, ReactionChips, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
+import { ReactionPicker, ReactionChips, StripButton, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
 import MentionText from './MentionText';
 import ReplyBar from './ReplyBar';
 
@@ -16,6 +16,8 @@ import ReplyBar from './ReplyBar';
 // Shared by progress log replies and club session replies. The callbacks do
 // the requests and throw to report a failure:
 //   onEdit(body, mentionIds) · onDelete() · onReact(emoji) -> reactions
+// `onReply(person)` is the toolbar's Reply: it answers this reply in the
+// thread's bar, @mentioning its author (nobody, if it is your own).
 // Who may edit or delete mirrors the server: the author edits; the author, a
 // director or an admin deletes.
 
@@ -28,7 +30,7 @@ const stamp = (iso) =>
     month: 'numeric', day: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit',
   });
 
-export default function CommentMessage({ comment, onEdit, onDelete, onReact }) {
+export default function CommentMessage({ comment, onEdit, onDelete, onReact, onReply }) {
   const { user, isReadOnly } = useAuth();
   const name = authorName(comment.user_name);
   const mine = comment.user_id != null && comment.user_id === user?.id;
@@ -111,12 +113,19 @@ export default function CommentMessage({ comment, onEdit, onDelete, onReact }) {
         {error && <p className="text-ninja-red font-ninja text-xs mt-1">{error}</p>}
       </div>
 
-      {(canReact || canEdit || canDelete) && !editing && (
+      {(canReact || canEdit || canDelete || (onReply && !isReadOnly)) && !editing && (
         // The message's toolbar, floating on its top corner. Out of sight until
         // the reply is pointed at on a pointer that can hover; a touch screen
         // shows it, having no hover to wait for.
         <div className="comment-actions absolute -top-4 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-ninja-border bg-white px-1 py-0.5 shadow-sm">
           {canReact && <ReactionPicker onPick={react} />}
+          {onReply && !isReadOnly && (
+            <StripButton
+              icon={ReplyIcon}
+              label="Reply"
+              onClick={() => onReply(mine ? null : { id: comment.user_id, username: comment.user_username, display_name: comment.user_name })}
+            />
+          )}
           {(canEdit || canDelete) && (
             <ActionMenu
               label="Reply actions"
