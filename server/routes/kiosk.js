@@ -4,6 +4,7 @@ const { requireManager, requireOwnLocation, requireKiosk, kioskLocationId } = re
 const ms = require('../lib/mystudio');
 const { keepSignedIn } = require('../lib/mystudioSession');
 const { addToBoard } = require('../lib/boardCheckIn');
+const { resolveClass } = require('../lib/classMappings');
 
 // The check-in kiosk.
 //
@@ -225,7 +226,7 @@ const UNDO_WINDOW_MINUTES = 30;
 // still be undone, or null.
 async function undoableCheckIn(pool, locationId, participantId, classKey) {
   const { rows } = await pool.query(
-    `SELECT id, result, assignment_id
+    `SELECT id, result, assignment_id, student_id, club_session_id
        FROM mystudio_kiosk_checkins
       WHERE location_id = $1 AND participant_id = $2 AND class_key = $3
         AND result IN ('checked_in', 'registered') AND undone_at IS NULL
@@ -263,8 +264,8 @@ async function logCheckIn(pool, row) {
     await pool.query(
       `INSERT INTO mystudio_kiosk_checkins
          (location_id, participant_id, class_key, class_name, start_time,
-          student_id, assignment_id, stood_in_for, result)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          student_id, assignment_id, stood_in_for, club_session_id, result)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         row.locationId,
         row.participantId,
@@ -274,6 +275,7 @@ async function logCheckIn(pool, row) {
         row.studentId || null,
         row.assignmentId || null,
         row.stoodInFor || null,
+        row.clubSessionId || null,
         row.result,
       ]
     );
@@ -350,6 +352,56 @@ async function addKioskCheckInToBoard(pool, locationId, booking) {
 
   const assignmentId = await addToBoard(pool, { studentId, program, date });
   return { studentId, assignmentId, stoodInFor: null };
+}
+
+// Puts a kiosk check-in into a club the director mapped the class to: today's
+// session of that club, made if nobody has logged it yet. Returns the session
+// id only when the kiosk added the ninja, so an undo never takes off a ninja a
+// sensei already had down. A re-tap leaves the club alone, as it does the board.
+async function addKioskCheckInToClub(pool, locationId, booking, clubName) {
+  const none = { studentId: null, clubSessionId: null };
+  const studentId = await matchStudent(pool, locationId, booking);
+  if (!studentId) return none;
+  if (booking.already) return { ...none, studentId };
+
+  const date = todayDate();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Two ninjas tapping in for the same club at once must land in one session.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`kiosk-club:${locationId}:${clubName}:${date}`]);
+    const { rows: existing } = await client.query(
+      `SELECT id FROM club_sessions
+        WHERE location_id = $1 AND club_name = $2 AND session_date = $3
+        ORDER BY created_at DESC LIMIT 1`,
+      [locationId, clubName, date]
+    );
+    let sessionId = existing[0]?.id;
+    if (!sessionId) {
+      const { rows } = await client.query(
+        `INSERT INTO club_sessions (club_name, session_date, location_id, sensei_id, notes)
+         VALUES ($1, $2, $3, NULL, NULL) RETURNING id`,
+        [clubName, date, locationId]
+      );
+      sessionId = rows[0].id;
+    }
+    const { rows: added } = await client.query(
+      `INSERT INTO club_attendees (club_session_id, student_id) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING id`,
+      [sessionId, studentId]
+    );
+    await client.query(
+      'INSERT INTO club_members (club_name, location_id, student_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+      [clubName, locationId, studentId]
+    );
+    await client.query('COMMIT');
+    return { studentId, clubSessionId: added[0] ? sessionId : null };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -509,6 +561,129 @@ router.patch('/setup', requireManager, requireOwnLocation, async (req, res) => {
   } catch (err) {
     console.error('Kiosk settings save failed:', err.message);
     res.status(500).json({ error: 'Failed to save the kiosk setting' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Class names (directors)
+// ---------------------------------------------------------------------------
+
+// Titles a director may want to map: every class the kiosk has checked a
+// ninja into here, today's schedule when the kiosk can read it, and any title
+// already mapped.
+async function classTitlesFor(pool, locationId) {
+  const titles = new Map();
+  const add = (t) => {
+    const title = String(t || '').trim();
+    if (title && !titles.has(title.toLowerCase())) titles.set(title.toLowerCase(), title);
+  };
+  const { rows: seen } = await pool.query(
+    `SELECT DISTINCT class_name FROM mystudio_kiosk_checkins
+      WHERE location_id = $1 AND class_name IS NOT NULL
+        AND created_at > now() - interval '180 days'`,
+    [locationId]
+  );
+  seen.forEach((r) => add(r.class_name));
+  try {
+    const kiosk = await loadKiosk(pool, locationId);
+    if (kiosk && kiosk.status === 'connected') {
+      const classes = await ms.portalClassList(ms.decryptCookie(kiosk.portal_token), todayDate());
+      classes.forEach((c) => add(c.class_appointment_title));
+    }
+  } catch (err) {
+    // The log alone is still a useful list.
+    console.error('Kiosk class names schedule read failed:', err.message);
+  }
+  return titles;
+}
+
+async function classMappingsShape(pool, locationId) {
+  const titles = await classTitlesFor(pool, locationId);
+  const [{ rows: mapped }, { rows: clubs }] = await Promise.all([
+    pool.query(
+      'SELECT class_title, program, club_id FROM mystudio_class_mappings WHERE location_id = $1',
+      [locationId]
+    ),
+    pool.query(
+      `SELECT id, name FROM club_definitions
+        WHERE location_id = $1 OR location_id IS NULL
+        ORDER BY name`,
+      [locationId]
+    ),
+  ]);
+  const byTitle = new Map(mapped.map((m) => [m.class_title.trim().toLowerCase(), m]));
+  mapped.forEach((m) => { if (!titles.has(m.class_title.trim().toLowerCase())) titles.set(m.class_title.trim().toLowerCase(), m.class_title); });
+
+  const classes = [...titles.entries()]
+    .map(([key, title]) => {
+      const m = byTitle.get(key);
+      return {
+        title,
+        program: m ? m.program : null,
+        clubId: m ? m.club_id : null,
+        // What the kiosk does with this name when nobody has mapped it.
+        automatic: ms.programForClass(title),
+      };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
+  return { classes, clubs, programs: ms.PROGRAMS };
+}
+
+// GET /api/kiosk/class-mappings
+router.get('/class-mappings', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    res.json(await classMappingsShape(pool, req.session.activeLocationId));
+  } catch (err) {
+    console.error('Kiosk class names read failed:', err.message);
+    res.status(500).json({ error: 'Failed to load class names' });
+  }
+});
+
+// PUT /api/kiosk/class-mappings  { title, program?, clubId? }
+//
+// Neither program nor clubId clears the mapping.
+router.put('/class-mappings', requireManager, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const locationId = req.session.activeLocationId;
+  const body = req.body || {};
+  const title = String(body.title || '').trim();
+  const program = body.program == null || body.program === '' ? null : String(body.program);
+  const clubId = body.clubId == null || body.clubId === '' ? null : Number(body.clubId);
+
+  if (!title || title.length > 120) return res.status(400).json({ error: 'Pick a class name.' });
+  if (program && clubId) return res.status(400).json({ error: 'Pick a program or a club, not both.' });
+  if (program && !ms.PROGRAMS.includes(program)) return res.status(400).json({ error: 'Pick a program.' });
+
+  try {
+    if (clubId !== null) {
+      if (!Number.isInteger(clubId)) return res.status(400).json({ error: 'Pick a club.' });
+      const { rows } = await pool.query(
+        'SELECT 1 FROM club_definitions WHERE id = $1 AND (location_id = $2 OR location_id IS NULL)',
+        [clubId, locationId]
+      );
+      if (!rows[0]) return res.status(400).json({ error: 'Pick a club.' });
+    }
+
+    if (!program && clubId === null) {
+      await pool.query(
+        'DELETE FROM mystudio_class_mappings WHERE location_id = $1 AND lower(class_title) = lower($2)',
+        [locationId, title]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO mystudio_class_mappings (location_id, class_title, program, club_id, updated_by)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (location_id, lower(class_title))
+         DO UPDATE SET program = EXCLUDED.program, club_id = EXCLUDED.club_id,
+                       updated_by = EXCLUDED.updated_by, updated_at = now()`,
+        [locationId, title, program, clubId, req.session.userId]
+      );
+    }
+    res.json(await classMappingsShape(pool, locationId));
+  } catch (err) {
+    console.error('Kiosk class name save failed:', err.message);
+    res.status(500).json({ error: 'Failed to save the class name' });
   }
 });
 
@@ -802,9 +977,15 @@ router.post('/checkin', requireKiosk, async (req, res) => {
 
   // MyStudio has the check-in. The board is DojoLink's own copy and a failure
   // here is logged and survived, not reported as a failed check-in.
-  let board = { studentId: null, assignmentId: null, stoodInFor: null };
+  // What the class is at this center: a director's mapping first, then the
+  // exact-match rule. A class mapped to a club goes into that club instead.
+  let board = { studentId: null, assignmentId: null, stoodInFor: null, clubSessionId: null };
   try {
-    board = await addKioskCheckInToBoard(pool, locationId, outcome);
+    const target = await resolveClass(pool, locationId, outcome.className);
+    const booking = { ...outcome, program: target.program, isClub: target.isClub };
+    board = target.clubName
+      ? { ...board, ...(await addKioskCheckInToClub(pool, locationId, booking, target.clubName)) }
+      : { ...board, ...(await addKioskCheckInToBoard(pool, locationId, booking)) };
   } catch (err) {
     console.error('Kiosk board check-in failed:', err.message);
   }
@@ -824,6 +1005,22 @@ router.post('/checkin', requireKiosk, async (req, res) => {
     startTime: outcome.startTime,
   });
 });
+
+// Takes a ninja the kiosk added back off a club session, and the session with
+// them when the kiosk made it and nobody has written anything on it since.
+async function removeFromKioskClub(pool, clubSessionId, studentId) {
+  await pool.query(
+    'DELETE FROM club_attendees WHERE club_session_id = $1 AND student_id = $2',
+    [clubSessionId, studentId]
+  );
+  await pool.query(
+    `DELETE FROM club_sessions cs
+      WHERE cs.id = $1 AND cs.notes IS NULL AND cs.sensei_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM club_attendees ca WHERE ca.club_session_id = cs.id)
+        AND NOT EXISTS (SELECT 1 FROM club_session_comments c WHERE c.session_id = cs.id)`,
+    [clubSessionId]
+  );
+}
 
 // POST /api/kiosk/undo  { participantId, classKey }
 //
@@ -887,6 +1084,10 @@ router.post('/undo', requireKiosk, async (req, res) => {
         'DELETE FROM daily_assignments WHERE id = $1 AND completed = false',
         [entry.assignment_id]
       ).catch((err) => console.error('Kiosk undo board cleanup failed:', err.message));
+    }
+    if (entry.club_session_id && entry.student_id) {
+      await removeFromKioskClub(pool, entry.club_session_id, entry.student_id)
+        .catch((err) => console.error('Kiosk undo club cleanup failed:', err.message));
     }
 
     res.json({

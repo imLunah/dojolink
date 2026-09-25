@@ -73,6 +73,80 @@ function ClassWindowSetting({ minutes, onSave }) {
   );
 }
 
+// What each MyStudio class name is at this center. Centers name classes
+// their own way ("Robotics", "CREATE - Coding", "CLUBS: Minecraft") and the
+// kiosk only places a name that is exactly a program's, so the rest landed on
+// Today's Board with no program. A class mapped to a club puts the ninja in
+// today's session of that club instead of on the board.
+// See server/lib/classMappings.js.
+function ClassNames() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get('/kiosk/class-mappings').then(setData).catch((err) => setError(err.message));
+  }, []);
+
+  const valueOf = (c) => (c.clubId ? `c:${c.clubId}` : c.program ? `p:${c.program}` : c.automatic ? `p:${c.automatic}` : '');
+
+  const save = async (c, value) => {
+    const program = value.startsWith('p:') ? value.slice(2) : null;
+    const clubId = value.startsWith('c:') ? Number(value.slice(2)) : null;
+    // Picking the program the name already matches on its own is the same as
+    // no mapping, so it clears rather than storing a copy of the rule.
+    const clear = !value || (program && program === c.automatic);
+    const before = data;
+    setData({
+      ...data,
+      classes: data.classes.map((x) => (x.title === c.title
+        ? { ...x, program: clear ? null : program, clubId: clear ? null : clubId }
+        : x)),
+    });
+    setError('');
+    try {
+      setData(await api.put('/kiosk/class-mappings', clear ? { title: c.title } : { title: c.title, program, clubId }));
+    } catch (err) {
+      setData(before);
+      setError(err.message);
+    }
+  };
+
+  if (!data && !error) return null;
+  if (data && !data.classes.length) return null;
+
+  return (
+    <section className={`${CARD} p-5 space-y-3`}>
+      <h2 className="font-ninja font-extrabold text-base text-ninja-navy">MyStudio class names</h2>
+      {data && (
+        <ul className="divide-y divide-ninja-border">
+          {data.classes.map((c) => (
+            <li key={c.title} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+              <span className="font-ninja text-sm font-bold text-ninja-navy min-w-0 break-words">{c.title}</span>
+              <select
+                aria-label={`What ${c.title} is`}
+                value={valueOf(c)}
+                onChange={(e) => save(c, e.target.value)}
+                className="w-48 rounded-lg border border-ninja-border bg-white px-2.5 py-1.5 font-ninja text-sm text-ninja-navy focus:outline-none focus:border-ninja-blue"
+              >
+                {!c.automatic && <option value="">Not set</option>}
+                <optgroup label="Programs">
+                  {data.programs.map((p) => <option key={p} value={`p:${p}`}>{p}</option>)}
+                </optgroup>
+                {data.clubs.length > 0 && (
+                  <optgroup label="Clubs">
+                    {data.clubs.map((club) => <option key={club.id} value={`c:${club.id}`}>{club.name}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p role="alert" className="font-ninja text-sm font-semibold text-ninja-red">{error}</p>}
+    </section>
+  );
+}
+
 export default function KioskSetupPage() {
   const [setup, setSetup] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -316,6 +390,8 @@ export default function KioskSetupPage() {
                 </div>
               </section>
             )}
+
+            {ready && <ClassNames />}
 
             <section className={`${CARD} p-5 space-y-4 ${ready ? '' : 'opacity-60'}`}>
               <div className="flex items-center gap-3">

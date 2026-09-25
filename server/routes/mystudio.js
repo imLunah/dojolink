@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
+const { mappingsFor } = require('../lib/classMappings');
 const { keepSignedIn, canRenew } = require('../lib/mystudioSession');
 const { addMembership } = require('../lib/studentScope');
 
@@ -618,7 +619,13 @@ router.get('/today', requireSensei, async (req, res) => {
       for (const r of boardRows) onBoard.add(r.student_id);
     }
 
+    // A director's name for a class outranks the exact-match rule the pull
+    // used (lib/classMappings.js), so the board and the kiosk agree.
+    const mappings = await mappingsFor(pool, locationId);
+
     const expected = pulled.expected.map((row) => {
+      const mapped = mappings.get(String(row.className || '').trim().toLowerCase());
+      const classProgram = mapped ? mapped.program : row.program;
       let student = byParticipantId.get(row.participantId) || null;
       let matchStatus = student ? 'linked' : null;
 
@@ -635,8 +642,8 @@ router.get('/today', requireSensei, async (req, res) => {
       }
 
       const program =
-        student && row.program && enrolled.get(student.id)?.has(row.program)
-          ? row.program
+        student && classProgram && enrolled.get(student.id)?.has(classProgram)
+          ? classProgram
           : null;
 
       return {
