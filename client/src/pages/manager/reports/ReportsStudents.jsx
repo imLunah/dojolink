@@ -1,6 +1,5 @@
 import { BELTS, PROGRAM_LOGOS } from '../../../utils/beltConfig';
 import BeltIcon from '../../../components/ui/BeltIcon';
-import { supportLabel } from '../../../lib/support';
 import {
   Card, CompositionBar, Empty, ErrorLine, Loading, Meters, Metric, NinjaCell, Table,
   daysSince, initials, plural, shortDate, useReport, useReportFilters,
@@ -128,21 +127,6 @@ export default function ReportsStudents() {
           />
         </Card>
         <Frequency visits={data.visitsPerNinja} days={period.days} />
-        <Card title="Needs extra support" className="xl:col-span-2">
-          <Table
-            rowKey={(r) => r.id}
-            rows={data.support || []}
-            maxHeight={380}
-            minWidth={520}
-            empty="No ninjas are marked as needing extra support."
-            columns={[
-              { key: 'name', label: 'Ninja', render: (r) => <NinjaCell id={r.id} name={r.full_name} sub={multi ? r.centers : null} /> },
-              { key: 'reason', label: 'Reason', render: (r) => supportLabel(r.reason) },
-              { key: 'by', label: 'Marked', className: 'text-ninja-muted', render: (r) => [r.set_by_name, shortDate(r.set_on)].filter(Boolean).join(', ') },
-              { key: 'last', label: 'Last came', align: 'right', render: (r) => (r.last_seen ? shortDate(r.last_seen) : 'Never') },
-            ]}
-          />
-        </Card>
         <Enrollment data={data.enrollment} />
         <Belts data={data.belts} />
       </div>

@@ -362,7 +362,7 @@ router.get('/students', requireManager, handle('student report', async (req, res
                        JOIN locations l ON l.id = sl2.location_id
                        WHERE sl2.student_id = s.id AND sl2.location_id = ANY($1::int[]))`;
 
-  const [roster, enrollment, belts, frequency, inactive, support] = await Promise.all([
+  const [roster, enrollment, belts, frequency, inactive] = await Promise.all([
     pool.query(`
       SELECT COUNT(*)::int AS count FROM students s
       WHERE s.active = true AND ${inScope('s.id')}
@@ -406,23 +406,6 @@ router.get('/students', requireManager, handle('student report', async (req, res
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
       ORDER BY last_seen DESC NULLS LAST, s.full_name
     `, [f.centerIds, f.program, centerToday()]),
-    // Ninjas marked "needs extra support", with the reason and when they last
-    // came, so a director can see who is marked and review it.
-    pool.query(`
-      SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers, ss.reason,
-             to_char(ss.set_at, 'YYYY-MM-DD') AS set_on, u.display_name AS set_by_name,
-             to_char(GREATEST(
-               (SELECT MAX(da.session_date) FROM daily_assignments da WHERE da.student_id = s.id),
-               (SELECT MAX(cs.session_date) FROM club_attendees ca JOIN club_sessions cs ON ca.club_session_id = cs.id
-                  WHERE ca.student_id = s.id)
-             ), 'YYYY-MM-DD') AS last_seen
-      FROM student_support ss
-      JOIN students s ON s.id = ss.student_id
-      LEFT JOIN users u ON u.id = ss.set_by
-      WHERE s.active = true AND ${inScope('s.id')}
-        AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM student_programs sp WHERE sp.student_id = s.id AND sp.program = $2::text))
-      ORDER BY s.full_name
-    `, [f.centerIds, f.program]),
   ]);
 
   res.json({
@@ -433,7 +416,6 @@ router.get('/students', requireManager, handle('student report', async (req, res
     belts: belts.rows,
     visitsPerNinja: frequency.rows.map((r) => r.visits),
     inactive: inactive.rows,
-    support: support.rows,
   });
 }));
 

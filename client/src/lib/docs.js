@@ -558,7 +558,7 @@ export const DOCS = [
             '**Overview**: ninjas who came, visits, belt-ups and ninjas not seen in 30+ days, each against the period before, plus ninjas each day and a usual weekday. With All centers picked, the centers are shown side by side.',
             '**Attendance**: how many ninjas are in the room at once, by weekday and hour, then an hour-by-hour view of a usual day or one date, including how many of them need extra support. Useful for staffing.',
             '**Classes**: which programs and clubs the visits go to. For each program, how many are enrolled, how many came, and how often. For each club, sessions run, ninjas a session and when it last ran.',
-            '**Students**: roster size, how often ninjas come, who has not been seen in 30+ days, every ninja marked as needing extra support, and enrollment by program and belt.',
+            '**Students**: roster size, how often ninjas come, who has not been seen in 30+ days, and enrollment by program and belt.',
             '**Progress**: belt-ups, sessions logged each week, and sessions by sensei.',
           ] },
           { img: '/docs/reports-attendance.jpg', alt: 'The Attendance tab heatmap of ninjas in the room at once by weekday and hour' },
