@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { TriangleAlertIcon, LightbulbIcon, InboxIcon, CheckCheckIcon, UserIcon, PlusIcon } from 'lucide-react';
+import { TriangleAlertIcon, LightbulbIcon, InboxIcon, CheckCheckIcon, UserIcon, PlusIcon, TrashIcon } from 'lucide-react';
 import Layout from '../components/layout/Layout';
 import Modal from '../components/ui/Modal';
+import ActionMenu, { MenuItem, MenuConfirm } from '../components/ui/ActionMenu';
 import { SkeletonList } from '../components/ui/Skeleton';
 import TicketStatus from '../components/shared/TicketStatus';
 import { api } from '../api/client';
@@ -424,14 +425,18 @@ function TicketDialog({ id, onClose, onSaved, onDeleted }) {
     }
   };
 
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const remove = async () => {
-    setSaving(true);
+    setDeleting(true);
+    setDeleteError('');
     try {
       await api.delete(`/bugs/${id}`);
       onDeleted(id);
     } catch {
-      setError('Could not delete.');
-      setSaving(false);
+      setDeleteError('Could not delete.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -451,9 +456,35 @@ function TicketDialog({ id, onClose, onSaved, onDeleted }) {
       ) : (
         <div className="space-y-5">
           <div>
-            <p className="font-ninja text-xs text-ninja-muted mb-1.5">
-              {[ticket.reporter_name || 'Unknown', roleLabel(ticket.reporter_role), ticket.location_name, ticket.category].filter(Boolean).join(' · ')}
-            </p>
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <p className="font-ninja text-xs text-ninja-muted">
+                {[ticket.reporter_name || 'Unknown', roleLabel(ticket.reporter_role), ticket.location_name, ticket.category].filter(Boolean).join(' · ')}
+              </p>
+              {/* Up here rather than beside Save: the menu opens downward,
+                  and at the foot of the dialog it would open into the edge. */}
+              <ActionMenu
+                label="Ticket actions"
+                step={confirmDelete ? 'confirm' : 'actions'}
+                className="flex-shrink-0"
+                onClosed={() => { setConfirmDelete(false); setDeleteError(''); }}
+              >
+                {() =>
+                  confirmDelete ? (
+                    <MenuConfirm
+                      question="Delete this ticket?"
+                      busy={deleting}
+                      onConfirm={remove}
+                      onCancel={() => setConfirmDelete(false)}
+                      error={deleteError}
+                    />
+                  ) : (
+                    <MenuItem icon={TrashIcon} danger onSelect={() => setConfirmDelete(true)}>
+                      Delete
+                    </MenuItem>
+                  )
+                }
+              </ActionMenu>
+            </div>
             {ticket.description && (
               <p className="font-ninja text-sm text-ninja-navy whitespace-pre-wrap break-words rounded-xl bg-ninja-bg px-4 py-3 leading-relaxed">
                 {ticket.description}
@@ -521,21 +552,7 @@ function TicketDialog({ id, onClose, onSaved, onDeleted }) {
 
             {error && <p className="font-ninja text-sm text-ninja-red">{error}</p>}
 
-            <div className="flex items-center justify-between gap-3 pt-1">
-              {confirmDelete ? (
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={remove} disabled={saving} className="rounded-full bg-ninja-red px-4 py-2 font-ninja text-sm font-bold text-white disabled:opacity-50">
-                    Delete
-                  </button>
-                  <button type="button" onClick={() => setConfirmDelete(false)} className="px-2 py-2 font-ninja text-sm font-semibold text-ninja-muted hover:text-ninja-navy">
-                    Keep
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setConfirmDelete(true)} className="font-ninja text-sm font-semibold text-ninja-muted hover:text-ninja-red">
-                  Delete ticket
-                </button>
-              )}
+            <div className="flex items-center justify-end gap-3 pt-1">
               <div className="flex gap-2">
                 <button type="button" onClick={onClose} className="border border-ninja-border text-ninja-muted font-ninja font-semibold text-sm px-4 py-2.5 rounded-xl hover:text-ninja-navy transition-colors">
                   Cancel
