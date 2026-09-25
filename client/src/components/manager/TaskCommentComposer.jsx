@@ -56,7 +56,7 @@ export default function TaskCommentComposer({ taskId, placeholder, posting, onPo
     if (!mention) return [];
     const query = mention.query.toLowerCase();
     return people
-      .filter((person) => person.display_name.toLowerCase().includes(query))
+      .filter((person) => person.username && (person.username.toLowerCase().includes(query) || person.display_name.toLowerCase().includes(query)))
       .slice(0, 8);
   }, [mention, people]);
 
@@ -109,10 +109,10 @@ export default function TaskCommentComposer({ taskId, placeholder, posting, onPo
 
     const token = document.createElement('span');
     token.dataset.mentionId = String(person.id);
-    token.dataset.mentionName = person.display_name;
+    token.dataset.mentionName = person.username;
     token.contentEditable = 'false';
     token.className = 'inline rounded-md bg-ninja-blue/15 px-1 py-0.5 font-bold text-ninja-blue-ink';
-    token.textContent = `@${person.display_name}`;
+    token.textContent = `@${person.username}`;
 
     const spacer = document.createTextNode('\u00a0');
     const fragment = document.createDocumentFragment();
@@ -228,6 +228,7 @@ export default function TaskCommentComposer({ taskId, placeholder, posting, onPo
                   {initials(person.display_name)}
                 </span>
                 <span className="truncate">{person.display_name}</span>
+                <span className="ml-auto truncate font-normal text-xs text-ninja-muted">@{person.username}</span>
               </button>
             ))}
           </div>

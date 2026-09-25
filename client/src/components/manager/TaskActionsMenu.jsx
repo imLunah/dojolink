@@ -16,7 +16,7 @@ export default function TaskActionsMenu({ task, canMove = true, canDelete = true
   const deleted = Boolean(task.archived_at);
 
   return (
-    <ActionMenu label="Task actions" className={className} onClosed={() => setConfirming(false)}>
+    <ActionMenu label="Task actions" step={confirming ? 'confirm' : 'actions'} className={className} onClosed={() => setConfirming(false)}>
       {({ close }) =>
         confirming ? (
           // A destructive confirm keeps its word. Everything else here is a

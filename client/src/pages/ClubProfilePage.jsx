@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import '../styles/markdown.css';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 
@@ -30,8 +30,10 @@ import { SkeletonProfile } from '../components/ui/Skeleton';
 import { TrashIcon, CameraIcon } from '../components/ui/icons';
 import { UsersIcon, ChevronLeftIcon, PlusIcon, ReplyIcon } from 'lucide-react';
 import ClubBoard from '../components/shared/ClubBoard';
-import ActionMenu, { MenuItem } from '../components/ui/ActionMenu';
+import ActionMenu, { MenuItem, MenuConfirm } from '../components/ui/ActionMenu';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, toggleLocally } from '../components/ui/Reactions';
+import ReplyBar from '../components/shared/ReplyBar';
+import CommentMessage from '../components/shared/CommentMessage';
 import { authorName } from '../lib/authors';
 
 const relativeDate = (ts) => {
@@ -169,61 +171,12 @@ function PinnedNoteSection({ clubName, initialNote, initialAuthor, initialUpdate
   );
 }
 
-// A session's comments, which the server has stored and returned all along
-// without anything ever drawing them. Same shape as a progress log's: the thread
-// is content and always shows, while replying is a button on the row.
-function SessionComment({ comment }) {
-  return (
-    <div className="flex gap-2">
-      <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
-      <div className="min-w-0">
-        <p className="text-ninja-navy font-ninja text-sm break-words"><Linkify>{comment.body}</Linkify></p>
-        <p className="text-ninja-muted font-ninja text-xs mt-0.5">
-          {authorName(comment.user_name)} · {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function SessionReplyBox({ sessionId, onAdded, onClose }) {
-  const [body, setBody] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      const comment = await api.post(`/clubs/${sessionId}/comments`, { body: body.trim() });
-      onAdded(comment);
-      setBody('');
-      onClose();
-    } catch (err) {
-      setError(err?.message || 'Could not post that reply.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input
-        type="text"
-        value={body}
-        autoFocus
-        onChange={(e) => setBody(e.target.value)}
-        // Escape closes the box, and must not bubble: the modal listens for
-        // Escape too, and would close the whole session behind it.
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
-        placeholder="Write a reply…"
-        className="flex-1 bg-white border border-ninja-border text-ninja-navy rounded-lg px-3 py-1.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue transition-colors"
-      />
-      <Button type="submit" size="sm" disabled={saving || !body.trim()}>{saving ? '…' : 'Reply'}</Button>
-      {error && <p className="text-ninja-red font-ninja text-xs mt-1">{error}</p>}
-    </form>
+    <ReplyBar
+      onClose={onClose}
+      onSend={async (body, mention_ids) => onAdded(await api.post(`/clubs/${sessionId}/comments`, { body, mention_ids }))}
+    />
   );
 }
 
@@ -231,6 +184,7 @@ function SessionReplyBox({ sessionId, onAdded, onClose }) {
 // thread, without leaving the page. Esc, backdrop click, or × to close.
 function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSession, onSessionChanged }) {
   const comments = session.comments || [];
+  const [replyTo, setReplyTo] = useState(null); // { person, key } from a reply's Reply
   const [reactions, setReactions] = useState(session.reactions || []);
   const [error, setError] = useState('');
 
@@ -330,9 +284,46 @@ function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSess
           </div>
 
           {comments.length > 0 && (
-            <div className="space-y-2 border-t border-ninja-border pt-4">
-              {comments.map((c) => <SessionComment key={c.id} comment={c} />)}
+            <div className="space-y-3 border-t border-ninja-border pt-4">
+              {comments.map((c) => (
+                <CommentMessage
+                  key={c.id}
+                  comment={c}
+                  onEdit={async (body, mention_ids) => {
+                    const saved = await api.patch(`/clubs/comments/${c.id}`, { body, mention_ids });
+                    onSessionChanged?.(session.id, { comments: comments.map((x) => (x.id === c.id ? saved : x)) });
+                  }}
+                  onDelete={async () => {
+                    await api.delete(`/clubs/comments/${c.id}`);
+                    onSessionChanged?.(session.id, { comments: comments.filter((x) => x.id !== c.id) });
+                  }}
+                  onReact={async (emoji) => {
+                    const { reactions: next } = await api.post(`/clubs/comments/${c.id}/reactions`, { emoji });
+                    onSessionChanged?.(session.id, { comments: comments.map((x) => (x.id === c.id ? { ...x, reactions: next } : x)) });
+                    return next;
+                  }}
+                  onReply={(person) => setReplyTo({ person, key: Date.now() })}
+                />
+              ))}
             </div>
+          )}
+
+          {/* The thread's own input, under it and always there, as a chat's is:
+              reading and answering happen in the same place. It stays open
+              after a send. Escape leaves the field rather than closing the
+              session around it. */}
+          {!isReadOnly && (
+            <ReplyBar
+              className={comments.length > 0 ? '' : 'border-t border-ninja-border pt-4'}
+              stayOpen
+              autoFocus={false}
+              mentionRequest={replyTo}
+              onClose={() => document.activeElement?.blur?.()}
+              onSend={async (body, mention_ids) => {
+                const created = await api.post(`/clubs/${session.id}/comments`, { body, mention_ids });
+                onSessionChanged?.(session.id, { comments: [...comments, created] });
+              }}
+            />
           )}
         </div>
 
@@ -359,8 +350,24 @@ function SessionsSection({ sessions, memberCount, slug, navigate, isManager, isR
   const [expanded, setExpanded] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [quickView, setQuickView] = useState(null);
+  // The id, not a copy of the session: the quick view has to show replies and
+  // reactions changed while it is open, and those land in `sessions`.
+  const [quickViewId, setQuickViewId] = useState(null);
+  const quickView = quickViewId ? sessions?.find((x) => x.id === quickViewId) ?? null : null;
+  const setQuickView = (session) => setQuickViewId(session ? session.id : null);
   const [replyingId, setReplyingId] = useState(null);
+
+  // ?session=ID opens that session's quick view once the list has it: a
+  // notification links here. The param is dropped after, so closing it stays
+  // closed on a refresh or a back.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedSession = Number(searchParams.get('session'));
+  useEffect(() => {
+    if (!linkedSession || !sessions?.length) return;
+    const found = sessions.find((x) => x.id === linkedSession);
+    if (found) setQuickView(found);
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('session'); return next; }, { replace: true });
+  }, [linkedSession, sessions]);
   const [rowErrors, setRowErrors] = useState({});
   const todayStr = today();
   const shown = expanded ? sessions : sessions.slice(0, 4);
@@ -450,6 +457,7 @@ function SessionsSection({ sessions, memberCount, slug, navigate, isManager, isR
                           <ReactionPicker onPick={(emoji) => react(s, emoji)} />
                           <StripButton
                             icon={ReplyIcon}
+                                  dismissesStrip
                             label={replyingId === s.id ? 'Cancel reply' : 'Reply'}
                             active={replyingId === s.id}
                             onClick={() => setReplyingId(replyingId === s.id ? null : s.id)}
@@ -669,19 +677,19 @@ function ClubHero({ clubDef, colors, memberCount, locationName, isManager, isRea
 
           {canEditCover && (
             hasCover ? (
-              <ActionMenu label="Club photo" onClosed={() => setConfirmRemove(false)}
+              <ActionMenu label="Club photo" step={confirmRemove ? 'confirm' : 'actions'} onClosed={() => setConfirmRemove(false)}
                 className="[&>button]:text-white [&>button:hover]:text-white [&>button]:bg-black/25 [&>button:hover]:bg-black/40">
                 {({ close }) => (
                   confirmRemove ? (
-                    <div className="p-1.5 w-44">
-                      <p className="font-ninja text-xs text-ninja-muted mb-2">Remove this photo?</p>
-                      <div className="flex items-center gap-1.5">
-                        <Button variant="danger" size="sm" onClick={handleRemoveCover} disabled={uploading}>
-                          {uploading ? 'Removing…' : 'Remove'}
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setConfirmRemove(false)}>Keep</Button>
-                      </div>
-                    </div>
+                    <MenuConfirm
+                      question="Remove this photo?"
+                      confirmLabel="Remove"
+                      busyLabel="Removing…"
+                      busy={uploading}
+                      onConfirm={handleRemoveCover}
+                      onCancel={() => setConfirmRemove(false)}
+                      className="w-44"
+                    />
                   ) : (
                     <>
                       <MenuItem icon={CameraIcon} onSelect={() => { fileInputRef.current?.click(); close(); }}>

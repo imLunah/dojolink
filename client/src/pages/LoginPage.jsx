@@ -332,6 +332,8 @@ export default function LoginPage() {
         </Link>
       </Modal>
       <p className="text-center mt-6 text-ninja-muted font-ninja text-xs flex items-center justify-center gap-2">
+        <Link to="/docs" className="hover:text-ninja-blue transition-colors">Help</Link>
+        <span>·</span>
         <Link to="/privacy" className="hover:text-ninja-blue transition-colors">Privacy Policy</Link>
         <span>·</span>
         <Link to="/terms" className="hover:text-ninja-blue transition-colors">Terms and Conditions</Link>

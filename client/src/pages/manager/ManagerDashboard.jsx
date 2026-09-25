@@ -198,6 +198,7 @@ export default function ManagerDashboard() {
           <TodayBoard
             assignments={visibleAssignments}
             onRemove={handleRemove}
+            onUpdate={handleUpdate}
             statusFilter={statusFilter}
           />
         )}

@@ -41,6 +41,7 @@
   --ninja-navy:        26 46 74;
   --ninja-muted:       80 102 144;
   --ninja-hero:        26 46 74;   /* fixed brand navy for hero banners — does NOT flip in dark */
+  --menu-surface:      #ffffff;    /* the liquid a gooey ActionMenu is made of */
 
   /* Motion curves (Emil Kowalski's design-eng defaults). The built-in CSS
      easings are too weak; these carry the punch that reads as intentional. */
@@ -58,6 +59,7 @@
   --ninja-navy:        208 218 234; /* #d0daed — cool near-white */
   --ninja-muted:       138 155 184; /* #8a9bb8 — cool blue-gray, WCAG AA */
   --ninja-hero:        26 46 74;    /* intentionally NOT flipped — hero banners stay navy in dark */
+  --menu-surface:      #252c3e;    /* the dark card colour, so the menu matches .dark .bg-white */
 }
 
 /* ── Theme-locked subtrees ── */
@@ -404,6 +406,21 @@ textarea:focus-visible {
   .group:hover .row-actions,
   .row-actions:focus-within,
   .row-actions:has([aria-expanded='true']) { opacity: 1; }
+  /* Put away by the button that was pressed (Reply), until the pointer leaves
+     the row and comes back. Three deep, like `.group:hover .row-actions`, and
+     after it, so source order settles the tie. */
+  .group .row-actions.row-actions-dismissed { opacity: 0; pointer-events: none; }
+  /* A reply's own menu, the same way: out of sight until that reply is pointed
+     at, held up while focused or open. */
+  .comment-actions { opacity: 0; transition: opacity 150ms ease; }
+  .comment:hover .comment-actions,
+  .comment-actions:focus-within,
+  .comment-actions:has([aria-expanded='true']) { opacity: 1; }
+  /* The pencil on a ninja's sticker avatar: out of sight until the avatar is
+     pointed at or focused. Outside this block (touch) it simply shows. */
+  .sticker-pencil { opacity: 0; transform: scale(0.75); transition: opacity 150ms ease, transform 150ms ease; }
+  .sticker-edit:hover .sticker-pencil,
+  .sticker-edit:focus-visible .sticker-pencil { opacity: 1; transform: scale(1); }
 }
 
 /* ── Interaction feedback (Emil Kowalski design-eng) ──
@@ -592,3 +609,23 @@ textarea:focus-visible {
 .dark .tint-inset { background: rgb(255 255 255 / 0.07); }
 /* Vibrancy for secondary text on tints and heroes: heavier, a touch tracked. */
 .v2 { font-weight: 700; letter-spacing: 0.005em; }
+
+/* Reports: the top three senseis wear a medal with a glint that crosses it
+   every few seconds, each one a beat after the last. */
+.rank-medal { position: relative; overflow: hidden; }
+.rank-medal::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.85) 48%, transparent 66%);
+  transform: translateX(-120%);
+  animation: rankGlint 3.2s ease-in-out infinite;
+  animation-delay: var(--glint-delay, 0s);
+}
+@keyframes rankGlint {
+  0%, 55% { transform: translateX(-120%); }
+  85%, 100% { transform: translateX(120%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rank-medal::after { animation: none; opacity: 0; }
+}

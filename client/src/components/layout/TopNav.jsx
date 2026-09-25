@@ -3,9 +3,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
+import NotificationBell from '../shared/NotificationBell';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
-import { LogOutIcon, UserIcon, ChevronDownIcon } from 'lucide-react';
+import { LogOutIcon, UserIcon, ChevronDownIcon, CircleHelpIcon } from 'lucide-react';
 import { managerLinks, senseiLinks, isLinkActive, QuickFlyoutPanel, visibleLinks } from './Sidebar';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -124,6 +125,7 @@ export default function TopNav({ onOpenBug }) {
           </span>
         ))}
 
+        <NotificationBell />
         <ThemeToggle />
 
         <div ref={menuRef} className="relative">
@@ -163,6 +165,10 @@ export default function TopNav({ onOpenBug }) {
                   <UserIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
                   Account
                 </Link>
+                <Link to="/docs" role="menuitem" onClick={() => setMenuOpen(false)} className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+                  <CircleHelpIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+                  Help Center
+                </Link>
                 <button
                   type="button"
                   role="menuitem"
@@ -170,7 +176,7 @@ export default function TopNav({ onOpenBug }) {
                   className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
                 >
                   <RocketIcon className="w-4 h-4 flex-shrink-0" />
-                  Report a bug
+                  Send feedback
                 </button>
                 <button
                   type="button"

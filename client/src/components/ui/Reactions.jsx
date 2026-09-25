@@ -38,8 +38,9 @@ export function toggleLocally(list, emoji) {
 
 // The "+" that opens the full picker. Its own popover rather than an ActionMenu
 // because the panel is a 320px grid with its own chrome, and ActionMenu's shell
-// would draw a second card around it.
-function EmojiPickerButton({ onPick }) {
+// would draw a second card around it. The reply bar borrows it with its own
+// glyph and name, since there it types an emoji rather than reacting with one.
+export function EmojiPickerButton({ onPick, label = 'More reactions', icon: Icon = SmilePlusIcon, onClosed }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const triggerRef = useRef(null);
@@ -52,7 +53,7 @@ function EmojiPickerButton({ onPick }) {
       setOpen(false);
       triggerRef.current?.focus();
     };
-    const onPointerDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const onPointerDown = (e) => { if (!wrapRef.current?.contains(e.target)) { setOpen(false); onClosed?.(); } };
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onPointerDown);
     return () => {
@@ -67,19 +68,19 @@ function EmojiPickerButton({ onPick }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="More reactions"
-        aria-label="More reactions"
+        title={label}
+        aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors duration-150 hover:text-ninja-navy hover:bg-ninja-navy/[0.06] dark:hover:bg-white/10 ${
           open ? 'text-ninja-navy bg-ninja-navy/[0.06] dark:bg-white/10' : 'text-ninja-muted'
         }`}
       >
-        <SmilePlusIcon size={20} strokeWidth={2} />
+        <Icon size={20} strokeWidth={2} />
       </button>
       {open && (
-        <div className="absolute z-30 top-full right-0 mt-1" role="dialog" aria-label="Pick a reaction">
-          <LazyEmojiPicker onPick={onPick} onClose={() => setOpen(false)} />
+        <div className="absolute z-30 top-full right-0 mt-1" role="dialog" aria-label="Pick an emoji">
+          <LazyEmojiPicker onPick={onPick} onClose={() => { setOpen(false); onClosed?.(); }} />
         </div>
       )}
     </div>
@@ -209,9 +210,30 @@ export function ReactionChips({ reactions, canReact, onToggle, className = 'mt-2
 // card that is ALREADY ninja-bg it would disappear, so those pass bg-white,
 // which the .dark override turns into the lighter #252c3e. Neither value is
 // right in both places; that is why it is a prop and not a constant.
+//
+// A button marked `data-dismisses-strip` (StripButton's `dismissesStrip`) puts
+// the strip away when pressed, even with the pointer still on the row: after
+// Reply the row's job is the reply bar, and the strip hanging over it is noise.
+// It comes back the next time the pointer enters the row.
 export function RowActions({ children, className = '', surface = 'bg-ninja-bg' }) {
+  const ref = useRef(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!dismissed) return;
+    const row = ref.current?.closest('.group');
+    if (!row) return;
+    const back = () => setDismissed(false);
+    row.addEventListener('pointerleave', back);
+    return () => row.removeEventListener('pointerleave', back);
+  }, [dismissed]);
+
   return (
-    <div className={`row-actions flex-shrink-0 flex items-center gap-0.5 rounded-lg border border-ninja-border ${surface} px-1 py-0.5 shadow-sm ${className}`}>
+    <div
+      ref={ref}
+      onClick={(e) => { if (e.target.closest?.('[data-dismisses-strip]')) setDismissed(true); }}
+      className={`row-actions ${dismissed ? 'row-actions-dismissed' : ''} flex-shrink-0 flex items-center gap-0.5 rounded-lg border border-ninja-border ${surface} px-1 py-0.5 shadow-sm ${className}`}
+    >
       {children}
     </div>
   );
@@ -219,11 +241,12 @@ export function RowActions({ children, className = '', surface = 'bg-ninja-bg' }
 
 // A plain glyph button sized to sit in a strip beside the reaction picker, so
 // anything a row wants to offer matches it instead of approximating it.
-export function StripButton({ icon: Icon, label, active = false, onClick }) {
+export function StripButton({ icon: Icon, label, active = false, onClick, dismissesStrip = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-dismisses-strip={dismissesStrip || undefined}
       title={label}
       aria-label={label}
       aria-pressed={active}

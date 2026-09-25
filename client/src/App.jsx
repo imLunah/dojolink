@@ -27,7 +27,12 @@ const StudentRoster = lazy(() => import('./pages/manager/StudentRoster'));
 const AddStudentPage = lazy(() => import('./pages/manager/AddStudentPage'));
 const StudentProfile = lazy(() => import('./pages/manager/StudentProfile'));
 const StaffPage = lazy(() => import('./pages/manager/StaffPage'));
-const ReportsPage = lazy(() => import('./pages/manager/ReportsPage'));
+const ReportsLayout = lazy(() => import('./pages/manager/reports/ReportsLayout'));
+const ReportsOverview = lazy(() => import('./pages/manager/reports/ReportsOverview'));
+const ReportsAttendance = lazy(() => import('./pages/manager/reports/ReportsAttendance'));
+const ReportsClasses = lazy(() => import('./pages/manager/reports/ReportsClasses'));
+const ReportsStudents = lazy(() => import('./pages/manager/reports/ReportsStudents'));
+const ReportsProgress = lazy(() => import('./pages/manager/reports/ReportsProgress'));
 const TasksPage = lazy(() => import('./pages/manager/TasksPage'));
 const EventsPage = lazy(() => import('./pages/manager/EventsPage'));
 const EventListingEditorPage = lazy(() => import('./pages/manager/EventListingEditorPage'));
@@ -54,12 +59,14 @@ const ParentStickerBook = lazy(() => import('./pages/parent/ParentStickerBook'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
+const DocsPage = lazy(() => import('./pages/DocsPage'));
 const CurriculumRoadmapPage = lazy(() => import('./pages/CurriculumRoadmapPage'));
 const LocationsPage = lazy(() => import('./pages/admin/LocationsPage'));
 const CurriculumPage = lazy(() => import('./pages/admin/CurriculumPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 // Lazy — pulls in lottie; keep it out of the main bundle (only new accounts / revisits load it).
 const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'));
 const AppearancePage = lazy(() => import('./pages/AppearancePage'));
@@ -102,7 +109,15 @@ export default function App() {
             <Route path="/manager/overview" element={<ProtectedRoute role="sensei"><DirectorDashboard /></ProtectedRoute>} />
             <Route path="/manager/students"  element={<ProtectedRoute role="sensei"><StudentRoster /></ProtectedRoute>} />
             <Route path="/manager/staff"     element={<ProtectedRoute role="sensei"><StaffPage /></ProtectedRoute>} />
-            <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsPage /></ProtectedRoute>} />
+            {/* Reports is a section with its own rail; the tabs are children
+                so the rail and filters stay mounted between them. */}
+            <Route path="/manager/reports"  element={<ProtectedRoute role="manager"><ReportsLayout /></ProtectedRoute>}>
+              <Route index element={<ReportsOverview />} />
+              <Route path="attendance" element={<ReportsAttendance />} />
+              <Route path="classes" element={<ReportsClasses />} />
+              <Route path="students" element={<ReportsStudents />} />
+              <Route path="progress" element={<ReportsProgress />} />
+            </Route>
             <Route path="/manager/tasks"    element={<ProtectedRoute role="manager"><TasksPage /></ProtectedRoute>} />
             <Route path="/manager/events"   element={<ProtectedRoute role="manager"><EventsPage /></ProtectedRoute>} />
             <Route path="/manager/events/new" element={<ProtectedRoute role="manager"><EventListingEditorPage /></ProtectedRoute>} />
@@ -151,6 +166,7 @@ export default function App() {
             {/* Curriculum Roadmap */}
             <Route path="/curriculum-roadmap" element={<ProtectedRoute role="sensei"><CurriculumRoadmapPage /></ProtectedRoute>} />
             <Route path="/changelog" element={<ProtectedRoute role="sensei"><ChangelogPage /></ProtectedRoute>} />
+            <Route path="/feedback" element={<ProtectedRoute role="sensei"><FeedbackPage /></ProtectedRoute>} />
             <Route path="/welcome" element={<ProtectedRoute role="sensei"><WelcomePage /></ProtectedRoute>} />
             <Route path="/getting-started" element={<ProtectedRoute role="sensei"><GettingStartedPage /></ProtectedRoute>} />
 
@@ -164,6 +180,8 @@ export default function App() {
             <Route path="/privacy"       element={<PrivacyPage />} />
             <Route path="/terms"         element={<TermsPage />} />
             <Route path="/accessibility" element={<AccessibilityPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/docs/:slug" element={<DocsPage />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

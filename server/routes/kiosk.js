@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireManager, requireOwnLocation, requireKiosk, kioskLocationId } = require('../middleware/auth');
 const ms = require('../lib/mystudio');
+const { keepSignedIn } = require('../lib/mystudioSession');
 const { addToBoard } = require('../lib/boardCheckIn');
 
 // The check-in kiosk.
@@ -117,10 +118,16 @@ async function savedLogin(pool, locationId) {
 // reads it: the stored status, and the expiry the credential states itself.
 async function connectionState(pool, locationId) {
   const { rows } = await pool.query(
-    'SELECT status, session_cookie, feature_kiosk FROM mystudio_connections WHERE location_id = $1',
+    `SELECT id, location_id, company_id, status, session_cookie, feature_kiosk,
+            login_email, login_secret, remembered_until
+       FROM mystudio_connections WHERE location_id = $1`,
     [locationId]
   );
-  const conn = rows[0];
+  // Renewed here as well, or a kiosk would go dark at the counter every day
+  // until somebody opened the board.
+  const conn = rows[0] && rows[0].feature_kiosk !== false
+    ? await keepSignedIn(pool, rows[0])
+    : rows[0];
   if (!conn) return 'none';
   if (conn.feature_kiosk === false) return 'off';
   if (conn.status === 'expired') return 'expired';
@@ -256,8 +263,8 @@ async function logCheckIn(pool, row) {
     await pool.query(
       `INSERT INTO mystudio_kiosk_checkins
          (location_id, participant_id, class_key, class_name, start_time,
-          student_id, assignment_id, result)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          student_id, assignment_id, stood_in_for, result)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         row.locationId,
         row.participantId,
@@ -266,6 +273,7 @@ async function logCheckIn(pool, row) {
         row.startTime || null,
         row.studentId || null,
         row.assignmentId || null,
+        row.stoodInFor || null,
         row.result,
       ]
     );
@@ -300,19 +308,21 @@ async function matchStudent(pool, locationId, booking) {
 // Puts a kiosk check-in on Today's Board. Returns the assignment id, or null
 // when it is right to leave the board alone: a club (clubs are never board
 // check-ins), a ninja DojoLink cannot place with certainty, or one a sensei has
-// already put on today's board.
+// already put on today's board for this class.
+//
+// Every kiosk check-in is its own session, so a ninja checked in for CREATE and
+// then for Robotics, or for the 3:00 and the 4:00, gets two rows. A row only
+// stands in for this check-in when a sensei made it (no kiosk check-in created
+// it or has already stood on it) and it is for the same program; for a class
+// with no program, any such row will do. A re-tap of a class the child is
+// already checked into is not a new session and leaves the board alone.
 async function addKioskCheckInToBoard(pool, locationId, booking) {
-  if (booking.isClub) return { studentId: null, assignmentId: null };
+  const none = { studentId: null, assignmentId: null, stoodInFor: null };
+  if (booking.isClub) return none;
 
   const studentId = await matchStudent(pool, locationId, booking);
-  if (!studentId) return { studentId: null, assignmentId: null };
-
-  const date = todayDate();
-  const { rows: onBoard } = await pool.query(
-    'SELECT 1 FROM daily_assignments WHERE student_id = $1 AND session_date = $2 LIMIT 1',
-    [studentId, date]
-  );
-  if (onBoard[0]) return { studentId, assignmentId: null };
+  if (!studentId) return none;
+  if (booking.already) return { ...none, studentId };
 
   let program = null;
   if (booking.program) {
@@ -323,8 +333,23 @@ async function addKioskCheckInToBoard(pool, locationId, booking) {
     if (rows[0]) program = booking.program;
   }
 
+  const date = todayDate();
+  const { rows: onBoard } = await pool.query(
+    `SELECT d.id FROM daily_assignments d
+      WHERE d.student_id = $1 AND d.session_date = $2
+        AND ($3::text IS NULL OR d.program = $3)
+        AND NOT EXISTS (
+          SELECT 1 FROM mystudio_kiosk_checkins k
+           WHERE (k.assignment_id = d.id OR k.stood_in_for = d.id) AND k.undone_at IS NULL
+        )
+      ORDER BY d.id
+      LIMIT 1`,
+    [studentId, date, program]
+  );
+  if (onBoard[0]) return { studentId, assignmentId: null, stoodInFor: onBoard[0].id };
+
   const assignmentId = await addToBoard(pool, { studentId, program, date });
-  return { studentId, assignmentId };
+  return { studentId, assignmentId, stoodInFor: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -777,7 +802,7 @@ router.post('/checkin', requireKiosk, async (req, res) => {
 
   // MyStudio has the check-in. The board is DojoLink's own copy and a failure
   // here is logged and survived, not reported as a failed check-in.
-  let board = { studentId: null, assignmentId: null };
+  let board = { studentId: null, assignmentId: null, stoodInFor: null };
   try {
     board = await addKioskCheckInToBoard(pool, locationId, outcome);
   } catch (err) {

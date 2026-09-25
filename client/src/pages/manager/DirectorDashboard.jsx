@@ -11,8 +11,10 @@ import {
   CalendarDaysIcon,
   ChevronRightIcon,
   TabletSmartphoneIcon,
+  MilestoneIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
+import NotificationBell from '../../components/shared/NotificationBell';
 import { ChartContainer, ChartTooltip } from '../../components/ui/chart';
 import EventCalendar from '../../components/manager/EventCalendar';
 import TasksQuickLink from '../../components/manager/TasksQuickLink';
@@ -274,7 +276,10 @@ function AreaChart({ points, height = 120, gradientId, className = '', formatLab
       className={`w-full ${className}`}
       style={{ height }}
     >
-      <RechartsAreaChart data={data} margin={CHART_MARGIN}>
+      {/* No accessibility layer: the chart sits inside a button (or a
+          dialog that reads out the same numbers), and a focusable chart
+          inside a button drew its own blue ring after a click. */}
+      <RechartsAreaChart data={data} margin={CHART_MARGIN} accessibilityLayer={false}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-count)" stopOpacity="0.32" />
@@ -737,6 +742,12 @@ function QuickLinksCard({ isManager }) {
             <span className="truncate">{l.label}</span>
           </Link>
         ))}
+        {/* Last and full width: the label is too long for half the rail, and
+            both roles have an odd number of doors before it. */}
+        <Link to="/feedback" className={`${QUICK_BTN} col-span-2`}>
+          <MilestoneIcon className={QUICK_ICON} />
+          <span className="truncate">Issues &amp; roadmap</span>
+        </Link>
       </nav>
     </section>
   );
@@ -854,8 +865,8 @@ function DailySchedule({ feed, date, onAdded, existingStudentIds, readOnly, canC
       ) : expired ? (
         <ScheduleBlocked title="The MyStudio connection ran out">
           {canConnect ? (
-            // Sign in right here. The credential lasts a day at a time, so
-            // this is a weekly errand rather than a one-off repair.
+            // Sign in right here. With a saved password the server renews
+            // the session itself for 30 days, so this is a monthly errand.
             <MyStudioReconnect onConnected={() => feed.reload?.()} />
           ) : (
             <p className="font-ninja text-sm text-ninja-muted">
@@ -964,11 +975,16 @@ export default function DirectorDashboard() {
             page title in its own elevated surface was what turned this page into
             a stack of five identical boxes. A page title is allowed to sit on
             the page. */}
-        <motion.header {...fadeUp(0)}>
-          <p className="font-ninja text-sm text-ninja-muted">{formatDate(todayStr)}</p>
-          <h1 className="mt-1 text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight text-balance">
-            {greeting}{firstName && ', '}<span className="text-ninja-blue">{firstName}</span>
-          </h1>
+        <motion.header {...fadeUp(0)} className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-ninja text-sm text-ninja-muted">{formatDate(todayStr)}</p>
+            <h1 className="mt-1 text-3xl sm:text-4xl font-black font-ninja text-ninja-navy tracking-tight text-balance">
+              {greeting}{firstName && ', '}<span className="text-ninja-blue">{firstName}</span>
+            </h1>
+          </div>
+          {/* Phones have no sidebar or top bar to carry the bell, and this is
+              the page they land on. */}
+          <div className="lg:hidden flex-shrink-0"><NotificationBell /></div>
         </motion.header>
 
         {/* MyStudio-home shape: a narrow rail of doors and today's timetable on

@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
-import { LogOutIcon } from 'lucide-react';
-import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
+import NotificationBell from '../shared/NotificationBell';
+import { LogOutIcon, CircleHelpIcon, UserIcon, BellIcon } from 'lucide-react';
+import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon, MilestoneIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 const EXPANDED_W = 224; // matches w-56
@@ -39,12 +40,6 @@ export function isLinkActive(link, pathname, search) {
   return pathname === link.to || (link.to.length > 1 && pathname.startsWith(link.to + '/'));
 }
 
-function BugIcon() {
-  return (
-    <RocketIcon className="w-4 h-4 flex-shrink-0" />
-  );
-}
-
 export const managerLinks = [
   // Hovering Dashboard opens a flyout naming the director tools that live on
   // (or off) the dashboard, so none of them costs the nav a row of its own.
@@ -58,6 +53,7 @@ export const managerLinks = [
       { to: '/manager/reports', label: 'Reports', Glyph: ChartNoAxesColumnIncreasingIcon },
       { to: '/curriculum-roadmap', label: 'Curriculum', Glyph: BookOpenIcon },
       { to: '/changelog', label: "What's New", Glyph: GiftIcon },
+      { to: '/feedback', label: 'Issues & roadmap', Glyph: MilestoneIcon },
     ],
   },
   { to: '/manager/dashboard', label: "Today's Board", icon: 'today' },
@@ -127,6 +123,23 @@ export default function Sidebar({ onOpenBug }) {
   };
   useEffect(() => { setFlyout(null); }, [location.pathname]);
 
+  // The avatar opens a small menu above the user card holding Account, Help
+  // and the report button. Closes on outside click, Escape, or navigation.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+
   const toggleCollapsed = () => {
     setCollapsed((c) => {
       localStorage.setItem('sidebar-collapsed', c ? '0' : '1');
@@ -144,6 +157,101 @@ export default function Sidebar({ onOpenBug }) {
     try { await logout(); } catch {}
     navigate('/login');
   };
+
+  const MENU_ITEM =
+    'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-ninja text-sm font-semibold text-left transition-colors';
+
+  // The avatar that opens the account menu. `bell` is the notification
+  // bell's handle on the collapsed rail: the avatar anchors its panel and
+  // wears a dot while anything is unread.
+  const avatarButton = (bell) => (
+    <button
+      ref={bell?.anchorRef}
+      type="button"
+      onClick={() => setMenuOpen((o) => !o)}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      aria-label={bell?.unread ? `Account menu, ${bell.unread} unread notifications` : 'Account menu'}
+      title={collapsed ? (user?.displayName || 'Account') : undefined}
+      className={`relative flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity ${collapsed ? 'rounded-full' : 'flex-1 min-w-0 rounded-xl'}`}
+    >
+      {user?.profilePicUrl ? (
+        <img src={user.profilePicUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-ninja-border" />
+      ) : (
+        <div className="w-8 h-8 rounded-full bg-ninja-blue flex items-center justify-center text-white font-ninja font-bold text-xs flex-shrink-0">
+          {initials}
+        </div>
+      )}
+      {bell?.unread > 0 && (
+        <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-ninja-red ring-2 ring-white dark:ring-[#252c3e]" />
+      )}
+      {!collapsed && (
+        <span className="flex-1 min-w-0 font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</span>
+      )}
+    </button>
+  );
+
+  const accountMenu = (bell) => (
+    <AnimatePresence>
+      {menuOpen && (
+        <motion.div
+          role="menu"
+          initial={{ opacity: 0, y: 4, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+          className="absolute left-0 bottom-full mb-2 w-52 bg-white border border-ninja-border rounded-xl shadow-lg p-1.5 origin-bottom-left z-50"
+        >
+          {bell && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setMenuOpen(false); bell.toggle(); }}
+              className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
+            >
+              <BellIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+              <span className="flex-1 text-left">Notifications</span>
+              {bell.unread > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-ninja-red text-white text-[10px] font-black leading-[18px] text-center">
+                  {bell.unread > 9 ? '9+' : bell.unread}
+                </span>
+              )}
+            </button>
+          )}
+          <Link to="/account" role="menuitem" className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+            <UserIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+            Account
+          </Link>
+          <Link to="/docs" role="menuitem" className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+            <CircleHelpIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+            Help Center
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setMenuOpen(false); onOpenBug(); }}
+            className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
+          >
+            <RocketIcon className="w-4 h-4 flex-shrink-0" />
+            Send feedback
+          </button>
+          {bell && (
+            <div className="mt-1 pt-1 border-t border-ninja-border">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleLogout}
+                className={`${MENU_ITEM} text-ninja-red hover:bg-red-50 dark:hover:bg-red-500/10`}
+              >
+                <LogOutIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+                Log out
+              </button>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   return (
     <motion.aside
@@ -261,56 +369,34 @@ export default function Sidebar({ onOpenBug }) {
         <ThemeToggle />
       </div>
 
-      {/* User card */}
+      {/* User card. Expanded: avatar and name, the bell, log out. Collapsed to
+          the rail there is room for the avatar alone, so it carries the unread
+          dot and its menu gains Notifications and Log out. */}
       <div className="p-3 border-t border-ninja-border">
         {collapsed ? (
-          <div className="flex flex-col items-center gap-2 py-1">
-            <Link to="/account" title="Account" className="hover:opacity-80 transition-opacity">
-              {user?.profilePicUrl ? (
-                <img src={user.profilePicUrl} alt={user.displayName} className="w-8 h-8 rounded-full object-cover border border-ninja-border" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-ninja-blue flex items-center justify-center text-white font-ninja font-bold text-xs">
-                  {initials}
-                </div>
-              )}
-            </Link>
-            <button
-              onClick={handleLogout}
-              title="Log out"
-              className="text-ninja-muted hover:text-ninja-red transition-colors p-1"
-            >
-              <LogOutIcon className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2.5 px-2 py-2">
-            <Link to="/account" className="flex items-center gap-2.5 flex-1 min-w-0 hover:opacity-80 transition-opacity">
-              {user?.profilePicUrl ? (
-                <img src={user.profilePicUrl} alt={user.displayName} className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-ninja-border" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-ninja-blue flex items-center justify-center text-white font-ninja font-bold text-xs flex-shrink-0">
-                  {initials}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</p>
-                <p className="font-ninja text-ninja-muted text-xs capitalize">{user?.role === 'manager' ? 'Center Director' : user?.role === 'admin' ? 'Admin' : user?.role}</p>
+          <NotificationBell placement="side">
+            {(bell) => (
+              <div ref={menuRef} className="relative flex flex-col items-center py-1">
+                {avatarButton(bell)}
+                {accountMenu(bell)}
               </div>
-            </Link>
-            <button
-              onClick={onOpenBug}
-              title="Report a bug or suggest a feature"
-              className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
-            >
-              <BugIcon />
-            </button>
+            )}
+          </NotificationBell>
+        ) : (
+          // Tight gaps so the name keeps most of the row beside the bell and
+          // log out; the avatar-to-name gap lives inside the account button.
+          <div ref={menuRef} className="relative flex items-center gap-1 px-1 py-2">
+            {avatarButton(null)}
+            <NotificationBell compact />
             <button
               onClick={handleLogout}
               title="Log out"
-              className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
+              aria-label="Log out"
+              className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1 -mr-1"
             >
               <LogOutIcon className="w-4 h-4" />
             </button>
+            {accountMenu(null)}
           </div>
         )}
       </div>

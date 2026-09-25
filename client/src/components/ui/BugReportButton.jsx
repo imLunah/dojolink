@@ -1,28 +1,12 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ModalPortal from './ModalPortal';
-import { TriangleAlertIcon, LightbulbIcon } from 'lucide-react';
-
-const BUG_CATEGORIES = [
-  'Login Issue',
-  'Student Progress',
-  'Check-In Issue',
-  'Parent Portal',
-  'UI / Visual Bug',
-  'Slow Performance',
-  'Other',
-];
-
-const FEATURE_CATEGORIES = [
-  'Check-In',
-  'Student Progress',
-  'Clubs',
-  'Reports',
-  'Parent Portal',
-  'UI / Design',
-  'Other',
-];
+import { TriangleAlertIcon, LightbulbIcon, ChevronLeftIcon } from 'lucide-react';
+import TicketStatus from '../shared/TicketStatus';
+import { SkeletonList } from './Skeleton';
+import { ticketName, shortDate, BUG_CATEGORIES, FEATURE_CATEGORIES } from '../../lib/tickets';
 
 // Per-type copy so one modal handles both bug reports and feature ideas.
 const COPY = {
@@ -63,7 +47,14 @@ console.error = (...args) => {
   _origConsoleError(...args);
 };
 
+// Every report is a ticket (server/routes/bugs.js). Staff follow theirs, and
+// everything already known, on the Issues & roadmap page; a parent has no
+// such page, so the dialog itself lists what they have sent.
 export default function BugReportButton({ reporter, open, onClose }) {
+  const navigate = useNavigate();
+  const isParent = reporter?.role === 'parent';
+  const [view, setView] = useState('form');
+  const [mine, setMine] = useState(null);
   const [type, setType] = useState('bug');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -82,17 +73,36 @@ export default function BugReportButton({ reporter, open, onClose }) {
     setError('');
   };
 
+  // Screenshots are scaled down to 1600px and re-encoded as JPEG before they
+  // are sent: the report travels as JSON, and Vercel refuses a request body
+  // over 4.5MB, which a phone photo passes on its own.
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File must be under 5MB.');
+    if (!file.type.startsWith('image/')) {
+      setError('That file is not an image.');
       return;
     }
     setError('');
-    const reader = new FileReader();
-    reader.onload = (ev) => setScreenshot(ev.target.result);
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      setScreenshot(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setError('That image could not be read.');
+    };
+    img.src = url;
   };
 
   const handleSubmit = async (e) => {
@@ -112,7 +122,6 @@ export default function BugReportButton({ reporter, open, onClose }) {
         timestamp: new Date().toISOString(),
         // Console errors only matter for bug diagnosis, not feature ideas.
         consoleErrors: type === 'bug' ? recentConsoleErrors.slice() : [],
-        reporter,
       });
       setDone(true);
     } catch {
@@ -122,8 +131,21 @@ export default function BugReportButton({ reporter, open, onClose }) {
     }
   };
 
+  const showMine = () => {
+    if (!isParent) {
+      handleClose();
+      navigate('/feedback?tab=mine');
+      return;
+    }
+    setView('mine');
+    setMine(null);
+    api.get('/bugs/mine').then((rows) => setMine(Array.isArray(rows) ? rows : [])).catch(() => setMine([]));
+  };
+
   const handleClose = () => {
     onClose();
+    setView('form');
+    setMine(null);
     setType('bug');
     setCategory('');
     setDescription('');
@@ -140,18 +162,59 @@ export default function BugReportButton({ reporter, open, onClose }) {
           <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold font-ninja text-ninja-navy flex items-center gap-2">
-                {type === 'bug' ? <BugIcon /> : <BulbIcon />} {copy.title}
-              </h2>
-              <button onClick={handleClose} className="text-ninja-muted hover:text-ninja-navy text-xl leading-none">✕</button>
+              {view === 'mine' ? (
+                <h2 className="text-lg font-bold font-ninja text-ninja-navy flex items-center gap-1">
+                  <button type="button" onClick={() => setView('form')} aria-label="Back" className="-ml-1.5 w-7 h-7 flex items-center justify-center rounded-full text-ninja-muted hover:text-ninja-navy hover:bg-ninja-bg">
+                    <ChevronLeftIcon size={18} aria-hidden="true" />
+                  </button>
+                  Your reports
+                </h2>
+              ) : (
+                <h2 className="text-lg font-bold font-ninja text-ninja-navy flex items-center gap-2">
+                  {type === 'bug' ? <BugIcon /> : <BulbIcon />} {copy.title}
+                </h2>
+              )}
+              <div className="flex items-center gap-3">
+                {view === 'form' && isParent && (
+                  <button type="button" onClick={showMine} className="font-ninja text-xs font-bold text-ninja-blue hover:text-ninja-blue-hover">
+                    Your reports
+                  </button>
+                )}
+                <button onClick={handleClose} aria-label="Close" className="text-ninja-muted hover:text-ninja-navy text-xl leading-none">✕</button>
+              </div>
             </div>
 
-            {done ? (
+            {view === 'mine' ? (
+              mine === null ? (
+                <div className="py-2"><SkeletonList rows={3} label="Loading your reports" /></div>
+              ) : mine.length === 0 ? (
+                <p className="py-8 text-center font-ninja text-sm text-ninja-muted">You haven't sent any reports yet.</p>
+              ) : (
+                <ul className="divide-y divide-ninja-border -mx-1">
+                  {mine.map((t) => (
+                    <li key={t.id} className="px-1 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-ninja text-sm font-semibold text-ninja-navy break-words min-w-0">{ticketName(t)}</p>
+                        <TicketStatus status={t.status} className="mt-0.5" />
+                      </div>
+                      <p className="font-ninja text-xs text-ninja-muted mt-1">
+                        {t.type === 'feature' ? 'Feature idea' : 'Bug'} · {shortDate(t.created_at)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : done ? (
               <div className="text-center py-8 space-y-3">
                 <p className="text-4xl">✓</p>
                 <p className="font-ninja font-bold text-ninja-navy text-lg">{copy.doneTitle}</p>
                 <p className="text-ninja-muted font-ninja text-sm">{copy.doneBody}</p>
-                <button onClick={handleClose} className="mt-2 text-ninja-blue font-ninja text-sm font-semibold hover:underline">Close</button>
+                <div className="flex items-center justify-center gap-5 mt-2">
+                  <button onClick={showMine} className="text-ninja-blue font-ninja text-sm font-semibold hover:underline">
+                    {isParent ? 'Your reports' : 'Track it'}
+                  </button>
+                  <button onClick={handleClose} className="text-ninja-muted font-ninja text-sm font-semibold hover:underline">Close</button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">

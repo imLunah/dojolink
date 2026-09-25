@@ -2,13 +2,14 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import BirthdayConfetti, { isBirthdayToday } from '../../components/shared/BirthdayConfetti';
 import { motion } from 'framer-motion';
-import { ChevronRightIcon } from 'lucide-react';
+import { ChevronRightIcon, PencilIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import BeltIcon from '../../components/ui/BeltIcon';
 import Button from '../../components/ui/Button';
 import ProgressHistory from '../../components/shared/ProgressHistory';
 import PinnedNote from '../../components/shared/PinnedNote';
+import SupportMark from '../../components/shared/SupportMark';
 import EditStudentModal from '../../components/manager/EditStudentModal';
 import StickerPickerModal from '../../components/shared/StickerPickerModal';
 import { stickerUrl, stickerLabel } from '../../utils/stickers';
@@ -65,12 +66,22 @@ function StudentAvatar({ student, size = 'md', canEditSticker, onEditSticker, de
     <button
       type="button"
       onClick={onEditSticker}
-      className="relative flex-shrink-0"
+      className="sticker-edit relative flex-shrink-0 rounded-full transition-transform duration-150 hover:scale-105"
       title="Code.AI sticker"
-      aria-label="Set Code.AI sticker"
+      aria-label={sticker ? 'Change Code.AI sticker' : 'Set Code.AI sticker'}
     >
       {circle}
-      {!sticker && (
+      {sticker ? (
+        // The same pencil the class icon on Today's Board wears: it says the
+        // picture is a control. Shown on hover where there is hover, and
+        // always on a touch screen, which has none to wait for.
+        <span
+          aria-hidden
+          className="sticker-pencil absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 rounded-full bg-white border border-ninja-border text-ninja-navy shadow-sm"
+        >
+          <PencilIcon size={11} strokeWidth={2.25} />
+        </span>
+      ) : (
         <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-ninja-blue text-white flex items-center justify-center text-xs font-bold leading-none border-2 border-white">
           +
         </span>
@@ -647,6 +658,16 @@ export default function StudentProfile() {
                 </p>
               </div>
             </div>
+            {(!isReadOnly || student.support) && (
+              <div className="mt-3 flex">
+                <SupportMark
+                  studentId={student.id}
+                  reason={student.support?.reason}
+                  readOnly={isReadOnly}
+                  onChange={(reason) => setStudent((prev) => ({ ...prev, support: reason ? { ...prev.support, reason } : null }))}
+                />
+              </div>
+            )}
           </motion.div>
 
           {/* Pinned Note — first so senseis can't miss it. Parent note folded in. */}
@@ -734,6 +755,12 @@ export default function StudentProfile() {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              <SupportMark
+                studentId={student.id}
+                reason={student.support?.reason}
+                readOnly={isReadOnly}
+                onChange={(reason) => setStudent((prev) => ({ ...prev, support: reason ? { ...prev.support, reason } : null }))}
+              />
               {isManager && !isReadOnly && (
                 <button
                   onClick={() => setShowEdit(true)}

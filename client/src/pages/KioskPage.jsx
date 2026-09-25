@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import Logo from '../components/ui/Logo';
@@ -196,15 +196,20 @@ export default function KioskPage() {
   }, [query, step, me]);
 
   // The count shown on the button is the timer, so the two cannot disagree.
-  useEffect(() => {
+  // The count lives in the interval, not in state: a screen that timed out
+  // used to leave secondsLeft at 0, and the next result screen read that 0 on
+  // its first render and closed itself before anyone saw it.
+  useLayoutEffect(() => {
     if (!AUTO_BACK_STEPS.has(step)) return undefined;
-    setSecondsLeft(AUTO_BACK_S);
-    const id = setInterval(() => setSecondsLeft((n) => n - 1), 1000);
+    let left = AUTO_BACK_S;
+    setSecondsLeft(left);
+    const id = setInterval(() => {
+      left -= 1;
+      if (left <= 0) reset();
+      else setSecondsLeft(left);
+    }, 1000);
     return () => clearInterval(id);
-  }, [step]);
-  useEffect(() => {
-    if (AUTO_BACK_STEPS.has(step) && secondsLeft <= 0) reset();
-  }, [step, secondsLeft, reset]);
+  }, [step, reset]);
 
   useEffect(() => {
     if (step === 'classes' || step === 'roster' || step === 'confirm' || (step === 'search' && query)) {
@@ -351,7 +356,7 @@ export default function KioskPage() {
           <div className="w-full max-w-md rounded-3xl px-5 md:px-8 py-10 lg:py-20 text-center shadow-sm" style={{ backgroundColor: 'rgb(255 255 255 / 0.88)' }}>
             <Logo className="h-7 lg:h-9 mx-auto" />
             <h1 className="mt-6 lg:mt-8 font-ninja font-extrabold text-3xl md:text-4xl lg:text-5xl text-ninja-navy text-balance">
-              Welcome to {me.centerName}
+              Welcome to {/^code ninjas/i.test(me.centerName) ? me.centerName : `Code Ninjas ${me.centerName}`}
             </h1>
           </div>
         </div>

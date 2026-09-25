@@ -5,7 +5,7 @@ import FloatingPanel from '../ui/FloatingPanel';
 import useIsDesktop from '../../lib/useIsDesktop';
 import Button from '../ui/Button';
 import LazyMarkdownEditor from '../shared/LazyMarkdownEditor';
-import Linkify from '../shared/Linkify';
+import MentionText from '../shared/MentionText';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { COLUMNS, DUE_TONE, carriesTask, dueMeta, ownsTask } from '../../lib/taskBoard';
@@ -492,28 +492,7 @@ export default function TaskEditorModal({ isOpen, task, assignees = [], column =
 // plain text through Linkify, not markdown: they are one-line answers, and an
 // editor here would out-weigh the note above it.
 function TaskCommentBody({ comment }) {
-  const names = (comment.mentions || [])
-    .map((mention) => mention.display_name)
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  if (names.length === 0) return <Linkify>{comment.body}</Linkify>;
-
-  const escaped = names.map((name) => `@${name}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const pattern = new RegExp(`(${escaped.join('|')})`, 'g');
-  const tagged = new Set(escaped.map((_, index) => `@${names[index]}`));
-  let offset = 0;
-
-  return comment.body.split(pattern).map((part) => {
-    const start = offset;
-    offset += part.length;
-    return tagged.has(part) ? (
-      <span key={`mention:${start}`} className="rounded-md bg-ninja-blue/15 px-1 py-0.5 font-bold text-ninja-blue-ink">
-        {part}
-      </span>
-    ) : (
-      <Linkify key={`text:${start}`}>{part}</Linkify>
-    );
-  });
+  return <MentionText text={comment.body} mentions={comment.mentions} />;
 }
 
 function TaskComments({ task, canComment, onCount }) {

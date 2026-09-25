@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireSensei, requireOwnLocation } = require('../middleware/auth');
 const { ALL_BELTS, isValidBelt, validateSublevel } = require('../lib/belts');
 const { toggleReaction } = require('../lib/reactions');
+const { KINDS, readReply, readMentionIds, saveMentions, mayEditReply, mayDeleteReply } = require('../lib/replies');
 
 const REACTION_TABLE = { table: 'progress_log_reactions', fk: 'log_id' };
 
@@ -454,25 +455,34 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
   }
 });
 
-// DELETE /api/progress/:id — managers delete any log in their center; senseis delete only their own
+// DELETE /api/progress/:id — any staff member at the center deletes any log there
 router.delete('/:id', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
-  const isManager = ['manager', 'admin'].includes(req.session.role);
+  // Any staff member at the center may delete a log there, not only its author.
+  // Editing stays with the author and directors (PATCH above). Because that is
+  // wide, every delete first copies the row and its comment thread (which
+  // cascades away with it) into progress_log_deletions, with who did it. One
+  // statement, so there is never a delete without its copy.
   try {
-    const ownershipClause = isManager ? '' : 'AND progress_logs.sensei_id = $3';
-    const params = isManager
-      ? [req.params.id, req.session.activeLocationId]
-      : [req.params.id, req.session.activeLocationId, req.session.userId];
-
     const { rows } = await pool.query(
-      `DELETE FROM progress_logs
-       USING students s
-       WHERE progress_logs.id = $1 AND progress_logs.student_id = s.id AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
-       ${ownershipClause}
-       RETURNING progress_logs.id`,
-      params
+      `WITH target AS (
+         SELECT pl.* FROM progress_logs pl
+         JOIN students s ON s.id = pl.student_id
+         WHERE pl.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
+         FOR UPDATE OF pl
+       ),
+       saved AS (
+         INSERT INTO progress_log_deletions (log_id, student_id, location_id, deleted_by, log, comments)
+         SELECT t.id, t.student_id, $2, $3, to_jsonb(t),
+                (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id) FROM progress_log_comments c WHERE c.log_id = t.id)
+         FROM target t
+         RETURNING log_id
+       )
+       DELETE FROM progress_logs WHERE id IN (SELECT log_id FROM saved)
+       RETURNING id`,
+      [req.params.id, req.session.activeLocationId, req.session.userId]
     );
-    if (!rows[0]) return res.status(404).json({ error: 'Log not found or not yours' });
+    if (!rows[0]) return res.status(404).json({ error: 'Log not found' });
     res.json({ ok: true });
   } catch (err) {
     console.error('Progress log delete error:', err);
@@ -495,25 +505,105 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
   if (body.length > MAX_COMMENT) {
     return res.status(400).json({ error: `Comment too long (max ${MAX_COMMENT} characters)` });
   }
+  const mentions = readMentionIds(req.body.mention_ids);
+  if (mentions.error) return res.status(400).json({ error: mentions.error });
 
   try {
-    const { rows: logRows } = await pool.query(
-      `SELECT pl.id FROM progress_logs pl
+    const { rows: parent } = await pool.query(`SELECT pl.id FROM progress_logs pl
        JOIN students s ON pl.student_id = s.id
-       WHERE pl.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)`,
-      [req.params.id, req.session.activeLocationId]
-    );
-    if (!logRows[0]) return res.status(404).json({ error: 'Log not found' });
+       WHERE pl.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)`, [req.params.id, req.session.activeLocationId]);
+    if (!parent[0]) return res.status(404).json({ error: 'Log not found' });
 
     const { rows } = await pool.query(
-      `INSERT INTO progress_log_comments (log_id, user_id, user_name, body)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
+      `INSERT INTO progress_log_comments (log_id, user_id, user_name, body) VALUES ($1, $2, $3, $4) RETURNING id`,
       [req.params.id, req.session.userId, req.session.displayName, body.trim()]
     );
-    res.status(201).json(rows[0]);
+    await saveMentions(pool, 'progress', {
+      commentId: rows[0].id, ids: mentions.ids, authorId: req.session.userId, locationId: req.session.activeLocationId,
+    });
+    // Returned in the shape the thread draws, picture and all, so the new
+    // reply looks like the rest without a refetch.
+    res.status(201).json(await readReply(pool, 'progress', rows[0].id, req.session.userId));
   } catch (err) {
     console.error('Progress log comment error:', err);
     res.status(500).json({ error: 'Failed to save comment' });
+  }
+});
+
+// The reply named in the URL, if it belongs to a log at the active
+// center. `activeLocationId` picks the target; requireOwnLocation on each
+// route is what authorizes writing there.
+const findReply = async (pool, commentId, locationId) => {
+  const { rows } = await pool.query(`SELECT c.id, c.user_id FROM progress_log_comments c
+     JOIN progress_logs pl ON pl.id = c.log_id
+     WHERE c.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = pl.student_id AND sl_m.location_id = $2)`, [commentId, locationId]);
+  return rows[0] ?? null;
+};
+
+// PATCH /api/progress/comments/:commentId — the author rewrites their reply.
+// The mentions follow the words: a name taken out stops being a mention.
+router.patch('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const { body } = req.body;
+  if (body != null && typeof body !== 'string') return res.status(400).json({ error: 'Invalid comment' });
+  if (!body?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
+  if (body.length > MAX_COMMENT) {
+    return res.status(400).json({ error: `Comment too long (max ${MAX_COMMENT} characters)` });
+  }
+  const mentions = readMentionIds(req.body.mention_ids);
+  if (mentions.error) return res.status(400).json({ error: mentions.error });
+  try {
+    const found = await findReply(pool, req.params.commentId, req.session.activeLocationId);
+    if (!found) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayEditReply(req.session, found.user_id)) return res.status(403).json({ error: 'Only the author can edit this reply' });
+    // An unchanged save is not an edit, so it leaves no mark.
+    await pool.query(
+      `UPDATE progress_log_comments SET body = $2, edited_at = CASE WHEN body = $2 THEN edited_at ELSE now() END WHERE id = $1`,
+      [found.id, body.trim()]
+    );
+    await saveMentions(pool, 'progress', {
+      commentId: found.id, ids: mentions.ids, authorId: found.user_id ?? req.session.userId,
+      locationId: req.session.activeLocationId, replace: true,
+    });
+    res.json(await readReply(pool, 'progress', found.id, req.session.userId));
+  } catch (err) {
+    console.error('Progress log comment edit error:', err);
+    res.status(500).json({ error: 'Failed to save comment' });
+  }
+});
+
+// DELETE /api/progress/comments/:commentId — the author, a director or an admin.
+// Its mentions and reactions go with it (ON DELETE CASCADE).
+router.delete('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const found = await findReply(pool, req.params.commentId, req.session.activeLocationId);
+    if (!found) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayDeleteReply(req.session, found.user_id)) return res.status(403).json({ error: 'You cannot delete this reply' });
+    await pool.query('DELETE FROM progress_log_comments WHERE id = $1', [found.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Progress log comment delete error:', err);
+    res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// POST /api/progress/comments/:commentId/reactions — toggle one emoji on a reply.
+// Anyone at the center can react to any reply there, as with the log itself.
+router.post('/comments/:commentId/reactions', requireSensei, requireOwnLocation, async (req, res) => {
+  try {
+    const result = await toggleReaction(req.app.get('db'), {
+      table: KINDS.progress.reactions,
+      fk: 'comment_id',
+      emoji: req.body.emoji,
+      userId: req.session.userId,
+      verify: async (client) => (await findReply(client, req.params.commentId, req.session.activeLocationId))?.id ?? null,
+    });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json({ reactions: result.reactions });
+  } catch (err) {
+    console.error('Progress log comment reaction error:', err);
+    res.status(500).json({ error: 'Failed to save reaction' });
   }
 });
 

@@ -175,8 +175,9 @@ export default function ExpectedToday({
 
   const groups = groupByClass(expected);
 
-  // The credential dies twenty four hours after it was made, and the moment is
-  // knowable in advance because the token says so. Six hours is the window that
+  // `expiresAt` is when somebody next has to type a code: the end of the 30 day
+  // remembered device for a center that renews itself, otherwise the end of
+  // today's session. Either way it is knowable in advance. Six hours is the window that
   // makes a warning useful rather than nagging: long enough to act on before the
   // afternoon classes, short enough that it is not on screen most of the day.
   //
@@ -191,8 +192,7 @@ export default function ExpectedToday({
         <TriangleAlertIcon size={15} />
       </span>
       <p className="font-ninja text-xs text-ninja-navy min-w-0">
-        The MyStudio sign-in runs out {formatExpiry(data.expiresAt)}. It lasts a
-        day at a time, so this is normal.{' '}
+        The MyStudio sign-in runs out {formatExpiry(data.expiresAt)}.{' '}
         <Link to="/account?mystudio=1" className="font-semibold text-ninja-blue hover:underline">
           Renew it now
         </Link>

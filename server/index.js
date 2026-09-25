@@ -154,6 +154,7 @@ app.use('/api/curriculum', require('./routes/curriculum'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/director-tasks', require('./routes/directorTasks'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/event-listings', require('./routes/eventListings'));
 app.use('/api/releases', require('./routes/releases'));
@@ -174,13 +175,14 @@ const kioskLimiter = rateLimit({
 app.use('/api/kiosk', kioskLimiter, require('./routes/kiosk'));
 app.use('/api/mystudio/login', mystudioLoginLimiter);
 app.use('/api/mystudio', mystudioLimiter, require('./routes/mystudio'));
-// Bug reports — staff or parent session accepted; try staff first, fall back to parent
+// Feedback tickets — staff or parent session accepted; try staff first, fall back to parent
 app.use('/api/bugs',
   (req, res, next) => staffSession(req, res, () => {
     if (req.session?.userId) return next();
     parentSession(req, res, next);
   }),
-  bugLimiter,
+  // Only filing a ticket is throttled; reading and triaging them is not.
+  (req, res, next) => (req.method === 'POST' && req.path === '/' ? bugLimiter(req, res, next) : next()),
   require('./routes/bugs')
 );
 

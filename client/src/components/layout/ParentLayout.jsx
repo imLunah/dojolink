@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, useAnimationControls, useReducedMotion } from 'framer-motion';
-import { HomeIcon, CalendarDaysIcon, LogOutIcon, ChevronLeftIcon } from 'lucide-react';
+import { HomeIcon, CalendarDaysIcon, LogOutIcon, ChevronLeftIcon, CircleHelpIcon } from 'lucide-react';
 import { useParentAuth } from '../../context/ParentAuthContext';
 import { useLightOnly } from '../../context/ThemeContext';
 import Logo from '../ui/Logo';
@@ -230,22 +230,32 @@ function ParentSideNav({ parentName, centerName, onLogout, onReport }) {
                   {centerName && <span className="block font-ninja text-ninja-muted text-xs truncate">{centerName}</span>}
                 </span>
               </button>
-              <button
-                onClick={onReport}
-                title="Report a bug or suggest a feature"
-                aria-label="Report a bug or suggest a feature"
-                className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
-              >
-                <RocketIcon className="w-4 h-4" />
-              </button>
-              <button
-                onClick={onLogout}
-                title="Sign out"
-                aria-label="Sign out"
-                className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
-              >
-                <LogOutIcon className="w-4 h-4" />
-              </button>
+              <div className="flex items-center flex-shrink-0 -mr-1">
+                <Link
+                  to="/docs/parent-portal"
+                  title="Help"
+                  aria-label="Help"
+                  className="text-ninja-muted hover:text-ninja-blue transition-colors flex-shrink-0 p-1"
+                >
+                  <CircleHelpIcon className="w-4 h-4" />
+                </Link>
+                <button
+                  onClick={onReport}
+                  title="Report a bug or suggest a feature"
+                  aria-label="Report a bug or suggest a feature"
+                  className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
+                >
+                  <RocketIcon className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={onLogout}
+                  title="Sign out"
+                  aria-label="Sign out"
+                  className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1"
+                >
+                  <LogOutIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -6,9 +6,12 @@ import ReactMarkdown from 'react-markdown';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { today } from '../../utils/dateUtils';
+import { CheckIcon, PencilIcon } from 'lucide-react';
 import { ProgramAvatar } from '../ui/ProgramBadge';
+import ActionMenu, { MenuItem } from '../ui/ActionMenu';
 import { isBirthdayToday } from '../shared/BirthdayConfetti';
 import { MARKDOWN_COMPONENTS, Pin } from '../shared/PinnedNote';
+import SupportMark from '../shared/SupportMark';
 
 // Sticky-note marker that reveals the ninja's pinned note on hover or click.
 // Filled amber square with a folded corner + text lines — reads as "note" at a
@@ -110,6 +113,79 @@ function PinnedNotePill({ note, parentNote }) {
   );
 }
 
+// The card's class icon is the way to change the class, for anyone who can log
+// (senseis included), so a check-in filed under the wrong class can be put
+// right from the board. A pencil shows on hover so the icon reads as editable.
+// Only unlogged check-ins move: a logged one's class belongs to its log.
+function ClassPicker({ group, onChange, children }) {
+  const { isReadOnly } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const pending = group.assignments.filter((a) => !a.completed);
+  const enrolled = group.assignments[0].enrolled_programs || [];
+  const nothingToChange = enrolled.length === 1 && pending.every((a) => a.program === enrolled[0]);
+  if (isReadOnly || !onChange || pending.length === 0 || enrolled.length === 0 || nothingToChange) return children;
+
+  const pick = async (assignment, program, close) => {
+    if (assignment.program === program) { close(); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await api.patch(`/daily/${assignment.id}/program`, { program });
+      onChange(updated);
+      close();
+    } catch (err) {
+      setError(err.message || 'Could not change the class');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+      <ActionMenu
+        label="Change class"
+        align="left"
+        onClosed={() => setError('')}
+        triggerClassName="group/class relative block rounded-full transition-transform duration-150 hover:scale-105"
+        trigger={
+          <>
+            {children}
+            <span
+              aria-hidden
+              className="absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 rounded-full bg-white border border-ninja-border text-ninja-navy shadow-sm opacity-0 scale-75 transition-all duration-150 group-hover/class:opacity-100 group-hover/class:scale-100"
+            >
+              <PencilIcon size={11} strokeWidth={2.25} />
+            </span>
+          </>
+        }
+      >
+        {({ close }) => (
+          <div className="min-w-[12rem]">
+            {pending.map((a, idx) => (
+              <div key={a.id}>
+                {pending.length > 1 && (
+                  <p className="px-2.5 pt-1.5 pb-0.5 font-ninja text-[11px] font-bold uppercase tracking-wide text-ninja-muted">
+                    Class {idx + 1}
+                  </p>
+                )}
+                {enrolled.map((program) => (
+                  <MenuItem key={program} disabled={saving} onSelect={() => pick(a, program, close)}>
+                    <ProgramAvatar program={program} belt={program === 'CREATE' ? a.belt_level || group.assignments.find((x) => x.program === 'CREATE')?.belt_level : null} size="xs" />
+                    <span className="flex-1">{program}</span>
+                    {a.program === program && <CheckIcon size={15} strokeWidth={2.25} className="text-ninja-blue" aria-label="Current class" />}
+                  </MenuItem>
+                ))}
+              </div>
+            ))}
+            {error && <p className="px-2.5 py-1.5 font-ninja text-xs text-ninja-red">{error}</p>}
+          </div>
+        )}
+      </ActionMenu>
+    </span>
+  );
+}
+
 function buildLogUrl(group) {
   // A generic (no-class) check-in has no program — let the sensei pick any
   // enrolled class on the log page (no programs filter passed).
@@ -149,11 +225,17 @@ export default function TodayBoard({
   onRemove,
   statusFilter = 'unlogged',
   canRemove = true,
+  onUpdate,
   emptyHint = 'Use the "+ Check In Ninja" button to get started.',
 }) {
   const { isReadOnly } = useAuth();
   const showRemove = canRemove && !isReadOnly;
   const navigate = useNavigate();
+  // The support mark belongs to the ninja, so every row of theirs on the
+  // board takes the new value.
+  const setSupport = (group, reason) => {
+    group.assignments.forEach((a) => onUpdate?.({ ...a, support_reason: reason }));
+  };
   const [confirmId, setConfirmId] = useState(null);
   const todayStr = today();
 
@@ -255,7 +337,7 @@ export default function TodayBoard({
             const isOverdue = group.assignments.some(
               (a) => !a.completed && a.session_date && String(a.session_date).split('T')[0] < todayStr
             );
-            const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
+            const borderClass = allDone ? 'border-green-500' : isOverdue ? 'border-red-500' : 'border-yellow-400';
             const sessionCount = group.assignments.length;
             const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
             const realPrograms = uniquePrograms.filter(Boolean);
@@ -269,18 +351,20 @@ export default function TodayBoard({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05, duration: 0.25, ease: 'easeOut' }}
-                className="bg-white border border-ninja-border rounded-2xl p-4 cursor-pointer"
+                className={`relative has-[[aria-expanded=true]]:z-30 bg-white border-2 ${borderClass} rounded-2xl p-4 cursor-pointer`}
                 onClick={() => navigate(`/manager/students/${group.student_id}`)}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative flex-shrink-0">
-                      <ProgramAvatar
-                        program={primaryProgram}
-                        belt={beltFor(primaryProgram)}
-                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                        size="md"
-                      />
+                      <ClassPicker group={group} onChange={onUpdate}>
+                        <ProgramAvatar
+                          program={primaryProgram}
+                          belt={beltFor(primaryProgram)}
+                          items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                          size="md"
+                        />
+                      </ClassPicker>
                       {sessionCount > 1 && (
                         <span
                           title={`${sessionCount} sessions today`}
@@ -310,7 +394,13 @@ export default function TodayBoard({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
-                    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${dotClass}`} />
+                    <SupportMark
+                      compact
+                      studentId={group.student_id}
+                      reason={group.support_reason}
+                      readOnly={isReadOnly}
+                      onChange={(reason) => setSupport(group, reason)}
+                    />
                     {showRemove && (
                       confirmId === group.student_id ? (
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -368,8 +458,7 @@ export default function TodayBoard({
           const isOverdue = group.assignments.some(
             (a) => !a.completed && a.session_date && String(a.session_date).split('T')[0] < todayStr
           );
-          const borderClass = allDone ? 'border-ninja-border' : isOverdue ? 'border-ninja-border' : 'border-ninja-border';
-            const dotClass = allDone ? 'bg-green-500' : isOverdue ? 'bg-red-400' : 'bg-yellow-400';
+          const borderClass = allDone ? 'border-green-500' : isOverdue ? 'border-red-500' : 'border-yellow-400';
           const sessionCount = group.assignments.length;
           const uniquePrograms = [...new Set(group.assignments.map((a) => a.program))];
           const realPrograms = uniquePrograms.filter(Boolean);
@@ -383,17 +472,19 @@ export default function TodayBoard({
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.28, ease: 'easeOut' }}
-              className={`bg-white border-2 ${borderClass} rounded-2xl p-4 shadow-sm flex flex-col gap-3`}
+              className={`relative has-[[aria-expanded=true]]:z-30 bg-white border-2 ${borderClass} rounded-2xl p-4 shadow-sm flex flex-col gap-3`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative flex-shrink-0">
-                    <ProgramAvatar
-                      program={primaryProgram}
-                      belt={beltFor(primaryProgram)}
-                      items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
-                      size="md"
-                    />
+                    <ClassPicker group={group} onChange={onUpdate}>
+                      <ProgramAvatar
+                        program={primaryProgram}
+                        belt={beltFor(primaryProgram)}
+                        items={realPrograms.map((p) => ({ program: p, belt: beltFor(p) }))}
+                        size="md"
+                      />
+                    </ClassPicker>
                     {sessionCount > 1 && (
                       <span
                         title={`${sessionCount} sessions today`}
@@ -416,7 +507,13 @@ export default function TodayBoard({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 mt-1">
-                  <div className={`w-3 h-3 rounded-full ${dotClass}`} />
+                  <SupportMark
+                    compact
+                    studentId={group.student_id}
+                    reason={group.support_reason}
+                    readOnly={isReadOnly}
+                    onChange={(reason) => setSupport(group, reason)}
+                  />
                   {showRemove && (
                     confirmId === group.student_id ? (
                       <div className="flex items-center gap-1">

@@ -99,10 +99,9 @@ export function prettyTime(value) {
 
 // How long this center's MyStudio credential has left, and how to say it.
 //
-// The credential is a Keycloak refresh token with a hard twenty four hour
-// expiry that nothing on our side can extend, so the useful thing is to say
-// when it runs out before it does. The server derives the moment from the token
-// itself and sends it as `expiresAt`.
+// The session lasts a day, but the server renews it without a code for 30 days
+// after a director last typed one. `expiresAt` is when a code will next be
+// needed, which is the only moment worth telling anybody about.
 
 export function hoursUntil(iso) {
   if (!iso) return null;
@@ -111,9 +110,8 @@ export function hoursUntil(iso) {
   return (at - new Date()) / 3600000;
 }
 
-// "at 4:31 PM", "tomorrow at 4:31 PM", "on Thu at 4:31 PM". A bare clock time
-// is ambiguous the moment the answer is not today, and a full date is more than
-// anyone needs for something that never lives longer than a day.
+// "at 4:31 PM", "tomorrow at 4:31 PM", "on Thu at 4:31 PM", "on Oct 25". A
+// weekday stops being enough once the answer is more than a week away.
 export function formatExpiry(iso) {
   if (!iso) return '';
   const at = new Date(iso);
@@ -125,5 +123,6 @@ export function formatExpiry(iso) {
 
   if (days <= 0) return `at ${time}`;
   if (days === 1) return `tomorrow at ${time}`;
-  return `on ${at.toLocaleDateString([], { weekday: 'short' })} at ${time}`;
+  if (days < 7) return `on ${at.toLocaleDateString([], { weekday: 'short' })} at ${time}`;
+  return `on ${at.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
 }

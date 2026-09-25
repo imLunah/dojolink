@@ -63,16 +63,30 @@ async function createSignedUploadUrl(bucket, path) {
 }
 
 // Sign a long-lived read URL for an already-uploaded object.
-async function createSignedReadUrl(bucket, path) {
+// `expiresIn` is for URLs that are handed out and never stored.
+async function createSignedReadUrl(bucket, path, expiresIn = SIGNED_TTL) {
   if (!isConfigured()) throw new Error('Storage not configured');
   const res = await fetch(`${storageBase()}/object/sign/${bucket}/${encodePath(path)}`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ expiresIn: SIGNED_TTL }),
+    body: JSON.stringify({ expiresIn }),
   });
   if (!res.ok) throw new Error(`sign read failed (${res.status})`);
   const data = await res.json();
   return `${storageBase()}${data.signedURL}`;
+}
+
+// Server-side upload, for bytes the server already holds (a ticket's
+// screenshot arrives in the request body). Refuses to overwrite.
+async function uploadObject(bucket, path, buffer, contentType) {
+  if (!isConfigured()) throw new Error('Storage not configured');
+  const res = await fetch(`${storageBase()}/object/${bucket}/${encodePath(path)}`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': contentType, 'x-upsert': 'false' }),
+    body: buffer,
+  });
+  if (!res.ok) throw new Error(`upload failed (${res.status})`);
+  return path;
 }
 
 // Best-effort delete. Never throws — a failed cleanup must not fail the request.
@@ -97,6 +111,7 @@ module.exports = {
   isConfigured,
   createSignedUploadUrl,
   createSignedReadUrl,
+  uploadObject,
   removeObject,
   removeByUrl,
   pathFromUrl,

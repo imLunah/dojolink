@@ -37,6 +37,11 @@ const ENC_KEY_HEX = (process.env.MYSTUDIO_ENC_KEY || '').trim();
 // a plausible desktop value keeps our requests shaped like the ones the app
 // itself makes; a missing or obviously synthetic agent is the kind of thing a
 // bot filter looks at.
+//
+// It is also part of the remembered device (see renewSignIn): MyStudio only
+// honours the 30 day "remember" cookies from the same user agent that entered
+// the code. Changing this string forgets every center's device, and each one
+// needs a code again the next time its sign-in runs out.
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -292,7 +297,9 @@ function serializeJar(jar) {
 // page load returns a Set-Cookie, and their own client carries no refresh call,
 // so the fuse is the vendor's behaviour rather than a defect in how we connect.
 // "Remember for 30 days" does not change it: the Fullerton connection was made
-// through the sign-in with rememberMe on and still got 1440 minutes.
+// through the sign-in with rememberMe on and still got 1440 minutes. What that
+// box does remember is the device, for signing in again without a code, which
+// is how renewSignIn relights the fuse every day.
 //
 // Knowing the moment in advance is the whole point. It turns a director finding
 // an empty board into the app asking for ten seconds before the fuse runs out.
@@ -593,7 +600,9 @@ async function verifySession(rawCookie, date) {
 // sign-in. That is the whole point of the code, and working around it would mean
 // reading the director's mailbox. So the best available shape is what this does
 // — ask MyStudio to send the code, then exchange it — leaving the human with six
-// digits to type instead of a network tab to navigate.
+// digits to type instead of a network tab to navigate. After that the device is
+// remembered for thirty days and renewSignIn keeps the session going without
+// one, so the code is a monthly errand rather than a daily one.
 //
 // The sign-in is two Next.js Server Actions on the login page. They are not a
 // documented API and their ids are build artifacts that change whenever MyStudio
@@ -921,6 +930,114 @@ async function completeLogin({
   // set the companyId cookie. We set it in our own jar instead: it is a cookie
   // the browser holds, every request re-sends it, and writing it here avoids
   // asking the vendor to change anything about the account.
+  const companyId = await resolveCompanyId({ jar, payload, preferredCompanyId });
+  jar.companyId = String(companyId);
+  jar.keepCache = 'true';
+
+  return {
+    cookie: serializeJar(jar),
+    companyId: String(companyId),
+    rememberedUntil: readRememberedUntil(getSetCookie(res)),
+  };
+}
+
+// The remembered device.
+//
+// Ticking "Remember for 30 days" on the code step makes the exchange set two
+// more cookies, c_u_id_<userId> and c_u_id_<userId>_sessid, each with a
+// Max-Age of exactly thirty days. Sent back with the next loginAction, they make
+// it answer with a finished sign-in (`data`, the same shape the code exchange
+// returns) instead of emailing a code. Measured on 25 Sep 2026: a pair stored
+// from a sign-in made on Vercel still skipped the code when replayed from a
+// different network, so the IP is not part of it, but the same pair sent under
+// a different user agent got a code. Only the pair is needed; the rest of the
+// jar made no difference.
+//
+// A code-free sign-in does NOT reissue the pair, so the thirty days run from
+// the last time somebody typed a code, and no amount of renewing extends them.
+function rememberedDevice(jar) {
+  const out = {};
+  for (const [name, value] of Object.entries(jar || {})) {
+    if (/^c_u_id_\d+(_sessid)?$/.test(name)) out[name] = value;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function forgetDevice(jar) {
+  const out = {};
+  for (const [name, value] of Object.entries(jar || {})) {
+    if (!/^c_u_id_\d+(_sessid)?$/.test(name)) out[name] = value;
+  }
+  return out;
+}
+
+// When the remembered device stops working, read off the Set-Cookie attributes
+// the jar itself throws away. The earliest of the pair wins.
+function readRememberedUntil(lines) {
+  let earliest = null;
+  for (const line of lines || []) {
+    const [pair, ...attrs] = String(line || '').split(';');
+    const name = pair.slice(0, pair.indexOf('=')).trim();
+    if (!/^c_u_id_\d+(_sessid)?$/.test(name)) continue;
+
+    let at = null;
+    for (const attr of attrs) {
+      const [key, ...rest] = attr.split('=');
+      const value = rest.join('=').trim();
+      if (/^\s*max-age\s*$/i.test(key) && /^\d+$/.test(value)) {
+        at = new Date(Date.now() + Number(value) * 1000);
+        break;
+      }
+      if (/^\s*expires\s*$/i.test(key)) {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) at = parsed;
+      }
+    }
+    if (at && (!earliest || at < earliest)) earliest = at;
+  }
+  return earliest;
+}
+
+// Signs in again with no code, from the saved password and the remembered
+// device, and returns a fresh day long session.
+//
+// Returns { needsCode: true } when MyStudio emailed a code instead, which means
+// the device is no longer remembered. The caller must stop trying at that
+// point: every further attempt emails the director another code.
+async function renewSignIn({ email, password, cookie, preferredCompanyId = null }) {
+  const jar = parseJar(cookie);
+  const device = rememberedDevice(jar);
+  if (!device) return { needsCode: true };
+
+  const fields = { email, password, rememberMe: 'on' };
+  const deviceCookie = serializeJar(device);
+
+  let result;
+  try {
+    result = await callLoginAction((await resolveLoginActions()).loginAction, fields, {
+      cookie: deviceCookie,
+    });
+  } catch (err) {
+    if (!(err instanceof MyStudioSignInUnavailable)) throw err;
+    const fresh = await resolveLoginActions({ force: true });
+    result = await callLoginAction(fresh.loginAction, fields, { cookie: deviceCookie });
+  }
+
+  const { payload, res } = result;
+  if (actionRejected(payload)) {
+    console.error('MyStudio renewal rejected:', describePayload(payload));
+    throw new MyStudioAuthError(
+      String((payload && payload.message) || '').trim() ||
+        'MyStudio did not accept the saved email and password.'
+    );
+  }
+  if (!payload || !payload.data) return { needsCode: true };
+
+  // The old jar, so the device pair and anything else it carried survive, with
+  // the new session written over it.
+  mergeSetCookie(jar, getSetCookie(res));
+  if (!jar.kc_access && !jar.kc_refresh) throw new MyStudioSignInUnavailable();
+
   const companyId = await resolveCompanyId({ jar, payload, preferredCompanyId });
   jar.companyId = String(companyId);
   jar.keepCache = 'true';
@@ -1904,6 +2021,10 @@ module.exports = {
   resolveLoginActions,
   startLogin,
   completeLogin,
+  renewSignIn,
+  rememberedDevice,
+  forgetDevice,
+  readRememberedUntil,
   resendOtp,
   isConfigured,
   encryptCookie,

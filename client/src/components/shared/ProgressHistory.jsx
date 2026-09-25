@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { PencilIcon, ReplyIcon } from 'lucide-react';
 import { formatDate, today } from '../../utils/dateUtils';
 import { STATUSES } from '../../utils/beltConfig';
@@ -12,28 +12,16 @@ import { api } from '../../api/client';
 import BeltBadge from '../ui/BeltBadge';
 import ProgramBadge from '../ui/ProgramBadge';
 import Button from '../ui/Button';
-import ActionMenu, { MenuItem } from '../ui/ActionMenu';
+import ActionMenu, { MenuItem, MenuConfirm } from '../ui/ActionMenu';
 import { TrashIcon } from '../ui/icons';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
 import LazyMarkdownEditor from './LazyMarkdownEditor';
+import ReplyBar from './ReplyBar';
+import CommentMessage from './CommentMessage';
 import MarkdownView from './MarkdownView';
 import { authorName } from '../../lib/authors';
 import Linkify from './Linkify';
 import { toSlug } from '../../utils/clubUtils';
-
-function LogComment({ comment }) {
-  return (
-    <div className="flex gap-2 mt-2">
-      <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
-      <div>
-        <p className="text-ninja-navy font-ninja text-sm"><Linkify>{comment.body}</Linkify></p>
-        <p className="text-ninja-muted font-ninja text-xs mt-0.5">
-          {authorName(comment.user_name)} · {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // Status was a filled green box, sitting beside four other coloured boxes. The
 // colour is the whole signal, so it only needs a dot to carry it: bg-current
@@ -272,48 +260,16 @@ function LogEditor({ log, programs, saving, error, onSave, onCancel }) {
 // Opened from the row's reply button rather than parked under every entry. A
 // permanently mounted box asks a question of every log you scroll past; most of
 // them do not need an answer.
-function CommentBox({ logId, onAdded, onClose }) {
-  const [body, setBody] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      const comment = await api.post(`/progress/${logId}/comments`, { body: body.trim() });
-      onAdded(comment);
-      setBody('');
-      onClose?.();
-    } catch (err) {
-      setError(err.message || 'Failed to post comment.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
+function CommentBox({ logId, onAdded, onClose, autoFocus, mentionRequest }) {
   return (
-    <div className="mt-3">
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={body}
-          autoFocus
-          onChange={(e) => setBody(e.target.value)}
-          // Escape backs out of a box you opened by mistake, without reaching
-          // for a Cancel button that would sit there for the other 99% of uses.
-          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose?.(); } }}
-          placeholder="Write a reply…"
-          className="flex-1 bg-white border border-ninja-border text-ninja-navy rounded-lg px-3 py-1.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue transition-colors"
-        />
-        <Button type="submit" size="sm" disabled={saving || !body.trim()}>
-          {saving ? '...' : 'Reply'}
-        </Button>
-      </form>
-      {error && <p className="text-ninja-red font-ninja text-xs mt-1">{error}</p>}
-    </div>
+    <ReplyBar
+      className="mt-3"
+      stayOpen
+      autoFocus={autoFocus}
+      mentionRequest={mentionRequest}
+      onClose={onClose}
+      onSend={async (body, mention_ids) => onAdded(await api.post(`/progress/${logId}/comments`, { body, mention_ids }))}
+    />
   );
 }
 
@@ -355,6 +311,17 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
   const multiProgram = programs.length > 1;
   const [filter, setFilter] = useState('');
   const [localComments, setLocalComments] = useState({});
+  // Edits and deletes to replies, by reply id: the new row, or null once gone.
+  // Applied over both the loaded thread and the replies added this visit.
+  const [commentPatches, setCommentPatches] = useState({});
+  const editComment = async (id, body, mention_ids) => {
+    const saved = await api.patch(`/progress/comments/${id}`, { body, mention_ids });
+    setCommentPatches((prev) => ({ ...prev, [id]: saved }));
+  };
+  const deleteComment = async (id) => {
+    await api.delete(`/progress/comments/${id}`);
+    setCommentPatches((prev) => ({ ...prev, [id]: null }));
+  };
 
   const [editingId, setEditingId] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -365,6 +332,14 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
   const [commentErrors, setCommentErrors] = useState({});
   const [reactionErrors, setReactionErrors] = useState({});
   const [replyingId, setReplyingId] = useState(null);
+  // A request to put the cursor in a log's bar, optionally @mentioning
+  // somebody: from the row's Reply, or from a reply's own Reply. `key` makes
+  // pressing it twice count twice.
+  const [replyTo, setReplyTo] = useState(null); // { logId, person, key }
+  const answer = (logId, person = null) => {
+    setReplyingId(logId);
+    setReplyTo({ logId, person, key: Date.now() });
+  };
 
   // Optimistic, then corrected by the server's own count. A failure puts the
   // chips back rather than leaving a reaction that was never stored.
@@ -383,6 +358,17 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
   };
 
   const visible = filter ? logs.filter((l) => l.program === filter) : logs;
+
+  // #log-ID scrolls that entry into view once it has rendered: a notification
+  // links here. The profile draws a phone and a desktop layout, so the entry
+  // may exist twice; the one with a layout box is the one on screen.
+  const { hash } = useLocation();
+  const linkedLog = /^#log-(\d+)$/.exec(hash)?.[1];
+  useEffect(() => {
+    if (!linkedLog) return;
+    const row = [...document.querySelectorAll(`[data-log-id="${linkedLog}"]`)].find((el) => el.offsetParent !== null);
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [linkedLog, logs.length]);
 
   const handleCommentAdded = (logId, comment) => {
     setLocalComments((prev) => ({
@@ -513,13 +499,17 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                   band an entry occupies rather than stopping at its text. */}
               <div className="pb-1">
                 {dayLogs.map((log, i) => {
-                  const allComments = [...(log.comments || []), ...(localComments[log.id] || [])];
+                  const allComments = [...(log.comments || []), ...(localComments[log.id] || [])]
+                    .map((c) => (c.id in commentPatches ? commentPatches[c.id] : c))
+                    .filter(Boolean);
                   const edge = edges.get(log.id);
                   const isEditing = editingId === log.id;
                   const isConfirmingDelete = confirmDeleteId === log.id;
                   const isReplying = replyingId === log.id;
 
                   const canEdit = !isReadOnly && (isManager || log.sensei_id === user?.id);
+                  // Deleting is open to any staff at the center; editing is not.
+                  const canDelete = !isReadOnly;
 
                   return (
                     // The tint runs the full width of the card, so a line
@@ -533,7 +523,8 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                     // rule, and the next session starts a new band.
                     <div
                       key={log.id}
-                      className={`group px-4 ${edge.startsGroup ? 'pt-3' : 'pt-1.5'} ${edge.endsGroup ? 'pb-3' : 'pb-0'} rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
+                      data-log-id={log.id}
+                      className={`group scroll-mt-24 px-4 ${edge.startsGroup ? 'pt-3' : 'pt-1.5'} ${edge.endsGroup ? 'pb-3' : 'pb-0'} rounded-lg transition-colors duration-150 hover:bg-ninja-navy/[0.04] dark:hover:bg-white/[0.05] ${
                         edge.startsGroup && i > 0 ? 'border-t border-ninja-border/60' : ''
                       }`}
                     >
@@ -563,7 +554,7 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                             <span className="text-ninja-muted text-xs font-ninja">by {authorName(log.sensei_name)}</span>
                           )}
                         </div>
-                        {!isEditing && (!isReadOnly || canEdit) && (
+                        {!isEditing && !isReadOnly && (
                           // bg-white, not the default: this card is already
                           // ninja-bg, so a ninja-bg strip would vanish into it.
                           <RowActions surface="bg-white" className="self-center">
@@ -572,15 +563,19 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                 <ReactionPicker onPick={(emoji) => react(log, emoji)} />
                                 <StripButton
                                   icon={ReplyIcon}
-                                  label={isReplying ? 'Cancel reply' : 'Reply'}
-                                  active={isReplying}
-                                  onClick={() => setReplyingId(isReplying ? null : log.id)}
+                                  dismissesStrip
+                                  label={isReplying && !allComments.length ? 'Cancel reply' : 'Reply'}
+                                  active={isReplying && !allComments.length}
+                                  // A thread already has its bar showing, so
+                                  // Reply takes you to it rather than toggling.
+                                  onClick={() => (isReplying && !allComments.length ? setReplyingId(null) : answer(log.id))}
                                 />
                               </>
                             )}
-                            {canEdit && (
+                            {(canEdit || canDelete) && (
                               <ActionMenu
                                 label="Log actions"
+                                step={isConfirmingDelete ? 'confirm' : 'actions'}
                                 className={`flex-shrink-0 ${IN_STRIP_MENU}`}
                                 onClosed={() => { setConfirmDeleteId(null); setDeleteError(''); }}
                               >
@@ -589,19 +584,18 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                     // The confirm keeps the word "Delete" while
                                     // everything around it is a glyph. Icons are
                                     // fine for reversible actions.
-                                    <div className="p-1.5 w-48">
-                                      <p className="font-ninja text-xs text-ninja-muted mb-2">Delete this log entry?</p>
-                                      <div className="flex items-center gap-1.5">
-                                        <Button variant="danger" size="sm" onClick={() => handleDelete(log.id)} disabled={deleting}>
-                                          {deleting ? 'Deleting…' : 'Delete'}
-                                        </Button>
-                                        <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>Keep</Button>
-                                      </div>
-                                      {deleteError && <p className="text-ninja-red font-ninja text-xs mt-1.5">{deleteError}</p>}
-                                    </div>
+                                    <MenuConfirm
+                                      question="Delete this log entry?"
+                                      busy={deleting}
+                                      onConfirm={() => handleDelete(log.id)}
+                                      onCancel={() => setConfirmDeleteId(null)}
+                                      error={deleteError}
+                                    />
                                   ) : (
                                     <>
-                                      <MenuItem icon={PencilIcon} onSelect={() => { startEdit(log); close(); }}>Edit</MenuItem>
+                                      {canEdit && (
+                                        <MenuItem icon={PencilIcon} onSelect={() => { startEdit(log); close(); }}>Edit</MenuItem>
+                                      )}
                                       <MenuItem icon={TrashIcon} danger onSelect={() => { setConfirmDeleteId(log.id); setEditingId(null); }}>
                                         Delete
                                       </MenuItem>
@@ -645,13 +639,27 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                       )}
 
                       {allComments.length > 0 && (
-                        <div className="mt-3 space-y-1 border-t border-ninja-border pt-3">
-                          {allComments.map((c) => <LogComment key={c.id} comment={c} />)}
+                        <div className="mt-3 space-y-3 border-t border-ninja-border pt-3">
+                          {allComments.map((c) => (
+                            <CommentMessage
+                              key={c.id}
+                              comment={c}
+                              onEdit={(body, ids) => editComment(c.id, body, ids)}
+                              onDelete={() => deleteComment(c.id)}
+                              onReact={async (emoji) => (await api.post(`/progress/comments/${c.id}/reactions`, { emoji })).reactions}
+                              onReply={(person) => answer(log.id, person)}
+                            />
+                          ))}
                         </div>
                       )}
-                      {!isReadOnly && isReplying && (
+                      {/* Opened by Reply on a log with no thread yet. Once a
+                          log has replies it is a conversation, and the bar
+                          stays under it, as a chat's input does. */}
+                      {!isReadOnly && (isReplying || allComments.length > 0) && (
                         <CommentBox
                           logId={log.id}
+                          autoFocus={isReplying}
+                          mentionRequest={replyTo?.logId === log.id ? replyTo : null}
                           onAdded={(c) => handleCommentAdded(log.id, c)}
                           onClose={() => setReplyingId(null)}
                         />

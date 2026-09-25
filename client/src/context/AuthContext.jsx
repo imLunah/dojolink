@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { invalidateCurriculumCache } from './CurriculumContext';
+import { getHomePath } from '../lib/navTabs';
+import { clearReportCache } from '../lib/reportCache';
 import SessionTimeoutModal from '../components/ui/SessionTimeoutModal';
 
 export const AuthContext = createContext(null);
@@ -35,6 +37,11 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Cached reports belong to whoever fetched them. Any change of signed-in
+  // user (sign-out, an expired session, a different director signing in)
+  // drops them.
+  useEffect(() => { clearReportCache(); }, [user?.id]);
+
   // Listen for 401s fired by api/client.js — only show modal if already logged
   // in, and only for a request that was on the staff side. A parent-portal 401
   // is the parent session dying, not this one.
@@ -65,9 +72,12 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Every staff request is scoped to the session's active center, and pages, contexts
+  // and caches all hold data fetched for the old one. Rather than teach each of them to
+  // notice, a switch reloads the app from the dashboard so nothing survives it.
   const switchLocation = async (locationId) => {
-    const data = await api.post('/auth/switch-location', { locationId });
-    setUser(prev => ({ ...prev, activeLocation: data.activeLocation }));
+    await api.post('/auth/switch-location', { locationId });
+    window.location.assign(getHomePath());
   };
 
   // Read-only when a non-admin is viewing a center they're not assigned to. Admins write

@@ -17,6 +17,7 @@
     "clsx": "^2.1.1",
     "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.38.0",
+    "liquid-gooey": "^0.2.2",
     "lottie-react": "^2.4.1",
     "lucide-react": "^1.27.0",
     "papaparse": "^5.5.3",

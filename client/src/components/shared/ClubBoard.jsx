@@ -7,7 +7,7 @@ import {
 import Markdown from './Markdown';
 import LazyMarkdownEditor from './LazyMarkdownEditor';
 import Button from '../ui/Button';
-import ActionMenu, { MenuItem } from '../ui/ActionMenu';
+import ActionMenu, { MenuItem, MenuConfirm } from '../ui/ActionMenu';
 import { ReactionPicker, ReactionChips, RowActions, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
 import { TrashIcon } from '../ui/icons';
 import { api } from '../../api/client';
@@ -193,6 +193,7 @@ function Post({ post, canEdit, canReact, onUpdated, onDeleted }) {
             {canEdit && (
           <ActionMenu
             label="Post actions"
+            step={confirming ? 'confirm' : 'actions'}
             className={`flex-shrink-0 ${IN_STRIP_MENU}`}
             onClosed={() => setConfirming(false)}
           >
@@ -200,17 +201,12 @@ function Post({ post, canEdit, canReact, onUpdated, onDeleted }) {
               confirming ? (
                 // The confirm stays inside the panel and keeps the word
                 // "Delete". Glyphs are fine for reversible actions.
-                <div className="p-1.5 w-48">
-                  <p className="font-ninja text-xs text-ninja-muted mb-2">
-                    Delete this post{post.url ? ' and its attachment' : ''}?
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <Button variant="danger" size="sm" onClick={remove} disabled={saving}>
-                      {saving ? 'Deleting…' : 'Delete'}
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>Keep</Button>
-                  </div>
-                </div>
+                <MenuConfirm
+                  question={`Delete this post${post.url ? ' and its attachment' : ''}?`}
+                  busy={saving}
+                  onConfirm={remove}
+                  onCancel={() => setConfirming(false)}
+                />
               ) : (
                 <>
                   {/* An attachment-only post can still gain text, so Edit is

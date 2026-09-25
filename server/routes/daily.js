@@ -20,11 +20,14 @@ const ASSIGNMENT_SELECT = `
     s.birthday,
     s.pinned_note,
     s.special_instructions,
+    (SELECT ss.reason FROM student_support ss WHERE ss.student_id = s.id) AS support_reason,
     sp.belt_level,
     sp.belt_sublevel,
     sp.current_project,
     sp.project_status,
     u.display_name as sensei_name,
+    ARRAY(SELECT sp2.program FROM student_programs sp2
+          WHERE sp2.student_id = da.student_id ORDER BY sp2.program) AS enrolled_programs,
     (SELECT COUNT(*) FROM daily_assignments da2
      WHERE da2.student_id = da.student_id
        AND da2.session_date = da.session_date
@@ -156,6 +159,50 @@ router.patch('/:id/assign', requireManager, requireOwnLocation, async (req, res)
   } catch (err) {
     console.error('Error assigning sensei:', err);
     res.status(500).json({ error: 'Failed to assign sensei' });
+  }
+});
+
+// PATCH /api/daily/:id/program
+// Change which class a check-in is for, before it is logged. Senseis can do
+// this too: whoever is in the room is the one who sees the director picked the
+// wrong class. A logged check-in is left alone, its class belongs to the log.
+router.patch('/:id/program', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const { id } = req.params;
+  const { program } = req.body;
+  if (typeof program !== 'string' || !program) {
+    return res.status(400).json({ error: 'program is required' });
+  }
+
+  try {
+    const { rows: existing } = await pool.query(`
+      SELECT da.id, da.student_id, da.completed FROM daily_assignments da
+      JOIN students s ON da.student_id = s.id
+      WHERE da.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = s.id AND sl_m.location_id = $2)
+    `, [id, req.session.activeLocationId]);
+    if (!existing[0]) return res.status(404).json({ error: 'Assignment not found' });
+    if (existing[0].completed) return res.status(409).json({ error: 'Already logged' });
+
+    // Same rule as checking in: the class has to be one the ninja is enrolled in.
+    const { rows: enrollmentRows } = await pool.query(
+      'SELECT 1 FROM student_programs WHERE student_id = $1 AND program = $2',
+      [existing[0].student_id, program]
+    );
+    if (!enrollmentRows[0]) return res.status(400).json({ error: 'Ninja not enrolled in this program' });
+
+    // completed is checked again here: a log saved since the read above owns
+    // its class now.
+    const { rowCount } = await pool.query(
+      'UPDATE daily_assignments SET program = $1 WHERE id = $2 AND completed = false',
+      [program, id]
+    );
+    if (!rowCount) return res.status(409).json({ error: 'Already logged' });
+
+    const { rows } = await pool.query(ASSIGNMENT_SELECT + ' WHERE da.id = $1', [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error changing class:', err);
+    res.status(500).json({ error: 'Failed to change class' });
   }
 });
 
