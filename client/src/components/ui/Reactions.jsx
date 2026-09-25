@@ -38,8 +38,9 @@ export function toggleLocally(list, emoji) {
 
 // The "+" that opens the full picker. Its own popover rather than an ActionMenu
 // because the panel is a 320px grid with its own chrome, and ActionMenu's shell
-// would draw a second card around it.
-function EmojiPickerButton({ onPick }) {
+// would draw a second card around it. The reply bar borrows it with its own
+// glyph and name, since there it types an emoji rather than reacting with one.
+export function EmojiPickerButton({ onPick, label = 'More reactions', icon: Icon = SmilePlusIcon, onClosed }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const triggerRef = useRef(null);
@@ -52,7 +53,7 @@ function EmojiPickerButton({ onPick }) {
       setOpen(false);
       triggerRef.current?.focus();
     };
-    const onPointerDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const onPointerDown = (e) => { if (!wrapRef.current?.contains(e.target)) { setOpen(false); onClosed?.(); } };
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onPointerDown);
     return () => {
@@ -67,19 +68,19 @@ function EmojiPickerButton({ onPick }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="More reactions"
-        aria-label="More reactions"
+        title={label}
+        aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors duration-150 hover:text-ninja-navy hover:bg-ninja-navy/[0.06] dark:hover:bg-white/10 ${
           open ? 'text-ninja-navy bg-ninja-navy/[0.06] dark:bg-white/10' : 'text-ninja-muted'
         }`}
       >
-        <SmilePlusIcon size={20} strokeWidth={2} />
+        <Icon size={20} strokeWidth={2} />
       </button>
       {open && (
-        <div className="absolute z-30 top-full right-0 mt-1" role="dialog" aria-label="Pick a reaction">
-          <LazyEmojiPicker onPick={onPick} onClose={() => setOpen(false)} />
+        <div className="absolute z-30 top-full right-0 mt-1" role="dialog" aria-label="Pick an emoji">
+          <LazyEmojiPicker onPick={onPick} onClose={() => { setOpen(false); onClosed?.(); }} />
         </div>
       )}
     </div>

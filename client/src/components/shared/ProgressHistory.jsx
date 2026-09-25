@@ -16,6 +16,7 @@ import ActionMenu, { MenuItem } from '../ui/ActionMenu';
 import { TrashIcon } from '../ui/icons';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
 import LazyMarkdownEditor from './LazyMarkdownEditor';
+import ReplyBar from './ReplyBar';
 import MarkdownView from './MarkdownView';
 import { authorName } from '../../lib/authors';
 import Linkify from './Linkify';
@@ -272,47 +273,12 @@ function LogEditor({ log, programs, saving, error, onSave, onCancel }) {
 // permanently mounted box asks a question of every log you scroll past; most of
 // them do not need an answer.
 function CommentBox({ logId, onAdded, onClose }) {
-  const [body, setBody] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      const comment = await api.post(`/progress/${logId}/comments`, { body: body.trim() });
-      onAdded(comment);
-      setBody('');
-      onClose?.();
-    } catch (err) {
-      setError(err.message || 'Failed to post comment.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <div className="mt-3">
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={body}
-          autoFocus
-          onChange={(e) => setBody(e.target.value)}
-          // Escape backs out of a box you opened by mistake, without reaching
-          // for a Cancel button that would sit there for the other 99% of uses.
-          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose?.(); } }}
-          placeholder="Write a reply…"
-          className="flex-1 bg-white border border-ninja-border text-ninja-navy rounded-lg px-3 py-1.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue transition-colors"
-        />
-        <Button type="submit" size="sm" disabled={saving || !body.trim()}>
-          {saving ? '...' : 'Reply'}
-        </Button>
-      </form>
-      {error && <p className="text-ninja-red font-ninja text-xs mt-1">{error}</p>}
-    </div>
+    <ReplyBar
+      className="mt-3"
+      onClose={onClose}
+      onSend={async (body) => onAdded(await api.post(`/progress/${logId}/comments`, { body }))}
+    />
   );
 }
 

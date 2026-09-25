@@ -32,6 +32,7 @@ import { UsersIcon, ChevronLeftIcon, PlusIcon, ReplyIcon } from 'lucide-react';
 import ClubBoard from '../components/shared/ClubBoard';
 import ActionMenu, { MenuItem } from '../components/ui/ActionMenu';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, toggleLocally } from '../components/ui/Reactions';
+import ReplyBar from '../components/shared/ReplyBar';
 import { authorName } from '../lib/authors';
 
 const relativeDate = (ts) => {
@@ -186,43 +187,11 @@ function SessionComment({ comment }) {
 }
 
 function SessionReplyBox({ sessionId, onAdded, onClose }) {
-  const [body, setBody] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      const comment = await api.post(`/clubs/${sessionId}/comments`, { body: body.trim() });
-      onAdded(comment);
-      setBody('');
-      onClose();
-    } catch (err) {
-      setError(err?.message || 'Could not post that reply.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input
-        type="text"
-        value={body}
-        autoFocus
-        onChange={(e) => setBody(e.target.value)}
-        // Escape closes the box, and must not bubble: the modal listens for
-        // Escape too, and would close the whole session behind it.
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
-        placeholder="Write a reply…"
-        className="flex-1 bg-white border border-ninja-border text-ninja-navy rounded-lg px-3 py-1.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue transition-colors"
-      />
-      <Button type="submit" size="sm" disabled={saving || !body.trim()}>{saving ? '…' : 'Reply'}</Button>
-      {error && <p className="text-ninja-red font-ninja text-xs mt-1">{error}</p>}
-    </form>
+    <ReplyBar
+      onClose={onClose}
+      onSend={async (body) => onAdded(await api.post(`/clubs/${sessionId}/comments`, { body }))}
+    />
   );
 }
 
