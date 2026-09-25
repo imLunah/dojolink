@@ -1,12 +1,7 @@
-import { useState, useRef, useEffect, useLayoutEffect, useId } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { MoreHorizontalIcon } from 'lucide-react';
 import { Liquid } from 'liquid-gooey';
-
-// Gap between the trigger and the panel. Under the goo's blur that is close
-// enough for the two to stay joined by a neck, so the menu reads as a drop
-// hanging off the button rather than a box placed near it.
-const GOO_GAP = 6;
 
 // A row's actions behind one glyph. Two icons sitting on every row compete with
 // the row's own content; a single "..." asks nothing of the reader until they
@@ -22,11 +17,11 @@ const GOO_GAP = 6;
 // When it changes the new page slides in over the old one; going back to the
 // first page slides the other way.
 //
-// The plain "..." menu is liquid (liquid-gooey): a drop of the panel's own
-// colour swells under the trigger and the panel buds off it, joined by a neck.
-// The surface is the goo, so the panel element itself stays transparent. A
-// custom trigger keeps the plain frosted panel: a drop spreading out of a
-// labelled pill or a class icon has no round shape to leave from.
+// The plain "..." menu's surface is liquid (liquid-gooey), for one moment only:
+// when a step changes the panel's shape, the surface flows into the new one
+// instead of snapping. Opening and closing stay the ordinary short fade. The
+// surface is the goo, so the panel element itself stays transparent. A custom
+// trigger keeps the plain frosted panel.
 export default function ActionMenu({ children, label = 'Actions', align = 'right', className = '', onClosed, trigger, triggerClassName, triggerStyle, step }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
@@ -70,11 +65,14 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
     };
   }, [open]);
 
-  // Keyboard users land on the first action instead of nowhere.
+  // Keyboard users land on the first action instead of nowhere. Opened with a
+  // pointer, the focus still moves (arrow keys work from there) but draws no
+  // ring: a ring on an item nobody chose reads as a selected, outlined row.
+  const openedByKeyboard = useRef(false);
   useEffect(() => {
     if (!open) return;
     const first = panelRef.current?.querySelector('[role="menuitem"]');
-    first?.focus();
+    first?.focus({ focusVisible: openedByKeyboard.current });
   }, [open]);
 
   // The page a menu opens on is "home"; any other step is further in, and
@@ -97,17 +95,10 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
     // arriving one by name.
     const current = panelRef.current?.querySelector(`[data-step="${CSS.escape(String(step ?? 'only'))}"]`);
     if (!current || current.contains(document.activeElement)) return;
-    current.querySelector('button:not([disabled])')?.focus();
+    // Ringed only if the press that got here was a keyboard one.
+    const keyboard = document.activeElement?.matches?.(':focus-visible') ?? false;
+    current.querySelector('button:not([disabled])')?.focus({ focusVisible: keyboard });
   }, [step, open]);
-
-  // The drop under the trigger is the trigger's own size and corner.
-  const [triggerBox, setTriggerBox] = useState({ w: 30, h: 30, r: 9999 });
-  useLayoutEffect(() => {
-    if (!open || !gooey || !triggerRef.current) return;
-    const el = triggerRef.current;
-    const r = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
-    setTriggerBox({ w: el.offsetWidth, h: el.offsetHeight, r });
-  }, [open, gooey]);
 
   const pages = (
     <AnimatePresence initial={false} mode="popLayout" custom={dir}>
@@ -135,15 +126,15 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => (open ? close() : setOpen(true))}
+        // A keyboard press on a button arrives as a click with no detail.
+        onClick={(e) => { openedByKeyboard.current = e.detail === 0; open ? close() : setOpen(true); }}
         aria-label={label}
         title={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         style={triggerStyle}
-        // Above the goo, which is painted behind it while the menu is open.
-        className={triggerClassName ?? `relative z-[21] p-1.5 rounded-full transition-colors duration-150 hover:text-ninja-navy hover:bg-ninja-bg ${
+        className={triggerClassName ?? `p-1.5 rounded-full transition-colors duration-150 hover:text-ninja-navy hover:bg-ninja-bg ${
           open ? 'text-ninja-navy bg-ninja-bg' : 'text-ninja-muted'
         }`}
       >
@@ -152,61 +143,43 @@ export default function ActionMenu({ children, label = 'Actions', align = 'right
 
       <AnimatePresence>
         {open && gooey && (
-          <Liquid
+          <motion.div
             key="goo"
-            blur={7}
-            contrast={20}
-            fill="var(--menu-surface)"
-            shadow="0 0 0 1px rgba(15,23,42,0.07), 0 12px 28px rgba(15,23,42,0.16)"
-            // Only the panel takes pointers; the rest of this box sits over
-            // the trigger and must let it be pressed to close.
-            className={`z-20 top-0 flex flex-col pointer-events-none ${
-              align === 'right' ? 'right-0 items-end' : 'left-0 items-start'
-            }`}
-            // Liquid writes position: relative inline; the menu has to float.
-            style={{ position: 'absolute', gap: GOO_GAP }}
+            // Opens like any other menu: a short fade and drop, no scale. The
+            // liquid measures the panel against this box, so scaling it would
+            // hand the goo a shape to chase on every opening.
+            style={{ transformOrigin: align === 'right' ? 'top right' : 'top left' }}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: -2 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -2 }}
+            transition={{ duration: 0.14, ease: [0.23, 1, 0.32, 1] }}
+            className={`absolute z-20 top-full mt-1 ${align === 'right' ? 'right-0' : 'left-0'}`}
           >
-            <Liquid.Item observe>
-              <motion.div
-                aria-hidden="true"
-                style={{ width: triggerBox.w, height: triggerBox.h, borderRadius: triggerBox.r }}
-                initial={reduce ? false : { scale: 0.3 }}
-                animate={{ scale: 1 }}
-                exit={reduce ? { opacity: 0 } : { scale: 0.3, transition: { duration: 0.18, delay: 0.08, ease: [0.4, 0, 1, 1] } }}
-                transition={{ type: 'spring', stiffness: 520, damping: 46 }}
-              />
-            </Liquid.Item>
-            {/* Critically damped: the library's default size spring rings for
-                half a second after every resize, which on a menu whose
-                buttons were just pressed reads as the panel shaking. The
-                droplet lead is cut down for the same reason. Both open
-                springs above are damped to settle without overshoot too. */}
-            <Liquid.Item morph={{ shape: true, contentBlur: 0, bounce: 0, speed: 1.3, advanced: { travel: 10, roundness: 0.5 } }}>
-              <motion.div
-                ref={panelRef}
-                id={panelId}
-                role="menu"
-                aria-label={label}
-                // Buds out of the drop under the trigger, so it grows from the
-                // corner nearest it rather than from its own middle.
-                style={{ transformOrigin: align === 'right' ? 'top right' : 'top left', borderRadius: 12 }}
-                initial={reduce ? { opacity: 0 } : { scale: 0.2, y: -(triggerBox.h * 0.6) }}
-                animate={reduce ? { opacity: 1 } : { scale: 1, y: 0 }}
-                exit={reduce ? { opacity: 0 } : { scale: 0.2, y: -(triggerBox.h * 0.6), transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } }}
-                transition={{ type: 'spring', stiffness: 420, damping: 41 }}
-                className="pointer-events-auto relative overflow-hidden min-w-[9.5rem] p-1"
-              >
-                {/* The words fade, never the surface: the goo is the surface. */}
-                <motion.div
-                  initial={reduce ? false : { opacity: 0 }}
-                  animate={{ opacity: 1, transition: { duration: 0.16, delay: reduce ? 0 : 0.06 } }}
-                  exit={{ opacity: 0, transition: { duration: 0.08 } }}
+            <Liquid
+              blur={7}
+              contrast={20}
+              fill="var(--menu-surface)"
+              shadow="0 0 0 1px rgba(15,23,42,0.07), 0 12px 28px rgba(15,23,42,0.16)"
+            >
+              {/* The liquid only has work to do when the panel changes shape,
+                  going to a confirm and back. Critically damped, because the
+                  library's default size spring rings for half a second after
+                  a resize and reads as the panel shaking; the droplet lead is
+                  cut down for the same reason. */}
+              <Liquid.Item morph={{ shape: true, contentBlur: 0, bounce: 0, speed: 1.3, advanced: { travel: 10, roundness: 0.5 } }}>
+                <div
+                  ref={panelRef}
+                  id={panelId}
+                  role="menu"
+                  aria-label={label}
+                  style={{ borderRadius: 12 }}
+                  className="relative overflow-hidden min-w-[9.5rem] p-1"
                 >
                   {pages}
-                </motion.div>
-              </motion.div>
-            </Liquid.Item>
-          </Liquid>
+                </div>
+              </Liquid.Item>
+            </Liquid>
+          </motion.div>
         )}
         {open && !gooey && (
           <motion.div
