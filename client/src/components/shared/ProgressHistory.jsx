@@ -539,6 +539,7 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                 <ReactionPicker onPick={(emoji) => react(log, emoji)} />
                                 <StripButton
                                   icon={ReplyIcon}
+                                  dismissesStrip
                                   label={isReplying ? 'Cancel reply' : 'Reply'}
                                   active={isReplying}
                                   onClick={() => setReplyingId(isReplying ? null : log.id)}

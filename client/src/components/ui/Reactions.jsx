@@ -210,9 +210,30 @@ export function ReactionChips({ reactions, canReact, onToggle, className = 'mt-2
 // card that is ALREADY ninja-bg it would disappear, so those pass bg-white,
 // which the .dark override turns into the lighter #252c3e. Neither value is
 // right in both places; that is why it is a prop and not a constant.
+//
+// A button marked `data-dismisses-strip` (StripButton's `dismissesStrip`) puts
+// the strip away when pressed, even with the pointer still on the row: after
+// Reply the row's job is the reply bar, and the strip hanging over it is noise.
+// It comes back the next time the pointer enters the row.
 export function RowActions({ children, className = '', surface = 'bg-ninja-bg' }) {
+  const ref = useRef(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!dismissed) return;
+    const row = ref.current?.closest('.group');
+    if (!row) return;
+    const back = () => setDismissed(false);
+    row.addEventListener('pointerleave', back);
+    return () => row.removeEventListener('pointerleave', back);
+  }, [dismissed]);
+
   return (
-    <div className={`row-actions flex-shrink-0 flex items-center gap-0.5 rounded-lg border border-ninja-border ${surface} px-1 py-0.5 shadow-sm ${className}`}>
+    <div
+      ref={ref}
+      onClick={(e) => { if (e.target.closest?.('[data-dismisses-strip]')) setDismissed(true); }}
+      className={`row-actions ${dismissed ? 'row-actions-dismissed' : ''} flex-shrink-0 flex items-center gap-0.5 rounded-lg border border-ninja-border ${surface} px-1 py-0.5 shadow-sm ${className}`}
+    >
       {children}
     </div>
   );
@@ -220,11 +241,12 @@ export function RowActions({ children, className = '', surface = 'bg-ninja-bg' }
 
 // A plain glyph button sized to sit in a strip beside the reaction picker, so
 // anything a row wants to offer matches it instead of approximating it.
-export function StripButton({ icon: Icon, label, active = false, onClick }) {
+export function StripButton({ icon: Icon, label, active = false, onClick, dismissesStrip = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-dismisses-strip={dismissesStrip || undefined}
       title={label}
       aria-label={label}
       aria-pressed={active}

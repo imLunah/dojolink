@@ -418,6 +418,7 @@ function SessionsSection({ sessions, memberCount, slug, navigate, isManager, isR
                           <ReactionPicker onPick={(emoji) => react(s, emoji)} />
                           <StripButton
                             icon={ReplyIcon}
+                                  dismissesStrip
                             label={replyingId === s.id ? 'Cancel reply' : 'Reply'}
                             active={replyingId === s.id}
                             onClick={() => setReplyingId(replyingId === s.id ? null : s.id)}

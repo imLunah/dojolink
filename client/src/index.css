@@ -406,6 +406,10 @@ textarea:focus-visible {
   .group:hover .row-actions,
   .row-actions:focus-within,
   .row-actions:has([aria-expanded='true']) { opacity: 1; }
+  /* Put away by the button that was pressed (Reply), until the pointer leaves
+     the row and comes back. Three deep, like `.group:hover .row-actions`, and
+     after it, so source order settles the tie. */
+  .group .row-actions.row-actions-dismissed { opacity: 0; pointer-events: none; }
 }
 
 /* ── Interaction feedback (Emil Kowalski design-eng) ──
