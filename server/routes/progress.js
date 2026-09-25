@@ -515,8 +515,13 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
     if (!logRows[0]) return res.status(404).json({ error: 'Log not found' });
 
     const { rows } = await pool.query(
-      `INSERT INTO progress_log_comments (log_id, user_id, user_name, body)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
+      // The author's picture rides back with the row so the new reply draws
+      // the same as the ones loaded with the thread.
+      `WITH ins AS (
+         INSERT INTO progress_log_comments (log_id, user_id, user_name, body)
+         VALUES ($1, $2, $3, $4) RETURNING *
+       )
+       SELECT ins.*, u.profile_pic_url AS user_pic FROM ins LEFT JOIN users u ON u.id = ins.user_id`,
       [req.params.id, req.session.userId, req.session.displayName, body.trim()]
     );
     res.status(201).json(rows[0]);

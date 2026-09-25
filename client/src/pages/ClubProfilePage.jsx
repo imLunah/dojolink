@@ -33,6 +33,7 @@ import ClubBoard from '../components/shared/ClubBoard';
 import ActionMenu, { MenuItem } from '../components/ui/ActionMenu';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, toggleLocally } from '../components/ui/Reactions';
 import ReplyBar from '../components/shared/ReplyBar';
+import CommentMessage from '../components/shared/CommentMessage';
 import { authorName } from '../lib/authors';
 
 const relativeDate = (ts) => {
@@ -170,22 +171,6 @@ function PinnedNoteSection({ clubName, initialNote, initialAuthor, initialUpdate
   );
 }
 
-// A session's comments, which the server has stored and returned all along
-// without anything ever drawing them. Same shape as a progress log's: the thread
-// is content and always shows, while replying is a button on the row.
-function SessionComment({ comment }) {
-  return (
-    <div className="flex gap-2">
-      <div className="min-w-0">
-        <p className="text-ninja-navy font-ninja text-sm break-words"><Linkify>{comment.body}</Linkify></p>
-        <p className="text-ninja-muted font-ninja text-xs mt-0.5">
-          {authorName(comment.user_name)} · {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function SessionReplyBox({ sessionId, onAdded, onClose }) {
   return (
     <ReplyBar
@@ -298,8 +283,8 @@ function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSess
           </div>
 
           {comments.length > 0 && (
-            <div className="space-y-2 border-t border-ninja-border pt-4">
-              {comments.map((c) => <SessionComment key={c.id} comment={c} />)}
+            <div className="space-y-3 border-t border-ninja-border pt-4">
+              {comments.map((c) => <CommentMessage key={c.id} comment={c} />)}
             </div>
           )}
         </div>

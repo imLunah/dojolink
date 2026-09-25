@@ -147,8 +147,8 @@ router.get('/:id', requireAuth, async (req, res) => {
     const { rows: progressLogs } = await pool.query(`
       SELECT pl.*, u.display_name AS sensei_name,
         COALESCE(
-          (SELECT json_agg(json_build_object('id', c.id, 'user_name', c.user_name, 'body', c.body, 'created_at', c.created_at) ORDER BY c.created_at ASC)
-           FROM progress_log_comments c WHERE c.log_id = pl.id),
+          (SELECT json_agg(json_build_object('id', c.id, 'user_name', c.user_name, 'user_pic', cu.profile_pic_url, 'body', c.body, 'created_at', c.created_at) ORDER BY c.created_at ASC)
+           FROM progress_log_comments c LEFT JOIN users cu ON cu.id = c.user_id WHERE c.log_id = pl.id),
           '[]'::json
         ) AS comments,
         ${reactionsSubquery({ table: 'progress_log_reactions', fk: 'log_id', subject: 'pl.id', userParam: '$2' })} AS reactions

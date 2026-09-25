@@ -17,23 +17,11 @@ import { TrashIcon } from '../ui/icons';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
 import LazyMarkdownEditor from './LazyMarkdownEditor';
 import ReplyBar from './ReplyBar';
+import CommentMessage from './CommentMessage';
 import MarkdownView from './MarkdownView';
 import { authorName } from '../../lib/authors';
 import Linkify from './Linkify';
 import { toSlug } from '../../utils/clubUtils';
-
-function LogComment({ comment }) {
-  return (
-    <div className="flex gap-2 mt-2">
-      <div>
-        <p className="text-ninja-navy font-ninja text-sm"><Linkify>{comment.body}</Linkify></p>
-        <p className="text-ninja-muted font-ninja text-xs mt-0.5">
-          {authorName(comment.user_name)} · {new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // Status was a filled green box, sitting beside four other coloured boxes. The
 // colour is the whole signal, so it only needs a dot to carry it: bg-current
@@ -616,8 +604,8 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                       )}
 
                       {allComments.length > 0 && (
-                        <div className="mt-3 space-y-1 border-t border-ninja-border pt-3">
-                          {allComments.map((c) => <LogComment key={c.id} comment={c} />)}
+                        <div className="mt-3 space-y-3 border-t border-ninja-border pt-3">
+                          {allComments.map((c) => <CommentMessage key={c.id} comment={c} />)}
                         </div>
                       )}
                       {!isReadOnly && isReplying && (
