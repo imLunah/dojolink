@@ -100,8 +100,12 @@ export default function FeedbackPage() {
     );
   }
 
+  // The tab and the open ticket live in the URL, and Layout keys its page
+  // animation on the location, so without a constant key every tab press
+  // remounted the page: the old list faded out over the new one and the data
+  // loaded again. Only the list below animates on a tab change.
   return (
-    <Layout>
+    <Layout motionKey="feedback">
       <div className="max-w-3xl mx-auto">
         <motion.header
           initial={{ opacity: 0, y: 14 }}
@@ -142,7 +146,16 @@ export default function FeedbackPage() {
           })}
         </nav>
 
-        <div className={`${CARD} overflow-hidden`}>{body}</div>
+        <div className={`${CARD} overflow-hidden`}>
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {body}
+          </motion.div>
+        </div>
       </div>
 
       {isAdmin && (
