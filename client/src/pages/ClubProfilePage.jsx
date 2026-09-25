@@ -30,7 +30,7 @@ import { SkeletonProfile } from '../components/ui/Skeleton';
 import { TrashIcon, CameraIcon } from '../components/ui/icons';
 import { UsersIcon, ChevronLeftIcon, PlusIcon, ReplyIcon } from 'lucide-react';
 import ClubBoard from '../components/shared/ClubBoard';
-import ActionMenu, { MenuItem } from '../components/ui/ActionMenu';
+import ActionMenu, { MenuItem, MenuConfirm } from '../components/ui/ActionMenu';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, toggleLocally } from '../components/ui/Reactions';
 import ReplyBar from '../components/shared/ReplyBar';
 import CommentMessage from '../components/shared/CommentMessage';
@@ -175,7 +175,7 @@ function SessionReplyBox({ sessionId, onAdded, onClose }) {
   return (
     <ReplyBar
       onClose={onClose}
-      onSend={async (body) => onAdded(await api.post(`/clubs/${sessionId}/comments`, { body }))}
+      onSend={async (body, mention_ids) => onAdded(await api.post(`/clubs/${sessionId}/comments`, { body, mention_ids }))}
     />
   );
 }
@@ -288,13 +288,18 @@ function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSess
                 <CommentMessage
                   key={c.id}
                   comment={c}
-                  onEdit={async (body) => {
-                    const saved = await api.patch(`/clubs/comments/${c.id}`, { body });
+                  onEdit={async (body, mention_ids) => {
+                    const saved = await api.patch(`/clubs/comments/${c.id}`, { body, mention_ids });
                     onSessionChanged?.(session.id, { comments: comments.map((x) => (x.id === c.id ? saved : x)) });
                   }}
                   onDelete={async () => {
                     await api.delete(`/clubs/comments/${c.id}`);
                     onSessionChanged?.(session.id, { comments: comments.filter((x) => x.id !== c.id) });
+                  }}
+                  onReact={async (emoji) => {
+                    const { reactions: next } = await api.post(`/clubs/comments/${c.id}/reactions`, { emoji });
+                    onSessionChanged?.(session.id, { comments: comments.map((x) => (x.id === c.id ? { ...x, reactions: next } : x)) });
+                    return next;
                   }}
                 />
               ))}
@@ -640,15 +645,15 @@ function ClubHero({ clubDef, colors, memberCount, locationName, isManager, isRea
                 className="[&>button]:text-white [&>button:hover]:text-white [&>button]:bg-black/25 [&>button:hover]:bg-black/40">
                 {({ close }) => (
                   confirmRemove ? (
-                    <div className="p-1.5 w-44">
-                      <p className="font-ninja text-xs text-ninja-muted mb-2">Remove this photo?</p>
-                      <div className="flex items-center gap-1.5">
-                        <Button variant="danger" size="sm" onClick={handleRemoveCover} disabled={uploading}>
-                          {uploading ? 'Removing…' : 'Remove'}
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setConfirmRemove(false)}>Keep</Button>
-                      </div>
-                    </div>
+                    <MenuConfirm
+                      question="Remove this photo?"
+                      confirmLabel="Remove"
+                      busyLabel="Removing…"
+                      busy={uploading}
+                      onConfirm={handleRemoveCover}
+                      onCancel={() => setConfirmRemove(false)}
+                      className="w-44"
+                    />
                   ) : (
                     <>
                       <MenuItem icon={CameraIcon} onSelect={() => { fileInputRef.current?.click(); close(); }}>

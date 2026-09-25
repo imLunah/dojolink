@@ -230,3 +230,32 @@ export function MenuItem({ icon: Icon, children, onSelect, danger = false, disab
     </button>
   );
 }
+
+// The step a menu slides to before anything is destroyed. The confirm keeps
+// the word ("Delete", "Remove"): glyphs are for reversible actions. One
+// component so every menu asks the same way, solid red beside a quiet Keep.
+export function MenuConfirm({ question, confirmLabel = 'Delete', busyLabel = 'Deleting…', busy = false, onConfirm, onCancel, error, className = 'w-48' }) {
+  return (
+    <div className={`p-1.5 ${className}`}>
+      <p className="font-ninja text-xs text-ninja-muted mb-2">{question}</p>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          className="flex-1 py-1.5 rounded-lg bg-ninja-red text-white font-ninja text-xs font-bold transition-transform duration-150 active:scale-95 disabled:opacity-60"
+        >
+          {busy ? busyLabel : confirmLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-1.5 rounded-lg bg-ninja-bg text-ninja-navy font-ninja text-xs font-bold transition-transform duration-150 active:scale-95"
+        >
+          Keep
+        </button>
+      </div>
+      {error && <p className="text-ninja-red font-ninja text-xs mt-1.5">{error}</p>}
+    </div>
+  );
+}

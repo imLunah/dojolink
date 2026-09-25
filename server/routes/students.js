@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireAuth, requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const { ALL_BELTS, isValidBelt, validateSublevel } = require('../lib/belts');
 const { reactionsSubquery } = require('../lib/reactions');
+const { replyJson } = require('../lib/replies');
 const { memberOf, addMembership, archiveOrRemove } = require('../lib/studentScope');
 
 // Code.AI (Code.org) login sticker set — must match the students.codeorg_sticker
@@ -147,7 +148,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     const { rows: progressLogs } = await pool.query(`
       SELECT pl.*, u.display_name AS sensei_name,
         COALESCE(
-          (SELECT json_agg(json_build_object('id', c.id, 'user_id', c.user_id, 'user_name', c.user_name, 'user_pic', cu.profile_pic_url, 'body', c.body, 'created_at', c.created_at) ORDER BY c.created_at ASC)
+          (SELECT json_agg(${replyJson('progress', '$2')} ORDER BY c.created_at ASC)
            FROM progress_log_comments c LEFT JOIN users cu ON cu.id = c.user_id WHERE c.log_id = pl.id),
           '[]'::json
         ) AS comments,

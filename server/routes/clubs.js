@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireAuth, requireSensei, requireManager, requireOwnLocation } = require('../middleware/auth');
 const storage = require('../lib/storage');
 const { reactionsSubquery, toggleReaction } = require('../lib/reactions');
+const { KINDS, replyJson, readReply, readMentionIds, saveMentions, mayEditReply, mayDeleteReply } = require('../lib/replies');
 
 function toSlug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -48,7 +49,7 @@ const sessionSelect = (userParam) => `
       '[]'::json
     ) AS attendees,
     COALESCE(
-      (SELECT json_agg(json_build_object('id', c.id, 'user_id', c.user_id, 'user_name', c.user_name, 'user_pic', cu.profile_pic_url, 'body', c.body, 'created_at', c.created_at) ORDER BY c.created_at ASC)
+      (SELECT json_agg(${replyJson('club', userParam)} ORDER BY c.created_at ASC)
        FROM club_session_comments c LEFT JOIN users cu ON cu.id = c.user_id WHERE c.session_id = cs.id),
       '[]'::json
     ) AS comments,
@@ -586,36 +587,41 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
   if (body.length > MAX_COMMENT) {
     return res.status(400).json({ error: `Comment too long (max ${MAX_COMMENT} characters)` });
   }
+  const mentions = readMentionIds(req.body.mention_ids);
+  if (mentions.error) return res.status(400).json({ error: mentions.error });
+
   try {
-    const { rows: sessionRows } = await pool.query(
-      'SELECT id FROM club_sessions WHERE id = $1 AND location_id = $2',
-      [req.params.id, req.session.activeLocationId]
-    );
-    if (!sessionRows[0]) return res.status(404).json({ error: 'Session not found' });
+    const { rows: parent } = await pool.query('SELECT id FROM club_sessions WHERE id = $1 AND location_id = $2', [req.params.id, req.session.activeLocationId]);
+    if (!parent[0]) return res.status(404).json({ error: 'Session not found' });
+
     const { rows } = await pool.query(
-      // The author's picture rides back with the row so the new reply draws
-      // the same as the ones loaded with the thread.
-      `WITH ins AS (
-         INSERT INTO club_session_comments (session_id, user_id, user_name, body) VALUES ($1, $2, $3, $4) RETURNING *
-       )
-       SELECT ins.*, u.profile_pic_url AS user_pic FROM ins LEFT JOIN users u ON u.id = ins.user_id`,
+      `INSERT INTO club_session_comments (session_id, user_id, user_name, body) VALUES ($1, $2, $3, $4) RETURNING id`,
       [req.params.id, req.session.userId, req.session.displayName, body.trim()]
     );
-    res.status(201).json(rows[0]);
+    await saveMentions(pool, 'club', {
+      commentId: rows[0].id, ids: mentions.ids, authorId: req.session.userId, locationId: req.session.activeLocationId,
+    });
+    // Returned in the shape the thread draws, picture and all, so the new
+    // reply looks like the rest without a refetch.
+    res.status(201).json(await readReply(pool, 'club', rows[0].id, req.session.userId));
   } catch (err) {
+    console.error('Club session comment error:', err);
     res.status(500).json({ error: 'Failed to save comment' });
   }
 });
 
-// Who may change a reply. Editing is the author's alone (words are put in
-// their name); deleting is also open to a director, who keeps the threads at
-// their center clean. Admin passes both, as everywhere.
-const mayEditComment = (session, authorId) =>
-  session.role === 'admin' || (authorId != null && authorId === session.userId);
-const mayDeleteComment = (session, authorId) =>
-  mayEditComment(session, authorId) || session.role === 'manager';
+// The reply named in the URL, if it belongs to a session at the active
+// center. `activeLocationId` picks the target; requireOwnLocation on each
+// route is what authorizes writing there.
+const findReply = async (pool, commentId, locationId) => {
+  const { rows } = await pool.query(`SELECT c.id, c.user_id FROM club_session_comments c
+     JOIN club_sessions cs ON cs.id = c.session_id
+     WHERE c.id = $1 AND cs.location_id = $2`, [commentId, locationId]);
+  return rows[0] ?? null;
+};
 
 // PATCH /api/clubs/comments/:commentId — the author rewrites their reply.
+// The mentions follow the words: a name taken out stops being a mention.
 router.patch('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   const { body } = req.body;
@@ -624,18 +630,22 @@ router.patch('/comments/:commentId', requireSensei, requireOwnLocation, async (r
   if (body.length > MAX_COMMENT) {
     return res.status(400).json({ error: `Comment too long (max ${MAX_COMMENT} characters)` });
   }
+  const mentions = readMentionIds(req.body.mention_ids);
+  if (mentions.error) return res.status(400).json({ error: mentions.error });
   try {
-    const { rows: found } = await pool.query(`SELECT c.id, c.user_id FROM club_session_comments c
-       JOIN club_sessions cs ON cs.id = c.session_id
-       WHERE c.id = $1 AND cs.location_id = $2`, [req.params.commentId, req.session.activeLocationId]);
-    if (!found[0]) return res.status(404).json({ error: 'Comment not found' });
-    if (!mayEditComment(req.session, found[0].user_id)) return res.status(403).json({ error: 'Only the author can edit this reply' });
-    const { rows } = await pool.query(
-      `WITH upd AS (UPDATE club_session_comments SET body = $2 WHERE id = $1 RETURNING *)
-       SELECT upd.*, u.profile_pic_url AS user_pic FROM upd LEFT JOIN users u ON u.id = upd.user_id`,
-      [req.params.commentId, body.trim()]
+    const found = await findReply(pool, req.params.commentId, req.session.activeLocationId);
+    if (!found) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayEditReply(req.session, found.user_id)) return res.status(403).json({ error: 'Only the author can edit this reply' });
+    // An unchanged save is not an edit, so it leaves no mark.
+    await pool.query(
+      `UPDATE club_session_comments SET body = $2, edited_at = CASE WHEN body = $2 THEN edited_at ELSE now() END WHERE id = $1`,
+      [found.id, body.trim()]
     );
-    res.json(rows[0]);
+    await saveMentions(pool, 'club', {
+      commentId: found.id, ids: mentions.ids, authorId: found.user_id ?? req.session.userId,
+      locationId: req.session.activeLocationId, replace: true,
+    });
+    res.json(await readReply(pool, 'club', found.id, req.session.userId));
   } catch (err) {
     console.error('Club session comment edit error:', err);
     res.status(500).json({ error: 'Failed to save comment' });
@@ -643,19 +653,37 @@ router.patch('/comments/:commentId', requireSensei, requireOwnLocation, async (r
 });
 
 // DELETE /api/clubs/comments/:commentId — the author, a director or an admin.
+// Its mentions and reactions go with it (ON DELETE CASCADE).
 router.delete('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
-    const { rows: found } = await pool.query(`SELECT c.id, c.user_id FROM club_session_comments c
-       JOIN club_sessions cs ON cs.id = c.session_id
-       WHERE c.id = $1 AND cs.location_id = $2`, [req.params.commentId, req.session.activeLocationId]);
-    if (!found[0]) return res.status(404).json({ error: 'Comment not found' });
-    if (!mayDeleteComment(req.session, found[0].user_id)) return res.status(403).json({ error: 'You cannot delete this reply' });
-    await pool.query('DELETE FROM club_session_comments WHERE id = $1', [req.params.commentId]);
+    const found = await findReply(pool, req.params.commentId, req.session.activeLocationId);
+    if (!found) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayDeleteReply(req.session, found.user_id)) return res.status(403).json({ error: 'You cannot delete this reply' });
+    await pool.query('DELETE FROM club_session_comments WHERE id = $1', [found.id]);
     res.json({ ok: true });
   } catch (err) {
     console.error('Club session comment delete error:', err);
     res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// POST /api/clubs/comments/:commentId/reactions — toggle one emoji on a reply.
+// Anyone at the center can react to any reply there, as with the session itself.
+router.post('/comments/:commentId/reactions', requireSensei, requireOwnLocation, async (req, res) => {
+  try {
+    const result = await toggleReaction(req.app.get('db'), {
+      table: KINDS.club.reactions,
+      fk: 'comment_id',
+      emoji: req.body.emoji,
+      userId: req.session.userId,
+      verify: async (client) => (await findReply(client, req.params.commentId, req.session.activeLocationId))?.id ?? null,
+    });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json({ reactions: result.reactions });
+  } catch (err) {
+    console.error('Club session comment reaction error:', err);
+    res.status(500).json({ error: 'Failed to save reaction' });
   }
 });
 

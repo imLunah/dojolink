@@ -12,7 +12,7 @@ import { api } from '../../api/client';
 import BeltBadge from '../ui/BeltBadge';
 import ProgramBadge from '../ui/ProgramBadge';
 import Button from '../ui/Button';
-import ActionMenu, { MenuItem } from '../ui/ActionMenu';
+import ActionMenu, { MenuItem, MenuConfirm } from '../ui/ActionMenu';
 import { TrashIcon } from '../ui/icons';
 import { ReactionPicker, ReactionChips, RowActions, StripButton, IN_STRIP_MENU, toggleLocally } from '../ui/Reactions';
 import LazyMarkdownEditor from './LazyMarkdownEditor';
@@ -265,7 +265,7 @@ function CommentBox({ logId, onAdded, onClose }) {
     <ReplyBar
       className="mt-3"
       onClose={onClose}
-      onSend={async (body) => onAdded(await api.post(`/progress/${logId}/comments`, { body }))}
+      onSend={async (body, mention_ids) => onAdded(await api.post(`/progress/${logId}/comments`, { body, mention_ids }))}
     />
   );
 }
@@ -311,8 +311,8 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
   // Edits and deletes to replies, by reply id: the new row, or null once gone.
   // Applied over both the loaded thread and the replies added this visit.
   const [commentPatches, setCommentPatches] = useState({});
-  const editComment = async (id, body) => {
-    const saved = await api.patch(`/progress/comments/${id}`, { body });
+  const editComment = async (id, body, mention_ids) => {
+    const saved = await api.patch(`/progress/comments/${id}`, { body, mention_ids });
     setCommentPatches((prev) => ({ ...prev, [id]: saved }));
   };
   const deleteComment = async (id) => {
@@ -559,16 +559,13 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                                     // The confirm keeps the word "Delete" while
                                     // everything around it is a glyph. Icons are
                                     // fine for reversible actions.
-                                    <div className="p-1.5 w-48">
-                                      <p className="font-ninja text-xs text-ninja-muted mb-2">Delete this log entry?</p>
-                                      <div className="flex items-center gap-1.5">
-                                        <Button variant="danger" size="sm" onClick={() => handleDelete(log.id)} disabled={deleting}>
-                                          {deleting ? 'Deleting…' : 'Delete'}
-                                        </Button>
-                                        <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>Keep</Button>
-                                      </div>
-                                      {deleteError && <p className="text-ninja-red font-ninja text-xs mt-1.5">{deleteError}</p>}
-                                    </div>
+                                    <MenuConfirm
+                                      question="Delete this log entry?"
+                                      busy={deleting}
+                                      onConfirm={() => handleDelete(log.id)}
+                                      onCancel={() => setConfirmDeleteId(null)}
+                                      error={deleteError}
+                                    />
                                   ) : (
                                     <>
                                       {canEdit && (
@@ -622,8 +619,9 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                             <CommentMessage
                               key={c.id}
                               comment={c}
-                              onEdit={(body) => editComment(c.id, body)}
+                              onEdit={(body, ids) => editComment(c.id, body, ids)}
                               onDelete={() => deleteComment(c.id)}
+                              onReact={async (emoji) => (await api.post(`/progress/comments/${c.id}/reactions`, { emoji })).reactions}
                             />
                           ))}
                         </div>
