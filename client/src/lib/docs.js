@@ -225,7 +225,13 @@ export const DOCS = [
       {
         title: 'Fixing a log',
         blocks: [
-          { p: 'Open the ninja\'s profile and find the session under their progress history. You can edit or delete a log you wrote. Center Directors can fix anyone\'s.' },
+          { p: 'Open the ninja\'s profile and find the session under their progress history. Point at the log and open the **...** menu to edit or delete it. You can fix a log you wrote. Center Directors can fix anyone\'s. Deleting asks you to confirm first.' },
+        ],
+      },
+      {
+        title: 'Talking about a log',
+        blocks: [
+          { p: 'Any sensei can reply to a log, react to it, and @mention a colleague. See [Replies and notifications](/docs/replies).' },
         ],
       },
     ],
@@ -241,19 +247,20 @@ export const DOCS = [
         title: 'What is on a profile',
         blocks: [
           { list: [
-            '**Pinned note**: anything every sensei should know before working with this ninja. It also shows on their card on Today\'s Board.',
+            '**Pinned note**: anything every sensei should know before working with this ninja. It also shows on their card on Today\'s Board. A long note scrolls inside its card.',
             '**Needs extra support**: the button beside Edit and Log Session. It shows the reason when the ninja is marked.',
             '**Note from parent**: written by the family in the Parent Portal. It appears inside the pinned note card.',
             '**Belt journey**: every belt on the ladder, with how far the ninja is toward the next one.',
             '**Activity**: sessions over the last six months, including club sessions.',
-            '**Progress history**: every logged session, newest first.',
+            '**Progress history**: every logged session, newest first, with its [replies](/docs/replies).',
+            '**Code.AI sticker**: JR ninjas can have a sticker in place of their initials. Select the avatar to pick one. A **+** on it means none is set yet, and a pencil appears when you point at it to change it.',
           ] },
         ],
       },
       {
         title: 'Pinning a note',
         blocks: [
-          { p: 'Select **Add note** on the pinned note card, write the note and save. Keep it short and useful to the next sensei. Pinned notes can use bold, lists and links.' },
+          { p: 'Select **Add note** on the pinned note card, write the note and save. Keep it short and useful to the next sensei. Pinned notes can use bold, lists and links. A long note, or a long note from the parent, scrolls inside the card rather than stretching the page.' },
         ],
       },
       {
@@ -279,12 +286,63 @@ export const DOCS = [
             'After the session, open it and log who came and what the group worked on.',
           ] },
           { p: 'Club sessions count as a visit for every ninja who came, so they show up in the ninja\'s activity and in [Reports](/docs/reports).' },
+          { p: 'Select a session on the club\'s page to read it, react to it and reply. The reply bar sits under the session\'s thread. See [Replies and notifications](/docs/replies).' },
         ],
       },
       {
         title: 'Creating a club',
         blocks: [
           { p: 'Center Directors create clubs from **+ Create Club** on the Clubs page, with a name, the day it meets, a description and an optional cover photo.' },
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'replies',
+    group: 'senseis',
+    title: 'Replies and notifications',
+    lede: 'Reply to a log or a club session, react, @mention a colleague, and see where you were mentioned.',
+    sections: [
+      {
+        title: 'Replying',
+        blocks: [
+          { steps: [
+            'Point at a log on a ninja\'s profile and select the **reply** arrow. On a club\'s page, select a session to open it.',
+            'Type in the reply bar and press **Enter**, or select the send arrow.',
+          ] },
+          { p: 'The bar stays open after you send, so you can keep going. Once a log has replies, its bar stays under the thread. Press **Escape** to leave the bar.' },
+          { p: 'To answer one reply in particular, point at it and select its **reply** arrow. The bar fills in that person\'s @username for you.' },
+          { tip: 'The smiley in the reply bar adds an emoji where your cursor is.' },
+        ],
+      },
+      {
+        title: 'Mentioning someone',
+        blocks: [
+          { p: 'Type **@** in a reply or a task comment. A list of the staff at your center appears. Type part of a name or username to narrow it, then pick someone with the arrow keys and **Enter**, or a click. The mention is written as their username, for example **@jmdang**, and shows as a blue name tag.' },
+          { p: 'Only people picked from the list are mentioned. Typing an @ by hand does not notify anyone. A reply that mentions you is tinted so it stands out in a long thread.' },
+        ],
+      },
+      {
+        title: 'Reacting',
+        blocks: [
+          { p: 'Point at a log or a reply to show its toolbar, then pick a quick reaction or the smiley for any emoji. Select a reaction under the message to add yours or take it back. Hover a reaction to see who left it.' },
+        ],
+      },
+      {
+        title: 'Editing and deleting',
+        blocks: [
+          { p: 'Point at a reply and open its **...** menu. You can edit your own replies. Replies that were changed say **(edited)**. You can delete your own replies, and Center Directors can delete any reply at their center. Deleting asks you to confirm first.' },
+        ],
+      },
+      {
+        title: 'Notifications',
+        blocks: [
+          { p: 'The bell collects everything that needs you: someone mentioned you in a reply or a task comment, or added you to a task. A red number shows how many you have not opened.' },
+          { list: [
+            'On a computer, the bell is next to your name at the bottom of the sidebar, or in the top bar if you use that layout.',
+            'On a phone, it is at the top of the dashboard.',
+          ] },
+          { p: 'Select a notification to go straight to it: the task opens, the ninja\'s profile scrolls to the log, or the club session opens. It is marked read when you open it. **Mark all as read** clears the rest. The bell shows the center you have selected, so switch centers to see mentions from another one.' },
         ],
       },
     ],
@@ -333,6 +391,7 @@ export const DOCS = [
             '**Check-ins**: how many ninjas came this week, from the board or a club, with **View all** for longer ranges. It counts the same way as Reports, so the two always agree.',
           ] },
           { tip: 'Hover over **Dashboard** in the sidebar to jump straight to Events, Tasks, Reports, Curriculum or What\'s New.' },
+          { p: 'On a phone, the [notification bell](/docs/replies) sits beside the greeting at the top of the dashboard.' },
         ],
       },
     ],
@@ -437,7 +496,8 @@ export const DOCS = [
       {
         title: 'Comments and mentions',
         blocks: [
-          { p: 'Open a task to comment on it. Type @ to mention someone. They see a red count on their Tasks link and on the task until they open it.' },
+          { p: 'Open a task to comment on it. Type @ and pick someone from the list to mention them. The mention is written as their username, for example **@jmdang**. They see a red count on their Tasks link, on the task, and on their [notification bell](/docs/replies) until they open it.' },
+          { p: 'Adding someone to a task by name also notifies them in the bell. Adding yourself does not, and neither do tasks that go to the whole center, such as quick adds.' },
         ],
       },
       {
