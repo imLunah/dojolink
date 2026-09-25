@@ -64,6 +64,7 @@ const CurriculumRoadmapPage = lazy(() => import('./pages/CurriculumRoadmapPage')
 const LocationsPage = lazy(() => import('./pages/admin/LocationsPage'));
 const CurriculumPage = lazy(() => import('./pages/admin/CurriculumPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
+const ParentsPage = lazy(() => import('./pages/admin/ParentsPage'));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
@@ -160,6 +161,7 @@ export default function App() {
             {/* Admin */}
             <Route path="/admin/locations" element={<ProtectedRoute role="manager"><LocationsPage /></ProtectedRoute>} />
             <Route path="/admin/users" element={<ProtectedRoute role="manager"><UsersPage /></ProtectedRoute>} />
+            <Route path="/admin/parents" element={<ProtectedRoute role="manager"><ParentsPage /></ProtectedRoute>} />
             <Route path="/admin/curriculum" element={<ProtectedRoute role="manager"><CurriculumPage /></ProtectedRoute>} />
             <Route path="/admin/settings" element={<ProtectedRoute role="manager"><SettingsPage /></ProtectedRoute>} />
 

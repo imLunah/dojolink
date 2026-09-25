@@ -217,6 +217,15 @@ router.post('/login', loginLimiter, async (req, res) => {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
 
+    // What Admin > Parents reads to tell "signed in, never finished the
+    // welcome form" from "never signed in". Best effort: a failure here must
+    // not cost a parent the sign-in they just completed.
+    pool.query(
+      `INSERT INTO parent_sign_ins (email, last_signed_in_at) VALUES ($1, now())
+       ON CONFLICT (email) DO UPDATE SET last_signed_in_at = now()`,
+      [req.session.parentEmail]
+    ).catch((err) => console.error('Parent sign-in record error:', err));
+
     res.json(payload);
   } catch (err) {
     console.error('Parent login error:', err);
@@ -297,6 +306,10 @@ router.post('/profile', requireParent, async (req, res) => {
       }
       await client.query('UPDATE students SET parent_email = $1 WHERE LOWER(parent_email) = $2', [newEmail, oldEmail]);
       await client.query('UPDATE parent_profiles SET email = $1, updated_at = now() WHERE email = $2', [newEmail, oldEmail]);
+      // A leftover row under the new address (staff moved a ninja off it) would
+      // collide on the key; nobody holds that address now, so it goes.
+      await client.query('DELETE FROM parent_sign_ins WHERE email = $1', [newEmail]);
+      await client.query('UPDATE parent_sign_ins SET email = $1 WHERE email = $2', [newEmail, oldEmail]);
     }
     // COALESCE on both consent columns, and it is the whole safety of this
     // write: an acceptance is stamped once and never moved. A parent editing
@@ -379,6 +392,7 @@ router.post('/delete-account', requireParent, deleteLimiter, async (req, res) =>
         ['parent', req.session.parentLocationId, reason, cleanDetails(details)]
       );
       await client.query('DELETE FROM parent_profiles WHERE email = $1', [parentEmail]);
+      await client.query('DELETE FROM parent_sign_ins WHERE email = $1', [parentEmail]);
       await client.query(
         `UPDATE students
             SET parent_email = NULL, parent_name = NULL, parent_phone = NULL, special_instructions = NULL

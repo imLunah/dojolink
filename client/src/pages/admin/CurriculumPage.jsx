@@ -29,6 +29,7 @@ const BELT_COLORS = {
 const ADMIN_NAV_LINKS = [
   { to: '/admin/locations', label: 'Locations' },
   { to: '/admin/users', label: 'Users' },
+  { to: '/admin/parents', label: 'Parents' },
   { to: '/admin/curriculum', label: 'Curriculum' },
   { to: '/admin/settings', label: 'Settings' },
 ];

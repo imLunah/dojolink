@@ -666,6 +666,67 @@ router.delete('/users/:id', requireManager, async (req, res) => {
 });
 
 // GET /api/admin/settings
+// ── Parents ───────────────────────────────────────────────────────────────────
+//
+// GET /api/admin/parents?location_id=  — who has signed up for the portal.
+//
+// A family is a parent email on the active ninjas at a center (the same
+// definition the parent sign-in uses), so a parent with ninjas at two centers
+// appears once per center. Four states, most done first:
+//   signed_up      a parent_profiles row: onboarding finished
+//   started        signed in, never finished the welcome form
+//   not_signed_in  has an email on file and has never signed in
+//   no_email       a ninja with no parent email, so nobody CAN sign in
+// Rule 1 applies: a director sees only their own centers.
+router.get('/parents', requireManager, async (req, res) => {
+  const pool = req.app.get('db');
+  const allowed = allowedLocationIds(req);
+  const wanted = req.query.location_id ? Number(req.query.location_id) : null;
+  if (wanted !== null && !mayTouchLocation(req, wanted)) return res.status(403).json({ error: 'Not your center' });
+
+  const params = [];
+  const where = ['s.active = true', 'l.active = true'];
+  if (wanted !== null) { params.push(wanted); where.push(`l.id = $${params.length}`); }
+  else if (allowed) { params.push(allowed); where.push(`l.id = ANY($${params.length})`); }
+
+  try {
+    const { rows } = await pool.query(
+      `WITH fam AS (
+         SELECT l.id AS location_id, l.name AS location_name,
+                NULLIF(LOWER(TRIM(s.parent_email)), '') AS email,
+                s.id AS student_id, s.full_name, s.parent_name
+           FROM students s
+           JOIN student_locations sl ON sl.student_id = s.id
+           JOIN locations l ON l.id = sl.location_id
+          WHERE ${where.join(' AND ')}
+       )
+       SELECT f.location_id, f.location_name, f.email,
+              COALESCE(NULLIF(TRIM(pp.first_name || ' ' || pp.last_name), ''), MAX(f.parent_name)) AS parent_name,
+              json_agg(f.full_name ORDER BY f.full_name) AS ninjas,
+              pp.created_at AS signed_up_at,
+              si.last_signed_in_at,
+              CASE WHEN f.email IS NULL THEN 'no_email'
+                   WHEN pp.email IS NOT NULL THEN 'signed_up'
+                   WHEN si.email IS NOT NULL THEN 'started'
+                   ELSE 'not_signed_in' END AS status
+         FROM fam f
+         LEFT JOIN parent_profiles pp ON pp.email = f.email
+         LEFT JOIN parent_sign_ins si ON si.email = f.email
+        GROUP BY f.location_id, f.location_name, f.email,
+                 -- A ninja with no email is a family of one; grouping them all
+                 -- under NULL would read as one parent with every such child.
+                 CASE WHEN f.email IS NULL THEN f.student_id END,
+                 pp.email, pp.first_name, pp.last_name, pp.created_at, si.email, si.last_signed_in_at
+        ORDER BY f.location_name, MIN(f.full_name)`,
+      params
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching parents:', err);
+    res.status(500).json({ error: 'Failed to fetch parents' });
+  }
+});
+
 router.get('/settings', requireManager, async (req, res) => {
   const pool = req.app.get('db');
   try {
