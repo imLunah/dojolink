@@ -24,7 +24,6 @@ import { toSlug } from '../../utils/clubUtils';
 function LogComment({ comment }) {
   return (
     <div className="flex gap-2 mt-2">
-      <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
       <div>
         <p className="text-ninja-navy font-ninja text-sm"><Linkify>{comment.body}</Linkify></p>
         <p className="text-ninja-muted font-ninja text-xs mt-0.5">

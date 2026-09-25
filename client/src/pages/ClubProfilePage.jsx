@@ -175,7 +175,6 @@ function PinnedNoteSection({ clubName, initialNote, initialAuthor, initialUpdate
 function SessionComment({ comment }) {
   return (
     <div className="flex gap-2">
-      <div className="flex-shrink-0 w-1 rounded-full bg-ninja-blue" />
       <div className="min-w-0">
         <p className="text-ninja-navy font-ninja text-sm break-words"><Linkify>{comment.body}</Linkify></p>
         <p className="text-ninja-muted font-ninja text-xs mt-0.5">
