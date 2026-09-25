@@ -152,6 +152,13 @@ describe('DELETE /api/progress/:id, scoped to the center', () => {
     const { agent } = await login(app, 'sensei_a2'); // same center, different sensei
     const res = await csrf(agent.delete(`/api/progress/${id}`)).send();
     expect(res.status).toBe(200);
+    // and a copy of it is kept, naming who deleted it
+    const { rows } = await pool.query(
+      `SELECT d.log->>'id' AS log_id, u.username FROM progress_log_deletions d
+       JOIN users u ON u.id = d.deleted_by WHERE d.log_id = $1`,
+      [id]
+    );
+    expect(rows).toEqual([{ log_id: String(id), username: 'sensei_a2' }]);
   });
 
   it('forbids a sensei at another center from deleting the log (404)', async () => {
