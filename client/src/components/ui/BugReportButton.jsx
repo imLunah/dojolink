@@ -93,17 +93,36 @@ export default function BugReportButton({ reporter, open, onClose }) {
     setError('');
   };
 
+  // Screenshots are scaled down to 1600px and re-encoded as JPEG before they
+  // are sent: the report travels as JSON, and Vercel refuses a request body
+  // over 4.5MB, which a phone photo passes on its own.
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File must be under 5MB.');
+    if (!file.type.startsWith('image/')) {
+      setError('That file is not an image.');
       return;
     }
     setError('');
-    const reader = new FileReader();
-    reader.onload = (ev) => setScreenshot(ev.target.result);
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      setScreenshot(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setError('That image could not be read.');
+    };
+    img.src = url;
   };
 
   const handleSubmit = async (e) => {
@@ -176,9 +195,9 @@ export default function BugReportButton({ reporter, open, onClose }) {
                 </h2>
               )}
               <div className="flex items-center gap-3">
-                {view === 'form' && (
+                {view === 'form' && isParent && (
                   <button type="button" onClick={showMine} className="font-ninja text-xs font-bold text-ninja-blue hover:text-ninja-blue-hover">
-                    {isParent ? 'Your reports' : 'Issues & roadmap'}
+                    Your reports
                   </button>
                 )}
                 <button onClick={handleClose} aria-label="Close" className="text-ninja-muted hover:text-ninja-navy text-xl leading-none">✕</button>

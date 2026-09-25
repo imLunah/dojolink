@@ -61,14 +61,20 @@ function mineClause(req, startAt = 1) {
   };
 }
 
+// Every way a sent screenshot can be dropped says so in the log: a ticket
+// that silently arrives without its picture is indistinguishable from one
+// that never had one.
 async function saveScreenshot(dataUrl) {
-  if (typeof dataUrl !== 'string' || !storage.isConfigured()) return null;
-  const m = dataUrl.match(/^data:([a-z/+-]+);base64,(.+)$/i);
-  if (!m) return null;
+  if (dataUrl == null || dataUrl === '') return null;
+  const drop = (why) => { console.error(`Ticket screenshot dropped: ${why}`); return null; };
+  if (typeof dataUrl !== 'string') return drop('not a string');
+  if (!storage.isConfigured()) return drop('storage is not configured');
+  const m = dataUrl.match(/^data:([a-z/+.-]+);base64,([\s\S]+)$/i);
+  if (!m) return drop('not a base64 data URL');
   const ext = SHOT_TYPES[m[1].toLowerCase()];
-  if (!ext) return null;
+  if (!ext) return drop(`unsupported type ${m[1]}`);
   const buffer = Buffer.from(m[2], 'base64');
-  if (!buffer.length || buffer.length > SHOT_MAX_BYTES) return null;
+  if (!buffer.length || buffer.length > SHOT_MAX_BYTES) return drop(`size ${buffer.length}`);
   const path = `${SHOT_PREFIX}/${crypto.randomUUID()}.${ext}`;
   try {
     return await storage.uploadObject(BUCKET, path, buffer, m[1].toLowerCase());
