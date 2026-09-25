@@ -8,9 +8,10 @@ import { EmojiPickerButton } from '../ui/Reactions';
 // has taught people to type into. Enter sends and Escape backs out, so the
 // buttons are there for a phone, not for a keyboard.
 //
-// Typing @ offers the staff at this center, as in any chat app. A mention is a
-// person picked from that list, not a name typed out: the bar keeps the people
-// picked, and sends the ids of those whose "@Name" is still in the words, so
+// Typing @ offers the staff at this center, as in any chat app, matched on
+// username or name, and picking one writes "@username". A mention is a person
+// picked from that list, not a name typed out: the bar keeps the people
+// picked, and sends the ids of those whose "@username" is still in the words, so
 // the server records who was addressed rather than parsing prose.
 //
 // `onSend(body, mentionIds)` does the request and throws to report a failure;
@@ -37,7 +38,7 @@ export default function ReplyBar({
   const [error, setError] = useState('');
   const [people, setPeople] = useState([]);
   const [picked, setPicked] = useState(() =>
-    initialMentions.map((m) => ({ id: m.user_id, display_name: m.display_name })).filter((m) => m.display_name));
+    initialMentions.map((m) => ({ id: m.user_id, display_name: m.display_name, username: m.username })).filter((m) => m.username));
   const [mention, setMention] = useState(null); // { query, start, end }
   const [active, setActive] = useState(0);
   const inputRef = useRef(null);
@@ -54,7 +55,9 @@ export default function ReplyBar({
   const suggestions = useMemo(() => {
     if (!mention) return [];
     const q = mention.query.toLowerCase();
-    return people.filter((p) => p.display_name.toLowerCase().includes(q)).slice(0, 6);
+    return people
+      .filter((p) => p.username && (p.username.toLowerCase().includes(q) || p.display_name.toLowerCase().includes(q)))
+      .slice(0, 6);
   }, [mention, people]);
 
   useEffect(() => { setActive(0); }, [mention?.query]);
@@ -67,7 +70,7 @@ export default function ReplyBar({
 
   const choose = (person) => {
     if (!mention) return;
-    const token = `@${person.display_name} `;
+    const token = `@${person.username} `;
     const next = body.slice(0, mention.start) + token + body.slice(mention.end);
     const caret = mention.start + token.length;
     setBody(next);
@@ -83,7 +86,7 @@ export default function ReplyBar({
     e.preventDefault();
     if (!ready) return;
     const text = body.trim();
-    const mentionIds = picked.filter((p) => text.includes(`@${p.display_name}`)).map((p) => p.id);
+    const mentionIds = picked.filter((p) => text.includes(`@${p.username}`)).map((p) => p.id);
     setSaving(true);
     setError('');
     try {
@@ -150,6 +153,7 @@ export default function ReplyBar({
                 {initialsOf(person.display_name)}
               </span>
               <span className="truncate">{person.display_name}</span>
+              <span className="ml-auto truncate font-normal text-xs text-ninja-muted">@{person.username}</span>
             </button>
           ))}
         </div>

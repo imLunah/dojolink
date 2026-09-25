@@ -1,13 +1,15 @@
 import Linkify from './Linkify';
 
-// Plain text with its recorded mentions drawn as name tags. Only the names in
+// Plain text with its recorded mentions drawn as name tags. Only the people in
 // `mentions` (who the server says was addressed) are highlighted, so an "@"
-// typed by hand never passes for a mention that notified nobody. Longest names
-// first, so "@Sam Lee" is not claimed by "@Sam".
+// typed by hand never passes for a mention that notified nobody. A mention is
+// "@username"; "@Display Name" is still matched because comments written
+// before usernames were the tag carry it. Longest first, so "@Sam Lee" is not
+// claimed by "@Sam".
 export default function MentionText({ text, mentions }) {
-  const names = (mentions || [])
-    .map((mention) => mention.display_name)
-    .filter(Boolean)
+  const names = [...new Set((mentions || [])
+    .flatMap((mention) => [mention.username, mention.display_name])
+    .filter(Boolean))]
     .sort((a, b) => b.length - a.length);
   if (names.length === 0) return <Linkify>{text}</Linkify>;
 

@@ -51,7 +51,7 @@ const SELECT = `
 // covering two locations appears on both boards. Admins are included because
 // acting anywhere is the whole point of the role.
 const ASSIGNEE_SELECT = `
-  SELECT u.id, u.display_name, u.role
+  SELECT u.id, u.display_name, u.username, u.role
   FROM users u
   WHERE u.active = true
     AND u.role IN ('manager', 'sensei', 'admin')
@@ -737,7 +737,8 @@ const COMMENT_SELECT = `
          COALESCE((
            SELECT json_agg(json_build_object(
              'user_id', m.user_id,
-             'display_name', mentioned.display_name
+             'display_name', mentioned.display_name,
+             'username', mentioned.username
            ) ORDER BY mentioned.display_name)
            FROM director_task_comment_mentions m
            JOIN users mentioned ON mentioned.id = m.user_id

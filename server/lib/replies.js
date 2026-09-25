@@ -36,11 +36,12 @@ function replyJson(kind, userParam) {
   )`;
 }
 
-// Who a reply addressed, by the names they carry today. The client highlights
-// only these, so an "@" typed by hand never looks like a mention it is not.
+// Who a reply addressed, by the username and name they carry today. The
+// client highlights only these, so an "@" typed by hand never looks like a
+// mention it is not.
 function mentionsSubquery(kind) {
   return `COALESCE((
-    SELECT json_agg(json_build_object('user_id', m.user_id, 'display_name', mu.display_name) ORDER BY mu.display_name)
+    SELECT json_agg(json_build_object('user_id', m.user_id, 'display_name', mu.display_name, 'username', mu.username) ORDER BY mu.display_name)
     FROM ${KINDS[kind].mentions} m JOIN users mu ON mu.id = m.user_id
     WHERE m.comment_id = c.id
   ), '[]'::json)`;
