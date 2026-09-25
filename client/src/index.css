@@ -41,6 +41,7 @@
   --ninja-navy:        26 46 74;
   --ninja-muted:       80 102 144;
   --ninja-hero:        26 46 74;   /* fixed brand navy for hero banners — does NOT flip in dark */
+  --menu-surface:      #ffffff;    /* the liquid a gooey ActionMenu is made of */
 
   /* Motion curves (Emil Kowalski's design-eng defaults). The built-in CSS
      easings are too weak; these carry the punch that reads as intentional. */
@@ -58,6 +59,7 @@
   --ninja-navy:        208 218 234; /* #d0daed — cool near-white */
   --ninja-muted:       138 155 184; /* #8a9bb8 — cool blue-gray, WCAG AA */
   --ninja-hero:        26 46 74;    /* intentionally NOT flipped — hero banners stay navy in dark */
+  --menu-surface:      #252c3e;    /* the dark card colour, so the menu matches .dark .bg-white */
 }
 
 /* ── Theme-locked subtrees ── */

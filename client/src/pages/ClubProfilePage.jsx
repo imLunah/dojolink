@@ -669,7 +669,7 @@ function ClubHero({ clubDef, colors, memberCount, locationName, isManager, isRea
 
           {canEditCover && (
             hasCover ? (
-              <ActionMenu label="Club photo" onClosed={() => setConfirmRemove(false)}
+              <ActionMenu label="Club photo" step={confirmRemove ? 'confirm' : 'actions'} onClosed={() => setConfirmRemove(false)}
                 className="[&>button]:text-white [&>button:hover]:text-white [&>button]:bg-black/25 [&>button:hover]:bg-black/40">
                 {({ close }) => (
                   confirmRemove ? (

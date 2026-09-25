@@ -193,6 +193,7 @@ function Post({ post, canEdit, canReact, onUpdated, onDeleted }) {
             {canEdit && (
           <ActionMenu
             label="Post actions"
+            step={confirming ? 'confirm' : 'actions'}
             className={`flex-shrink-0 ${IN_STRIP_MENU}`}
             onClosed={() => setConfirming(false)}
           >

@@ -583,6 +583,7 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                             {(canEdit || canDelete) && (
                               <ActionMenu
                                 label="Log actions"
+                                step={isConfirmingDelete ? 'confirm' : 'actions'}
                                 className={`flex-shrink-0 ${IN_STRIP_MENU}`}
                                 onClosed={() => { setConfirmDeleteId(null); setDeleteError(''); }}
                               >
