@@ -108,7 +108,10 @@ export default function PinnedNote({ studentId, initialNote, onUpdated, parentNo
             </div>
           </div>
         ) : hasNote ? (
-          <div className="font-ninja text-sm leading-relaxed text-gray-900 dark:text-white">
+          // Capped and scrolled in place: a long note should not push the
+          // whole profile down the page. overscroll-contain keeps a scroll
+          // that reaches the end of the note from dragging the page with it.
+          <div className="max-h-48 overflow-y-auto overscroll-contain pr-1 font-ninja text-sm leading-relaxed text-gray-900 dark:text-white">
             <ReactMarkdown
               components={MARKDOWN_COMPONENTS}
               urlTransform={(url) => (/^(https?:|mailto:)/i.test(url) ? url : '')}
@@ -127,7 +130,7 @@ export default function PinnedNote({ studentId, initialNote, onUpdated, parentNo
             <h4 className="font-ninja font-bold text-[11px] uppercase tracking-wide text-ninja-muted mb-1">
               Note from parent
             </h4>
-            <div className="font-ninja text-sm leading-relaxed text-ninja-navy">
+            <div className="max-h-32 overflow-y-auto overscroll-contain pr-1 font-ninja text-sm leading-relaxed text-ninja-navy">
               <ReactMarkdown
                 components={MARKDOWN_COMPONENTS}
                 urlTransform={(url) => (/^(https?:|mailto:)/i.test(url) ? url : '')}
