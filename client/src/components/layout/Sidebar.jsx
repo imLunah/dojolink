@@ -6,7 +6,7 @@ import ThemeToggle from '../ui/ThemeToggle';
 import Logo from '../ui/Logo';
 import { RocketIcon } from '../ui/icons';
 import NotificationBell from '../shared/NotificationBell';
-import { LogOutIcon, CircleHelpIcon, UserIcon } from 'lucide-react';
+import { LogOutIcon, CircleHelpIcon, UserIcon, BellIcon } from 'lucide-react';
 import { LayoutGridIcon, BookOpenIcon, MegaphoneIcon, ListTodoIcon, ChartNoAxesColumnIncreasingIcon, GiftIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -160,6 +160,98 @@ export default function Sidebar({ onOpenBug }) {
   const MENU_ITEM =
     'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-ninja text-sm font-semibold text-left transition-colors';
 
+  // The avatar that opens the account menu. `bell` is the notification
+  // bell's handle on the collapsed rail: the avatar anchors its panel and
+  // wears a dot while anything is unread.
+  const avatarButton = (bell) => (
+    <button
+      ref={bell?.anchorRef}
+      type="button"
+      onClick={() => setMenuOpen((o) => !o)}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      aria-label={bell?.unread ? `Account menu, ${bell.unread} unread notifications` : 'Account menu'}
+      title={collapsed ? (user?.displayName || 'Account') : undefined}
+      className={`relative flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity ${collapsed ? 'rounded-full' : 'flex-1 min-w-0 rounded-xl'}`}
+    >
+      {user?.profilePicUrl ? (
+        <img src={user.profilePicUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-ninja-border" />
+      ) : (
+        <div className="w-8 h-8 rounded-full bg-ninja-blue flex items-center justify-center text-white font-ninja font-bold text-xs flex-shrink-0">
+          {initials}
+        </div>
+      )}
+      {bell?.unread > 0 && (
+        <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-ninja-red ring-2 ring-white dark:ring-[#252c3e]" />
+      )}
+      {!collapsed && (
+        <span className="flex-1 min-w-0 font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</span>
+      )}
+    </button>
+  );
+
+  const accountMenu = (bell) => (
+    <AnimatePresence>
+      {menuOpen && (
+        <motion.div
+          role="menu"
+          initial={{ opacity: 0, y: 4, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+          className="absolute left-0 bottom-full mb-2 w-52 bg-white border border-ninja-border rounded-xl shadow-lg p-1.5 origin-bottom-left z-50"
+        >
+          {bell && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setMenuOpen(false); bell.toggle(); }}
+              className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
+            >
+              <BellIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+              <span className="flex-1 text-left">Notifications</span>
+              {bell.unread > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-ninja-red text-white text-[10px] font-black leading-[18px] text-center">
+                  {bell.unread > 9 ? '9+' : bell.unread}
+                </span>
+              )}
+            </button>
+          )}
+          <Link to="/account" role="menuitem" className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+            <UserIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+            Account
+          </Link>
+          <Link to="/docs" role="menuitem" className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
+            <CircleHelpIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+            Help Center
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setMenuOpen(false); onOpenBug(); }}
+            className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
+          >
+            <RocketIcon className="w-4 h-4 flex-shrink-0" />
+            Send feedback
+          </button>
+          {bell && (
+            <div className="mt-1 pt-1 border-t border-ninja-border">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleLogout}
+                className={`${MENU_ITEM} text-ninja-red hover:bg-red-50 dark:hover:bg-red-500/10`}
+              >
+                <LogOutIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+                Log out
+              </button>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <motion.aside
       initial={false}
@@ -276,72 +368,36 @@ export default function Sidebar({ onOpenBug }) {
         <ThemeToggle />
       </div>
 
-      {/* User card */}
+      {/* User card. Expanded: avatar and name, the bell, log out. Collapsed to
+          the rail there is room for the avatar alone, so it carries the unread
+          dot and its menu gains Notifications and Log out. */}
       <div className="p-3 border-t border-ninja-border">
-        {/* Tight gaps so the name keeps most of the row beside the bell and
-            log out; the avatar-to-name gap lives inside the account button. */}
-        <div ref={menuRef} className={`relative ${collapsed ? 'flex flex-col items-center gap-2 py-1' : 'flex items-center gap-1 px-1 py-2'}`}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            aria-label="Account menu"
-            title={collapsed ? (user?.displayName || 'Account') : undefined}
-            className={`flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity ${collapsed ? 'rounded-full' : 'flex-1 min-w-0 rounded-xl'}`}
-          >
-            {user?.profilePicUrl ? (
-              <img src={user.profilePicUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-ninja-border" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-ninja-blue flex items-center justify-center text-white font-ninja font-bold text-xs flex-shrink-0">
-                {initials}
+        {collapsed ? (
+          <NotificationBell placement="side">
+            {(bell) => (
+              <div ref={menuRef} className="relative flex flex-col items-center py-1">
+                {avatarButton(bell)}
+                {accountMenu(bell)}
               </div>
             )}
-            {!collapsed && (
-              <span className="flex-1 min-w-0 font-ninja font-bold text-ninja-navy text-sm truncate">{user?.displayName}</span>
-            )}
-          </button>
-          <NotificationBell compact />
-          <button
-            onClick={handleLogout}
-            title="Log out"
-            aria-label="Log out"
-            className={`text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1 ${collapsed ? '' : '-mr-1'}`}
-          >
-            <LogOutIcon className="w-4 h-4" />
-          </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <motion.div
-                role="menu"
-                initial={{ opacity: 0, y: 4, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-                className="absolute left-0 bottom-full mb-2 w-52 bg-white border border-ninja-border rounded-xl shadow-lg p-1.5 origin-bottom-left z-50"
-              >
-                <Link to="/account" role="menuitem" className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
-                  <UserIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
-                  Account
-                </Link>
-                <Link to="/docs" role="menuitem" className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}>
-                  <CircleHelpIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
-                  Help Center
-                </Link>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => { setMenuOpen(false); onOpenBug(); }}
-                  className={`${MENU_ITEM} text-ninja-navy hover:bg-ninja-bg`}
-                >
-                  <RocketIcon className="w-4 h-4 flex-shrink-0" />
-                  Send feedback
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+          </NotificationBell>
+        ) : (
+          // Tight gaps so the name keeps most of the row beside the bell and
+          // log out; the avatar-to-name gap lives inside the account button.
+          <div ref={menuRef} className="relative flex items-center gap-1 px-1 py-2">
+            {avatarButton(null)}
+            <NotificationBell compact />
+            <button
+              onClick={handleLogout}
+              title="Log out"
+              aria-label="Log out"
+              className="text-ninja-muted hover:text-ninja-red transition-colors flex-shrink-0 p-1 -mr-1"
+            >
+              <LogOutIcon className="w-4 h-4" />
+            </button>
+            {accountMenu(null)}
+          </div>
+        )}
       </div>
     </motion.aside>
   );

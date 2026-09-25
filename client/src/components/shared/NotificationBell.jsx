@@ -58,7 +58,12 @@ function plain(body, mentions) {
   return text.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
 }
 
-export default function NotificationBell({ className = '', compact = false }) {
+// `children`, when given, replaces the round bell: a function handed
+// { unread, open, toggle, anchorRef } that draws its own way in. The collapsed
+// sidebar uses it to put the unread dot on the avatar and open the list from
+// the account menu. `anchorRef` must be on the element the panel belongs to;
+// `placement="side"` opens the panel beside it rather than above or below.
+export default function NotificationBell({ className = '', compact = false, children, placement = 'auto' }) {
   const { user, viewAs } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState(null);
@@ -89,6 +94,12 @@ export default function NotificationBell({ className = '', compact = false }) {
       const r = buttonRef.current?.getBoundingClientRect();
       if (!r) return;
       const margin = 8;
+      if (placement === 'side') {
+        // Beside the anchor, bottom edges level, rising only as far as fits.
+        const maxHeight = Math.min(480, window.innerHeight - margin * 2);
+        setPos({ left: Math.min(r.right + 12, window.innerWidth - PANEL_W - margin), bottom: Math.max(margin, window.innerHeight - r.bottom), maxHeight });
+        return;
+      }
       const left = Math.min(Math.max(r.left, margin), window.innerWidth - PANEL_W - margin);
       const below = window.innerHeight - r.bottom;
       setPos(below >= 320
@@ -98,7 +109,7 @@ export default function NotificationBell({ className = '', compact = false }) {
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [open]);
+  }, [open, placement]);
 
   useEffect(() => {
     if (!open) return;
@@ -144,6 +155,7 @@ export default function NotificationBell({ className = '', compact = false }) {
 
   return (
     <>
+      {children ? children({ unread, open, toggle: () => setOpen((o) => !o), anchorRef: buttonRef }) : (
       <button
         ref={buttonRef}
         type="button"
@@ -166,6 +178,7 @@ export default function NotificationBell({ className = '', compact = false }) {
           </span>
         )}
       </button>
+      )}
 
       {open && pos && createPortal(
         <div
