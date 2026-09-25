@@ -66,7 +66,9 @@ const FEED_SQL = `
     SELECT 'task' AS kind, m.id, m.created_at, m.read_at, c.body,
            u.display_name AS author_name, u.profile_pic_url AS author_pic,
            t.title AS place, t.id AS task_id, NULL::int AS student_id, NULL::int AS log_id,
-           NULL::int AS session_id, NULL::text AS club_name
+           NULL::int AS session_id, NULL::text AS club_name,
+           (SELECT json_agg(json_build_object('display_name', mu.display_name, 'username', mu.username))
+            FROM director_task_comment_mentions mm JOIN users mu ON mu.id = mm.user_id WHERE mm.comment_id = c.id) AS mentions
     FROM director_task_comment_mentions m ${scoped('task', '$2')}
     LEFT JOIN users u ON u.id = c.author_id
     WHERE m.user_id = $1
@@ -75,7 +77,9 @@ const FEED_SQL = `
 
     SELECT 'log', m.id, m.created_at, m.read_at, c.body,
            COALESCE(u.display_name, c.user_name), u.profile_pic_url,
-           s.full_name, NULL, s.id, pl.id, NULL, NULL
+           s.full_name, NULL, s.id, pl.id, NULL, NULL,
+           (SELECT json_agg(json_build_object('display_name', mu.display_name, 'username', mu.username))
+            FROM progress_log_comment_mentions mm JOIN users mu ON mu.id = mm.user_id WHERE mm.comment_id = c.id)
     FROM progress_log_comment_mentions m ${scoped('log', '$2')}
     LEFT JOIN users u ON u.id = c.user_id
     WHERE m.user_id = $1
@@ -84,7 +88,9 @@ const FEED_SQL = `
 
     SELECT 'club', m.id, m.created_at, m.read_at, c.body,
            COALESCE(u.display_name, c.user_name), u.profile_pic_url,
-           cs.club_name, NULL, NULL, NULL, cs.id, cs.club_name
+           cs.club_name, NULL, NULL, NULL, cs.id, cs.club_name,
+           (SELECT json_agg(json_build_object('display_name', mu.display_name, 'username', mu.username))
+            FROM club_session_comment_mentions mm JOIN users mu ON mu.id = mm.user_id WHERE mm.comment_id = c.id)
     FROM club_session_comment_mentions m ${scoped('club', '$2')}
     LEFT JOIN users u ON u.id = c.user_id
     WHERE m.user_id = $1
@@ -93,7 +99,7 @@ const FEED_SQL = `
 
     SELECT 'assign', m.task_id, m.assigned_at, m.read_at, NULL,
            u.display_name, u.profile_pic_url,
-           t.title, t.id, NULL, NULL, NULL, NULL
+           t.title, t.id, NULL, NULL, NULL, NULL, NULL::json
     FROM director_task_assignees m ${scoped('assign', '$2')}
     LEFT JOIN users u ON u.id = m.assigned_by
     WHERE m.user_id = $1
