@@ -204,6 +204,41 @@ router.get('/admin', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/bugs/admin — an admin writes a known issue or a roadmap item
+// straight onto the board. It skips the inbox, so it needs its title and
+// status up front, and it rings nobody's bell.
+router.post('/admin', requireAdmin, async (req, res) => {
+  const { type, title, category, status, description } = req.body || {};
+  if (!['bug', 'feature'].includes(type)) return res.status(400).json({ error: 'Pick bug or feature.' });
+  const cleanTitle = clip(title, 120);
+  if (!cleanTitle) return res.status(400).json({ error: 'Give it a title.' });
+  if (!STATUSES.includes(status) || status === 'new') return res.status(400).json({ error: 'Pick a status.' });
+  const text = String(description ?? '').trim();
+  if (text.length > 2000) return res.status(400).json({ error: 'Details are too long.' });
+  const pool = req.app.get('db');
+  try {
+    const { rows: [u] } = await pool.query('SELECT display_name, username FROM users WHERE id = $1', [req.session.userId]);
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO feedback_tickets
+         (type, category, description, status, title, reporter_user_id, reporter_name, reporter_role,
+          location_id, seen_at, closed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'admin', $8, now(),
+               CASE WHEN $4 = ANY($9::text[]) THEN now() END)
+       RETURNING id`,
+      [type, clip(category, 60) || 'Other', text || null, status, cleanTitle, req.session.userId,
+        clip(u?.display_name || u?.username, 120), req.session.activeLocationId || null, CLOSED]
+    );
+    const { rows: [full] } = await pool.query(
+      `SELECT ${ADMIN_COLUMNS} FROM feedback_tickets t LEFT JOIN locations l ON l.id = t.location_id WHERE t.id = $1`,
+      [row.id]
+    );
+    res.status(201).json({ ...full, screenshot_url: null });
+  } catch (err) {
+    console.error('Ticket admin create error:', err.message);
+    res.status(500).json({ error: 'Could not add it.' });
+  }
+});
+
 const ticketId = (req) => {
   const id = Number(req.params.id);
   return Number.isInteger(id) && id > 0 ? id : null;

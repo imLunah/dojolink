@@ -13,6 +13,28 @@ export const STATUS = {
   wont_fix:    { label: "Won't fix",   dot: '#64748b' },
 };
 
+// What a report can be about. The report dialog and the admin's own form
+// both offer these.
+export const BUG_CATEGORIES = [
+  'Login Issue',
+  'Student Progress',
+  'Check-In Issue',
+  'Parent Portal',
+  'UI / Visual Bug',
+  'Slow Performance',
+  'Other',
+];
+
+export const FEATURE_CATEGORIES = [
+  'Check-In',
+  'Student Progress',
+  'Clubs',
+  'Reports',
+  'Parent Portal',
+  'UI / Design',
+  'Other',
+];
+
 export const isClosed = (status) => status === 'resolved' || status === 'wont_fix';
 
 // What a ticket is called. Before triage it has no title yet, so its sender

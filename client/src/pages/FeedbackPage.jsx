@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { TriangleAlertIcon, LightbulbIcon, InboxIcon, CheckCheckIcon, UserIcon } from 'lucide-react';
+import { TriangleAlertIcon, LightbulbIcon, InboxIcon, CheckCheckIcon, UserIcon, PlusIcon } from 'lucide-react';
 import Layout from '../components/layout/Layout';
 import Modal from '../components/ui/Modal';
 import { SkeletonList } from '../components/ui/Skeleton';
@@ -9,7 +9,7 @@ import TicketStatus from '../components/shared/TicketStatus';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { CARD } from '../lib/surfaces';
-import { STATUS, STATUS_ORDER, isClosed, shortDate } from '../lib/tickets';
+import { STATUS, STATUS_ORDER, isClosed, shortDate, BUG_CATEGORIES, FEATURE_CATEGORIES } from '../lib/tickets';
 
 // Issues & roadmap: every bug report and feature idea, as tickets.
 //
@@ -34,6 +34,7 @@ export default function FeedbackPage() {
   const [params, setParams] = useSearchParams();
   const [tickets, setTickets] = useState(null);
   const [mine, setMine] = useState(null);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(() => {
     api.get(isAdmin ? '/bugs/admin' : '/bugs/board')
@@ -115,9 +116,19 @@ export default function FeedbackPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-5"
+          className="mb-5 flex items-center justify-between gap-3"
         >
           <h1 className="text-2xl font-black font-ninja text-ninja-navy">Issues &amp; roadmap</h1>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-ninja-blue px-4 py-2.5 font-ninja text-sm font-bold text-white hover:bg-ninja-blue-hover transition-colors flex-shrink-0"
+            >
+              <PlusIcon className="w-4 h-4" strokeWidth={2.4} aria-hidden="true" />
+              {tab === 'roadmap' ? 'Add to roadmap' : 'Add known issue'}
+            </button>
+          )}
         </motion.header>
 
         <nav aria-label="Tickets" className="no-scrollbar mb-6 flex overflow-x-auto rounded-xl border border-ninja-border bg-ninja-bg p-1 lg:max-w-3xl">
@@ -160,6 +171,20 @@ export default function FeedbackPage() {
           {body}
         </motion.div>
       </div>
+
+      {isAdmin && (
+        <NewItemDialog
+          open={adding}
+          initialType={tab === 'roadmap' ? 'feature' : 'bug'}
+          onClose={() => setAdding(false)}
+          onCreated={(t) => {
+            setTickets((prev) => [t, ...(prev || [])]);
+            setAdding(false);
+            if (!isClosed(t.status)) setParam('tab', t.type === 'feature' ? 'roadmap' : 'bugs');
+            else setParam('tab', 'closed');
+          }}
+        />
+      )}
 
       {isAdmin && (
         <TicketDialog
@@ -429,9 +454,11 @@ function TicketDialog({ id, onClose, onSaved, onDeleted }) {
             <p className="font-ninja text-xs text-ninja-muted mb-1.5">
               {[ticket.reporter_name || 'Unknown', roleLabel(ticket.reporter_role), ticket.location_name, ticket.category].filter(Boolean).join(' · ')}
             </p>
-            <p className="font-ninja text-sm text-ninja-navy whitespace-pre-wrap break-words rounded-xl bg-ninja-bg px-4 py-3 leading-relaxed">
-              {ticket.description}
-            </p>
+            {ticket.description && (
+              <p className="font-ninja text-sm text-ninja-navy whitespace-pre-wrap break-words rounded-xl bg-ninja-bg px-4 py-3 leading-relaxed">
+                {ticket.description}
+              </p>
+            )}
           </div>
 
           {ticket.screenshot_url && (
@@ -521,6 +548,137 @@ function TicketDialog({ id, onClose, onSaved, onDeleted }) {
           </div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+// An admin writing a known issue or a roadmap item straight onto the board,
+// with no report behind it. It goes out with its title and status, so it
+// never sits in the inbox.
+function NewItemDialog({ open, initialType, onClose, onCreated }) {
+  const [type, setType] = useState(initialType);
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('Other');
+  const [status, setStatus] = useState(initialType === 'feature' ? 'planned' : 'aware');
+  const [details, setDetails] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setType(initialType);
+    setTitle('');
+    setCategory('Other');
+    setStatus(initialType === 'feature' ? 'planned' : 'aware');
+    setDetails('');
+    setError('');
+  }, [open, initialType]);
+
+  const pickType = (next) => {
+    setType(next);
+    setCategory('Other');
+    setStatus((s) => (s === 'aware' || s === 'planned' ? (next === 'feature' ? 'planned' : 'aware') : s));
+  };
+
+  const dirty = Boolean(title.trim() || details.trim());
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!title.trim()) { setError('Give it a title.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const created = await api.post('/bugs/admin', { type, title: title.trim(), category, status, description: details.trim() });
+      onCreated(created);
+    } catch (err) {
+      setError(err?.data?.error || 'Could not add it.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const label = 'block text-ninja-muted text-xs font-ninja font-semibold uppercase tracking-wide mb-1.5';
+  const field = 'w-full bg-ninja-bg border border-ninja-border text-ninja-navy rounded-xl px-3 py-2.5 font-ninja text-sm focus:outline-none focus:border-ninja-blue';
+
+  return (
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title={type === 'feature' ? 'Add to roadmap' : 'Add known issue'}
+      width="max-w-xl"
+      canDismiss={!dirty}
+      guardHint="This has unsaved changes."
+    >
+      <form onSubmit={save} className="space-y-4">
+        <div className="relative flex bg-ninja-bg border border-ninja-border rounded-2xl p-1">
+          <motion.div
+            className="absolute top-1 bottom-1 bg-white rounded-xl shadow-sm"
+            layout
+            transition={{ type: 'spring', damping: 28, stiffness: 380 }}
+            style={{ width: 'calc(50% - 4px)', left: type === 'bug' ? 4 : 'calc(50%)' }}
+          />
+          {[{ key: 'bug', label: 'Known issue' }, { key: 'feature', label: 'Roadmap' }].map(({ key, label: l }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => pickType(key)}
+              className={`relative z-10 flex-1 py-2 font-ninja font-bold text-sm rounded-xl transition-colors duration-200 ${type === key ? 'text-ninja-navy' : 'text-ninja-muted'}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <label htmlFor="new-item-title" className={label}>Title</label>
+          <input id="new-item-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required className={field} />
+        </div>
+
+        <div>
+          <label htmlFor="new-item-category" className={label}>Category</label>
+          <select id="new-item-category" value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
+            {(type === 'feature' ? FEATURE_CATEGORIES : BUG_CATEGORIES).map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <fieldset>
+          <legend className={label}>Status</legend>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {STATUS_ORDER.filter((s) => s !== 'new').map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                aria-pressed={status === s}
+                className={`flex items-center gap-2 rounded-lg border border-ninja-border px-3 py-2 font-ninja text-sm transition-colors ${
+                  status === s ? 'bg-ninja-blue/10 text-ninja-navy font-bold' : 'text-ninja-muted hover:text-ninja-navy hover:bg-ninja-bg'
+                }`}
+              >
+                <span aria-hidden="true" className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS[s].dot }} />
+                {STATUS[s].label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <div>
+          <label htmlFor="new-item-details" className={label}>
+            Details <span className="font-normal normal-case">(optional)</span>
+          </label>
+          <textarea id="new-item-details" value={details} onChange={(e) => setDetails(e.target.value)} rows={4} maxLength={2000} className={`${field} resize-none`} />
+        </div>
+
+        {error && <p className="font-ninja text-sm text-ninja-red">{error}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="border border-ninja-border text-ninja-muted font-ninja font-semibold text-sm px-4 py-2.5 rounded-xl hover:text-ninja-navy transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={saving || !title.trim()} className="bg-ninja-blue text-white font-ninja font-bold text-sm px-5 py-2.5 rounded-xl disabled:opacity-50 hover:bg-ninja-blue-hover transition-colors">
+            Add
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }

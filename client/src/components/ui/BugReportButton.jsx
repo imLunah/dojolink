@@ -6,27 +6,7 @@ import ModalPortal from './ModalPortal';
 import { TriangleAlertIcon, LightbulbIcon, ChevronLeftIcon } from 'lucide-react';
 import TicketStatus from '../shared/TicketStatus';
 import { SkeletonList } from './Skeleton';
-import { ticketName, shortDate } from '../../lib/tickets';
-
-const BUG_CATEGORIES = [
-  'Login Issue',
-  'Student Progress',
-  'Check-In Issue',
-  'Parent Portal',
-  'UI / Visual Bug',
-  'Slow Performance',
-  'Other',
-];
-
-const FEATURE_CATEGORIES = [
-  'Check-In',
-  'Student Progress',
-  'Clubs',
-  'Reports',
-  'Parent Portal',
-  'UI / Design',
-  'Other',
-];
+import { ticketName, shortDate, BUG_CATEGORIES, FEATURE_CATEGORIES } from '../../lib/tickets';
 
 // Per-type copy so one modal handles both bug reports and feature ideas.
 const COPY = {
