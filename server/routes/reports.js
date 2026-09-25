@@ -198,12 +198,16 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
         AND NOT EXISTS (SELECT 1 FROM club_attendees ca JOIN club_sessions cs ON ca.club_session_id = cs.id
                         WHERE ca.student_id = s.id AND cs.session_date >= $3::date - 29)
     `, [f.centerIds, f.program, centerToday()]),
+    // Stopped coming: came before (for the filtered program, if one is set)
+    // and has not been in since for ANYTHING. Moving from CREATE to Robotics
+    // is not stopping, so the "since" half never takes the program filter.
     pool.query(`
-      WITH v AS (${visits2})
+      WITH v AS (${visits2}),
+      anyv AS (${visitsSql({ from: '$5', to: '$3', program: 'NULL' })})
       SELECT COUNT(*)::int AS count FROM students s
       WHERE s.active = true
         AND EXISTS (SELECT 1 FROM v WHERE v.student_id = s.id AND v.day < $5::date)
-        AND NOT EXISTS (SELECT 1 FROM v WHERE v.student_id = s.id AND v.day >= $5::date)
+        AND NOT EXISTS (SELECT 1 FROM anyv WHERE anyv.student_id = s.id)
     `, base),
     dataSince(pool, f.centerIds),
     f.centerIds.length > 1 ? pool.query(`
@@ -405,16 +409,19 @@ router.get('/students', requireManager, handle('student report', async (req, res
       ORDER BY last_seen ASC NULLS FIRST, s.full_name
     `, [f.centerIds, f.program, centerToday()]),
     // Came in the comparison period, did not come in this one. A club counts as
-    // coming, the same as a board check-in.
+    // coming, the same as a board check-in. With a program filter, "came" is
+    // for that program but "not since" is for anything: a ninja who moved
+    // from CREATE to Robotics has not stopped coming.
     pool.query(`
-      WITH v AS (${visitsSql({ from: '$2', to: '$3', program: '$4' })})
+      WITH v AS (${visitsSql({ from: '$2', to: '$3', program: '$4' })}),
+      anyv AS (${visitsSql({ from: '$5', to: '$3', program: 'NULL' })})
       SELECT s.id, s.full_name, ${multi ? centersOf : 'NULL'} AS centers,
              COUNT(*)::int AS prev_visits,
              to_char(MAX(v.day), 'YYYY-MM-DD') AS last_seen
       FROM students s
       JOIN v ON v.student_id = s.id AND v.day < $5::date
       WHERE s.active = true
-        AND NOT EXISTS (SELECT 1 FROM v v2 WHERE v2.student_id = s.id AND v2.day >= $5::date)
+        AND NOT EXISTS (SELECT 1 FROM anyv WHERE anyv.student_id = s.id)
       GROUP BY s.id
       ORDER BY prev_visits DESC, s.full_name
     `, [f.centerIds, f.prevFrom, f.to, f.program, f.from]),
