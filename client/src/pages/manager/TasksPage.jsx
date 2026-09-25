@@ -288,8 +288,9 @@ export default function TasksPage({ mode = 'manager' }) {
 
   const openTask = useCallback((task) => {
     if (openEditor({ task }) === false) return;
-    if (!unreadByTask.has(task.id)) return;
-    setMentions((items) => items.filter((mention) => mention.task_id !== task.id));
+    if (unreadByTask.has(task.id)) setMentions((items) => items.filter((mention) => mention.task_id !== task.id));
+    // Always, not only with unread mentions: opening a card also reads the
+    // notification that you were assigned to it, which the board does not track.
     api.post(`/director-tasks/mentions/task/${task.id}/read`, {}).catch(loadMentions);
   }, [loadMentions, openEditor, unreadByTask]);
 

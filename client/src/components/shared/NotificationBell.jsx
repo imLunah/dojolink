@@ -9,7 +9,8 @@ import useLiveRefresh from '../../lib/useLiveRefresh';
 import { SkeletonList } from '../ui/Skeleton';
 
 // The bell: every place somebody @mentioned you, whether on a task, a ninja's
-// log or a club session, with a red count of what you have not opened.
+// log or a club session, and every task somebody put you on, with a red count
+// of what you have not opened.
 // Pressing one marks it read and takes you to it.
 //
 // The list comes from /api/notifications, which reads the mention rows each
@@ -35,12 +36,17 @@ function ago(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// What it was on, in words.
-function placeOf(n) {
-  if (n.kind === 'task') return `on the task "${n.place}"`;
-  if (n.kind === 'log') return `on ${n.place}'s log`;
-  return `on a ${n.place} session`;
+// What happened, after the person's name.
+function whatOf(n) {
+  if (n.kind === 'assign') return `assigned you to the task "${n.place}"`;
+  if (n.kind === 'task') return `mentioned you on the task "${n.place}"`;
+  if (n.kind === 'log') return `mentioned you on ${n.place}'s log`;
+  return `mentioned you on a ${n.place} session`;
 }
+
+// The preview reads as a sentence, not as markup: "@John Dang" is how a
+// mention is written, and the line above already says who was mentioned.
+const plain = (body) => (body || '').replace(/(^|\s)@(?=\S)/g, '$1');
 
 export default function NotificationBell({ className = '' }) {
   const { user, viewAs } = useAuth();
@@ -97,7 +103,7 @@ export default function NotificationBell({ className = '' }) {
   }, [open]);
 
   const linkFor = (n) => {
-    if (n.kind === 'task') return `${isManager ? '/manager/tasks' : '/sensei/tasks'}?task=${n.task_id}`;
+    if (n.kind === 'task' || n.kind === 'assign') return `${isManager ? '/manager/tasks' : '/sensei/tasks'}?task=${n.task_id}`;
     if (n.kind === 'log') return `/manager/students/${n.student_id}#log-${n.log_id}`;
     return `/clubs/${toSlug(n.club_name)}?session=${n.session_id}`;
   };
@@ -192,9 +198,11 @@ export default function NotificationBell({ className = '' }) {
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block font-ninja text-sm text-ninja-navy leading-snug">
-                      <span className="font-bold">{n.author_name || 'Someone'}</span> mentioned you {placeOf(n)}
+                      <span className="font-bold">{n.author_name || 'Someone'}</span> {whatOf(n)}
                     </span>
-                    <span className="block font-ninja text-xs text-ninja-muted mt-0.5 line-clamp-2 break-words">{n.body}</span>
+                    {n.body && (
+                      <span className="block font-ninja text-xs text-ninja-muted mt-0.5 line-clamp-2 break-words">{plain(n.body)}</span>
+                    )}
                     <span className="block font-ninja text-[11px] text-ninja-muted mt-1">{ago(n.created_at)}</span>
                   </span>
                   {!n.read_at && (

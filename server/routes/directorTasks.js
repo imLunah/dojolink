@@ -92,13 +92,22 @@ async function readAssignees(pool, body, locationId) {
   return { ids, legacyId: ids[0], center: false };
 }
 
-async function replaceAssignees(client, taskId, ids) {
-  await client.query('DELETE FROM director_task_assignees WHERE task_id = $1', [taskId]);
+// Sets who is on a card by difference, not by wiping and rewriting: a row is
+// also a notification ("Sam assigned you"), so somebody already on the card
+// must keep their row, and with it whether they have read it, or every edit
+// to the card would notify its people again. Only the newly added get a fresh
+// unread row, stamped with who added them; adding yourself is born read.
+async function replaceAssignees(client, taskId, ids, actorId) {
+  await client.query(
+    'DELETE FROM director_task_assignees WHERE task_id = $1 AND NOT (user_id = ANY($2::int[]))',
+    [taskId, ids]
+  );
   if (ids.length === 0) return;
   await client.query(
-    `INSERT INTO director_task_assignees (task_id, user_id)
-     SELECT $1, unnest($2::int[])`,
-    [taskId, ids]
+    `INSERT INTO director_task_assignees (task_id, user_id, assigned_by, read_at)
+     SELECT $1, uid, $3, CASE WHEN uid = $3 THEN now() END FROM unnest($2::int[]) AS uid
+     ON CONFLICT (task_id, user_id) DO NOTHING`,
+    [taskId, ids, actorId]
   );
 }
 
@@ -346,7 +355,7 @@ router.post('/', requireManager, requireOwnLocation, async (req, res) => {
         req.session.userId,
       ]
     );
-    if (!assignee.skip) await replaceAssignees(client, rows[0].id, assignee.ids);
+    if (!assignee.skip) await replaceAssignees(client, rows[0].id, assignee.ids, req.session.userId);
     // Re-read through SELECT so the response carries created_by_name and the
     // to_char'd date, exactly like the list endpoint.
     const { rows: full } = await client.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
@@ -668,7 +677,7 @@ router.patch('/:id', requireSensei, requireOwnLocation, async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Task not found' });
       }
-      if (!assignee.skip) await replaceAssignees(client, rows[0].id, assignee.ids);
+      if (!assignee.skip) await replaceAssignees(client, rows[0].id, assignee.ids, req.session.userId);
       const { rows: full } = await client.query(`${SELECT} WHERE t.id = $1`, [rows[0].id]);
       await client.query('COMMIT');
       res.json(full[0]);
@@ -788,6 +797,14 @@ router.get('/mentions', requireSensei, async (req, res) => {
 router.post('/mentions/task/:id/read', requireSensei, requireOwnLocation, async (req, res) => {
   const pool = req.app.get('db');
   try {
+    // Being assigned to the card is read by opening it, too.
+    await pool.query(
+      `UPDATE director_task_assignees a SET read_at = now()
+       FROM director_tasks t
+       WHERE a.user_id = $1 AND a.read_at IS NULL AND a.task_id = $2
+         AND t.id = a.task_id AND t.location_id = $3`,
+      [req.session.userId, req.params.id, req.session.activeLocationId]
+    );
     const { rows } = await pool.query(
       `UPDATE director_task_comment_mentions m
        SET read_at = COALESCE(m.read_at, now())
