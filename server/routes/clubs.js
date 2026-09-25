@@ -48,7 +48,7 @@ const sessionSelect = (userParam) => `
       '[]'::json
     ) AS attendees,
     COALESCE(
-      (SELECT json_agg(json_build_object('id', c.id, 'user_name', c.user_name, 'user_pic', cu.profile_pic_url, 'body', c.body, 'created_at', c.created_at) ORDER BY c.created_at ASC)
+      (SELECT json_agg(json_build_object('id', c.id, 'user_id', c.user_id, 'user_name', c.user_name, 'user_pic', cu.profile_pic_url, 'body', c.body, 'created_at', c.created_at) ORDER BY c.created_at ASC)
        FROM club_session_comments c LEFT JOIN users cu ON cu.id = c.user_id WHERE c.session_id = cs.id),
       '[]'::json
     ) AS comments,
@@ -604,6 +604,58 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
     res.status(201).json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to save comment' });
+  }
+});
+
+// Who may change a reply. Editing is the author's alone (words are put in
+// their name); deleting is also open to a director, who keeps the threads at
+// their center clean. Admin passes both, as everywhere.
+const mayEditComment = (session, authorId) =>
+  session.role === 'admin' || (authorId != null && authorId === session.userId);
+const mayDeleteComment = (session, authorId) =>
+  mayEditComment(session, authorId) || session.role === 'manager';
+
+// PATCH /api/clubs/comments/:commentId — the author rewrites their reply.
+router.patch('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const { body } = req.body;
+  if (body != null && typeof body !== 'string') return res.status(400).json({ error: 'Invalid comment' });
+  if (!body?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
+  if (body.length > MAX_COMMENT) {
+    return res.status(400).json({ error: `Comment too long (max ${MAX_COMMENT} characters)` });
+  }
+  try {
+    const { rows: found } = await pool.query(`SELECT c.id, c.user_id FROM club_session_comments c
+       JOIN club_sessions cs ON cs.id = c.session_id
+       WHERE c.id = $1 AND cs.location_id = $2`, [req.params.commentId, req.session.activeLocationId]);
+    if (!found[0]) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayEditComment(req.session, found[0].user_id)) return res.status(403).json({ error: 'Only the author can edit this reply' });
+    const { rows } = await pool.query(
+      `WITH upd AS (UPDATE club_session_comments SET body = $2 WHERE id = $1 RETURNING *)
+       SELECT upd.*, u.profile_pic_url AS user_pic FROM upd LEFT JOIN users u ON u.id = upd.user_id`,
+      [req.params.commentId, body.trim()]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Club session comment edit error:', err);
+    res.status(500).json({ error: 'Failed to save comment' });
+  }
+});
+
+// DELETE /api/clubs/comments/:commentId — the author, a director or an admin.
+router.delete('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows: found } = await pool.query(`SELECT c.id, c.user_id FROM club_session_comments c
+       JOIN club_sessions cs ON cs.id = c.session_id
+       WHERE c.id = $1 AND cs.location_id = $2`, [req.params.commentId, req.session.activeLocationId]);
+    if (!found[0]) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayDeleteComment(req.session, found[0].user_id)) return res.status(403).json({ error: 'You cannot delete this reply' });
+    await pool.query('DELETE FROM club_session_comments WHERE id = $1', [req.params.commentId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Club session comment delete error:', err);
+    res.status(500).json({ error: 'Failed to delete comment' });
   }
 });
 

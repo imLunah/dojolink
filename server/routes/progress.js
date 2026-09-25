@@ -531,6 +531,58 @@ router.post('/:id/comments', requireSensei, requireOwnLocation, async (req, res)
   }
 });
 
+// Who may change a reply. Editing is the author's alone (words are put in
+// their name); deleting is also open to a director, who keeps the threads at
+// their center clean. Admin passes both, as everywhere.
+const mayEditComment = (session, authorId) =>
+  session.role === 'admin' || (authorId != null && authorId === session.userId);
+const mayDeleteComment = (session, authorId) =>
+  mayEditComment(session, authorId) || session.role === 'manager';
+
+// PATCH /api/progress/comments/:commentId — the author rewrites their reply.
+router.patch('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  const { body } = req.body;
+  if (body != null && typeof body !== 'string') return res.status(400).json({ error: 'Invalid comment' });
+  if (!body?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
+  if (body.length > MAX_COMMENT) {
+    return res.status(400).json({ error: `Comment too long (max ${MAX_COMMENT} characters)` });
+  }
+  try {
+    const { rows: found } = await pool.query(`SELECT c.id, c.user_id FROM progress_log_comments c
+       JOIN progress_logs pl ON pl.id = c.log_id
+       WHERE c.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = pl.student_id AND sl_m.location_id = $2)`, [req.params.commentId, req.session.activeLocationId]);
+    if (!found[0]) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayEditComment(req.session, found[0].user_id)) return res.status(403).json({ error: 'Only the author can edit this reply' });
+    const { rows } = await pool.query(
+      `WITH upd AS (UPDATE progress_log_comments SET body = $2 WHERE id = $1 RETURNING *)
+       SELECT upd.*, u.profile_pic_url AS user_pic FROM upd LEFT JOIN users u ON u.id = upd.user_id`,
+      [req.params.commentId, body.trim()]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Progress log comment edit error:', err);
+    res.status(500).json({ error: 'Failed to save comment' });
+  }
+});
+
+// DELETE /api/progress/comments/:commentId — the author, a director or an admin.
+router.delete('/comments/:commentId', requireSensei, requireOwnLocation, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows: found } = await pool.query(`SELECT c.id, c.user_id FROM progress_log_comments c
+       JOIN progress_logs pl ON pl.id = c.log_id
+       WHERE c.id = $1 AND EXISTS (SELECT 1 FROM student_locations sl_m WHERE sl_m.student_id = pl.student_id AND sl_m.location_id = $2)`, [req.params.commentId, req.session.activeLocationId]);
+    if (!found[0]) return res.status(404).json({ error: 'Comment not found' });
+    if (!mayDeleteComment(req.session, found[0].user_id)) return res.status(403).json({ error: 'You cannot delete this reply' });
+    await pool.query('DELETE FROM progress_log_comments WHERE id = $1', [req.params.commentId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Progress log comment delete error:', err);
+    res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
 // POST /api/progress/:id/reactions — toggle one emoji on a log entry.
 // requireOwnLocation is load-bearing for exactly the reason the comment route
 // above spells out: activeLocationId picks the target, it does not authorize

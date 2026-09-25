@@ -284,7 +284,20 @@ function SessionQuickView({ session, memberCount, isReadOnly, onClose, onLogSess
 
           {comments.length > 0 && (
             <div className="space-y-3 border-t border-ninja-border pt-4">
-              {comments.map((c) => <CommentMessage key={c.id} comment={c} />)}
+              {comments.map((c) => (
+                <CommentMessage
+                  key={c.id}
+                  comment={c}
+                  onEdit={async (body) => {
+                    const saved = await api.patch(`/clubs/comments/${c.id}`, { body });
+                    onSessionChanged?.(session.id, { comments: comments.map((x) => (x.id === c.id ? saved : x)) });
+                  }}
+                  onDelete={async () => {
+                    await api.delete(`/clubs/comments/${c.id}`);
+                    onSessionChanged?.(session.id, { comments: comments.filter((x) => x.id !== c.id) });
+                  }}
+                />
+              ))}
             </div>
           )}
         </div>

@@ -410,6 +410,12 @@ textarea:focus-visible {
      the row and comes back. Three deep, like `.group:hover .row-actions`, and
      after it, so source order settles the tie. */
   .group .row-actions.row-actions-dismissed { opacity: 0; pointer-events: none; }
+  /* A reply's own menu, the same way: out of sight until that reply is pointed
+     at, held up while focused or open. */
+  .comment-actions { opacity: 0; transition: opacity 150ms ease; }
+  .comment:hover .comment-actions,
+  .comment-actions:focus-within,
+  .comment-actions:has([aria-expanded='true']) { opacity: 1; }
 }
 
 /* ── Interaction feedback (Emil Kowalski design-eng) ──

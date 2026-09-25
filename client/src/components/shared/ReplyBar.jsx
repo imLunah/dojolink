@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { SmileIcon, SendHorizontalIcon } from 'lucide-react';
 import { EmojiPickerButton } from '../ui/Reactions';
 
@@ -9,12 +9,19 @@ import { EmojiPickerButton } from '../ui/Reactions';
 //
 // `onSend(body)` does the request and throws to report a failure; the bar keeps
 // what was typed until it succeeds.
-export default function ReplyBar({ onSend, onClose, placeholder = 'Write a reply…', className = '' }) {
-  const [body, setBody] = useState('');
+// `initialValue` opens it on words already written, which is how a reply is
+// edited: the same bar, holding the reply, caret at the end.
+export default function ReplyBar({ onSend, onClose, placeholder = 'Write a reply…', className = '', initialValue = '' }) {
+  const [body, setBody] = useState(initialValue);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
   const ready = body.trim() && !saving;
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el && initialValue) el.setSelectionRange(initialValue.length, initialValue.length);
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();

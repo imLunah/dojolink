@@ -308,6 +308,17 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
   const multiProgram = programs.length > 1;
   const [filter, setFilter] = useState('');
   const [localComments, setLocalComments] = useState({});
+  // Edits and deletes to replies, by reply id: the new row, or null once gone.
+  // Applied over both the loaded thread and the replies added this visit.
+  const [commentPatches, setCommentPatches] = useState({});
+  const editComment = async (id, body) => {
+    const saved = await api.patch(`/progress/comments/${id}`, { body });
+    setCommentPatches((prev) => ({ ...prev, [id]: saved }));
+  };
+  const deleteComment = async (id) => {
+    await api.delete(`/progress/comments/${id}`);
+    setCommentPatches((prev) => ({ ...prev, [id]: null }));
+  };
 
   const [editingId, setEditingId] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -466,7 +477,9 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
                   band an entry occupies rather than stopping at its text. */}
               <div className="pb-1">
                 {dayLogs.map((log, i) => {
-                  const allComments = [...(log.comments || []), ...(localComments[log.id] || [])];
+                  const allComments = [...(log.comments || []), ...(localComments[log.id] || [])]
+                    .map((c) => (c.id in commentPatches ? commentPatches[c.id] : c))
+                    .filter(Boolean);
                   const edge = edges.get(log.id);
                   const isEditing = editingId === log.id;
                   const isConfirmingDelete = confirmDeleteId === log.id;
@@ -605,7 +618,14 @@ export default function ProgressHistory({ logs = [], clubs = [], enrolledProgram
 
                       {allComments.length > 0 && (
                         <div className="mt-3 space-y-3 border-t border-ninja-border pt-3">
-                          {allComments.map((c) => <CommentMessage key={c.id} comment={c} />)}
+                          {allComments.map((c) => (
+                            <CommentMessage
+                              key={c.id}
+                              comment={c}
+                              onEdit={(body) => editComment(c.id, body)}
+                              onDelete={() => deleteComment(c.id)}
+                            />
+                          ))}
                         </div>
                       )}
                       {!isReadOnly && isReplying && (
