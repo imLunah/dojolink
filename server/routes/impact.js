@@ -3,7 +3,7 @@ const router = express.Router();
 const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const impact = require('../lib/impact');
 const { accessTokenFor } = require('../lib/impactSession');
-const { recordScanIns } = require('../lib/impactRecord');
+const { recordScanIns, dojoBelts } = require('../lib/impactRecord');
 const { encryptCookie, isConfigured } = require('../lib/mystudio');
 
 // Experimental: the Live Ninjas board, read out of IMPACT.
@@ -158,13 +158,27 @@ const liveCache = new Map();
 const RECORD_EVERY_MS = 60 * 1000;
 const recordedAt = new Map();
 
-function liveBody(conn, rows) {
+// Belts for a set of IMPACT accounts, from DojoLink. A failed lookup costs the
+// belt art, never the board.
+function beltsFor(pool, locationId, people) {
+  return dojoBelts(pool, locationId, people).catch((err) => {
+    console.error('IMPACT belt lookup failed:', err.message);
+    return new Map();
+  });
+}
+
+async function liveBody(pool, conn, rows) {
+  const belts = await beltsFor(
+    pool,
+    conn.location_id,
+    rows.map((r) => ({ user: String(r.userGuid), name: `${r.firstName || ''} ${r.lastName || ''}` }))
+  );
   return {
     connected: true,
     status: 'connected',
     facilityName: conn.facility_name,
     fetchedAt: new Date().toISOString(),
-    ...impact.boardLists(rows),
+    ...impact.boardLists(rows, belts),
   };
 }
 
@@ -212,7 +226,7 @@ router.get('/live', requireSensei, async (req, res) => {
     pool
       .query('UPDATE impact_connections SET last_synced_at = now() WHERE id = $1', [conn.id])
       .catch(() => {});
-    const body = liveBody(conn, rows);
+    const body = await liveBody(pool, conn, rows);
     liveCache.set(locationId, { at: Date.now(), body });
     res.json(body);
   } catch (err) {
@@ -246,13 +260,19 @@ router.get('/ninjas', requireSensei, async (req, res) => {
       const prev = today.get(String(r.userGuid));
       if (!prev || new Date(n.startedAt) > new Date(prev.startedAt)) today.set(String(r.userGuid), n);
     }
+    const belts = await beltsFor(
+      pool,
+      conn.location_id,
+      found.ninjas.map((n) => ({ user: n.guid, name: n.fullName }))
+    );
     res.json({
       hasMore: found.hasMore,
-      ninjas: found.ninjas.map(({ guid, ...n }) => {
+      ninjas: found.ninjas.map(({ guid, fullName, ...n }) => {
         const scan = today.get(guid);
         return {
           ...n,
           id: guid,
+          belt: belts.get(guid) || null,
           program: scan ? scan.program : null,
           today: scan
             ? {
@@ -291,7 +311,7 @@ function boardAction(act) {
       liveCache.delete(locationId);
       const fresh = await readScanIns(pool, conn);
       await recordScanIns(pool, locationId, fresh).catch(() => {});
-      res.json(liveBody(conn, fresh));
+      res.json(await liveBody(pool, conn, fresh));
     } catch (err) {
       if (err instanceof impact.ImpactRefused) return res.status(400).json({ error: err.message });
       if (err instanceof impact.ImpactAuthError) {

@@ -295,8 +295,10 @@ function toMinutes(value, fallback) {
 // One scan-in, cut down at the boundary. The upstream row carries the ninja's
 // IMPACT username, account guid and full surname; none of it is needed to draw
 // the board and none of it leaves this file. The board shows a first name and
-// an initial, as IMPACT's own does.
-function normalizeScanIn(row) {
+// an initial, as IMPACT's own does. The belt comes from `belts` (IMPACT
+// account -> DojoLink belt, see dojoBelts), never from IMPACT's beltName,
+// which is not kept up.
+function normalizeScanIn(row, belts) {
   const first = String(row.firstName || '').trim();
   const last = String(row.lastName || '').trim();
   const program = String(row.programTypeName || '').trim();
@@ -307,7 +309,7 @@ function normalizeScanIn(row) {
     firstName: first,
     lastInitial: last ? last[0].toUpperCase() : '',
     program: /^jr$/i.test(program) ? 'JR' : /^create$/i.test(program) ? 'CREATE' : program || null,
-    belt: String(row.beltName || '').trim() || null,
+    belt: (belts && belts.get(String(row.userGuid))) || null,
     startedAt: row.dateCreated || null,
     sessionMinutes,
     defaultMinutes,
@@ -355,15 +357,16 @@ const byStart = (a, b) => new Date(a.startedAt) - new Date(b.startedAt);
 // The board in IMPACT's three lists. Hidden is how IMPACT marks an account
 // that is not a ninja at a desk (set on the child's record), so hidden rows
 // never reach the board or the removed list, only their own dropdown.
-function boardLists(rows) {
+function boardLists(rows, belts) {
   const shown = rows.filter((r) => !r.hideFromDashboard);
+  const norm = (r) => normalizeScanIn(r, belts);
   return {
-    ninjas: shown.filter((r) => !r.dateTimeRemoved).map(normalizeScanIn).sort(byStart),
+    ninjas: shown.filter((r) => !r.dateTimeRemoved).map(norm).sort(byStart),
     removed: shown
       .filter((r) => r.dateTimeRemoved)
-      .map(normalizeScanIn)
+      .map(norm)
       .sort((a, b) => new Date(b.removedAt) - new Date(a.removedAt)),
-    hidden: rows.filter((r) => r.hideFromDashboard && !r.dateTimeRemoved).map(normalizeScanIn).sort(byStart),
+    hidden: rows.filter((r) => r.hideFromDashboard && !r.dateTimeRemoved).map(norm).sort(byStart),
   };
 }
 
@@ -378,8 +381,9 @@ async function getNinjasInDojo(accessToken, facilityGuid) {
 // IMPACT's "View All Ninjas" list: every ninja at the center, searchable.
 // It is a read, though IMPACT sends it as a POST. The upstream rows are
 // families carrying the parent's name and email; only the children leave this
-// function, as first name, last initial, belt and IMPACT's id for them (which
-// is the userGuid on a scan-in, so the page can say who is here today).
+// function, as first name, last initial and IMPACT's id for them (which is
+// the userGuid on a scan-in, so the page can say who is here today), plus the
+// full name, which the route uses to find the ninja in DojoLink and then drops.
 // Paged by family, as IMPACT pages it.
 async function searchNinjas(accessToken, facilityGuid, { search = '', page = 1, pageSize = 40 } = {}) {
   const res = await timedFetch(`${API}/cncommon/api/v1/center/customersearch`, {
@@ -400,7 +404,7 @@ async function searchNinjas(accessToken, facilityGuid, { search = '', page = 1, 
         guid: String(m.guid),
         firstName: String(m.firstName || '').trim(),
         lastInitial: last ? last[0].toUpperCase() : '',
-        belt: String(m.beltName || '').trim() || null,
+        fullName: `${String(m.firstName || '').trim()} ${last}`,
         hidden: Boolean(m.hideFromDashboard),
       };
     });

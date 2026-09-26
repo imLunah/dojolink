@@ -28,12 +28,12 @@ function minutesOf(value) {
   return Number.isFinite(n) && n >= 0 && n <= 600 ? n : 60;
 }
 
-async function recordScanIns(pool, locationId, rows) {
-  // Hidden accounts are not ninjas at a desk (IMPACT's own meaning of hidden).
-  const usable = rows.filter((r) => r.userGuid && !r.hideFromDashboard && !Number.isNaN(new Date(r.dateCreated).getTime()));
-  if (!usable.length) return 0;
-
-  const userIds = [...new Set(usable.map((r) => String(r.userGuid)))];
+// IMPACT account -> DojoLink ninja, for a list of { user, name }. A match
+// already recorded for that account wins; otherwise the full name has to match
+// exactly one active ninja at the center. Unmatched accounts are left out.
+async function matchStudents(pool, locationId, people) {
+  if (!people.length) return new Map();
+  const userIds = [...new Set(people.map((p) => p.user))];
   const [roster, known] = await Promise.all([
     pool.query(
       `SELECT s.id, s.full_name
@@ -58,10 +58,47 @@ async function recordScanIns(pool, locationId, rows) {
   }
   const byUser = new Map(known.rows.map((r) => [r.impact_user_id, r.student_id]));
 
+  const out = new Map();
+  for (const p of people) {
+    const id = byUser.get(p.user) ?? byName.get(nameKey(p.name)) ?? null;
+    if (id != null) out.set(p.user, id);
+  }
+  return out;
+}
+
+// IMPACT account -> the ninja's CREATE belt as DojoLink has it. IMPACT's own
+// beltName is not kept up (it reads White for every ninja at Yorba Linda), so
+// the board draws the belt senseis actually log against. An account with no
+// match, or a ninja not in CREATE, gets no belt rather than IMPACT's guess.
+async function dojoBelts(pool, locationId, people) {
+  const match = await matchStudents(pool, locationId, people);
+  if (!match.size) return new Map();
+  const { rows } = await pool.query(
+    `SELECT student_id, belt_level FROM student_programs
+      WHERE program = 'CREATE' AND belt_level IS NOT NULL AND student_id = ANY($1::int[])`,
+    [[...new Set(match.values())]]
+  );
+  const belt = new Map(rows.map((r) => [r.student_id, r.belt_level]));
+  const out = new Map();
+  for (const [user, id] of match) if (belt.has(id)) out.set(user, belt.get(id));
+  return out;
+}
+
+async function recordScanIns(pool, locationId, rows) {
+  // Hidden accounts are not ninjas at a desk (IMPACT's own meaning of hidden).
+  const usable = rows.filter((r) => r.userGuid && !r.hideFromDashboard && !Number.isNaN(new Date(r.dateCreated).getTime()));
+  if (!usable.length) return 0;
+
+  const match = await matchStudents(
+    pool,
+    locationId,
+    usable.map((r) => ({ user: String(r.userGuid), name: `${r.firstName || ''} ${r.lastName || ''}` }))
+  );
+
   const cols = { id: [], user: [], student: [], program: [], started: [], minutes: [], removed: [] };
   for (const r of usable) {
     const user = String(r.userGuid);
-    const matched = byUser.get(user) ?? byName.get(nameKey(`${r.firstName || ''} ${r.lastName || ''}`)) ?? null;
+    const matched = match.get(user) ?? null;
     cols.id.push(String(r.key));
     cols.user.push(user);
     cols.student.push(matched);
@@ -91,4 +128,4 @@ async function recordScanIns(pool, locationId, rows) {
   return usable.length;
 }
 
-module.exports = { recordScanIns };
+module.exports = { recordScanIns, dojoBelts };
