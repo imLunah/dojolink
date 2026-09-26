@@ -232,7 +232,7 @@ export default function LiveNinjasPage() {
 
       {live && (
         <div className="fixed bottom-5 inset-x-0 z-20 flex justify-center px-4">
-          <StatusBar location={user?.activeLocation?.name || data.facilityName} online={ninjas.length} almostDone={almostDone} />
+          <StatusBar location={data.facilityName || user?.activeLocation?.name} online={ninjas.length} almostDone={almostDone} />
         </div>
       )}
     </div>

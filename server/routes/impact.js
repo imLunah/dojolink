@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireManager, requireSensei, requireOwnLocation } = require('../middleware/auth');
 const impact = require('../lib/impact');
 const { accessTokenFor } = require('../lib/impactSession');
+const { recordScanIns } = require('../lib/impactRecord');
 const { encryptCookie, isConfigured } = require('../lib/mystudio');
 
 // Experimental: the Live Ninjas board, read out of IMPACT.
@@ -150,6 +151,22 @@ router.delete('/connect', requireManager, requireOwnLocation, async (req, res) =
 // them rather than three. Per lambda instance, which is enough.
 const LIVE_TTL_MS = 10 * 1000;
 const liveCache = new Map();
+const RECORD_EVERY_MS = 60 * 1000;
+const recordedAt = new Map();
+
+// Today's scan-ins for a connection, renewing the sign-in if it has to.
+async function readScanIns(pool, conn) {
+  const token = await accessTokenFor(pool, conn);
+  try {
+    return await impact.getScanIns(token, conn.facility_guid);
+  } catch (err) {
+    // A token IMPACT turned away before its stated expiry: renew once and
+    // ask again before calling the connection dead. Only the read gets this
+    // second go; a refused password never does.
+    if (!(err instanceof impact.ImpactAuthError)) throw err;
+    return impact.getScanIns(await accessTokenFor(pool, conn, { force: true }), conn.facility_guid);
+  }
+}
 
 router.get('/live', requireSensei, async (req, res) => {
   const pool = req.app.get('db');
@@ -168,20 +185,17 @@ router.get('/live', requireSensei, async (req, res) => {
   if (!conn) return res.json({ connected: false, ninjas: [] });
 
   try {
-    const token = await accessTokenFor(pool, conn);
-    let ninjas;
-    try {
-      ninjas = await impact.getNinjasInDojo(token, conn.facility_guid);
-    } catch (err) {
-      // A token IMPACT turned away before its stated expiry: renew once and
-      // ask again before calling the connection dead. Only the board read
-      // gets this second go; a refused password never does.
-      if (!(err instanceof impact.ImpactAuthError)) throw err;
-      ninjas = await impact.getNinjasInDojo(
-        await accessTokenFor(pool, conn, { force: true }),
-        conn.facility_guid
-      );
+    const rows = await readScanIns(pool, conn);
+    // Every poll is also a chance to keep today's scan-ins for Reports. Once a
+    // minute per center is plenty: the nightly capture writes the whole day
+    // anyway, this only makes today's numbers right before then.
+    if (Date.now() - (recordedAt.get(locationId) || 0) > RECORD_EVERY_MS) {
+      recordedAt.set(locationId, Date.now());
+      await recordScanIns(pool, locationId, rows).catch((err) => {
+        console.error('IMPACT record failed:', err.message);
+      });
     }
+    const ninjas = impact.liveNinjas(rows);
     pool
       .query('UPDATE impact_connections SET last_synced_at = now() WHERE id = $1', [conn.id])
       .catch(() => {});
@@ -201,6 +215,33 @@ router.get('/live', requireSensei, async (req, res) => {
     console.error('IMPACT live failed:', err.message);
     res.status(502).json({ error: 'Could not reach IMPACT.' });
   }
+});
+
+// GET /api/impact/capture — the nightly job. Vercel Cron calls it after the
+// centers close and it writes each connected center's whole day, so Reports
+// has the day even where nobody opened the board. Not a session route: it is
+// authorized by CRON_SECRET, which Vercel sends as a bearer token, and it does
+// nothing at all when that variable is unset.
+router.get('/capture', async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || req.get('authorization') !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const pool = req.app.get('db');
+  const { rows: conns } = await pool.query(
+    `SELECT * FROM impact_connections WHERE status = 'connected'`
+  );
+  const results = [];
+  for (const conn of conns) {
+    try {
+      const count = await recordScanIns(pool, conn.location_id, await readScanIns(pool, conn));
+      results.push({ location: conn.location_id, recorded: count });
+    } catch (err) {
+      console.error(`IMPACT capture failed for location ${conn.location_id}:`, err.message);
+      results.push({ location: conn.location_id, error: err.name });
+    }
+  }
+  res.json({ results });
 });
 
 module.exports = router;

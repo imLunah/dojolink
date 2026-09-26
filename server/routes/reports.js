@@ -243,6 +243,15 @@ router.get('/summary', requireManager, handle('report summary', async (req, res)
 // clipped to opening hours. There is no check-out, so the hour is an
 // assumption, and the page says so.
 //
+// Where IMPACT recorded the ninja that day (a scan-in at a dojo computer, kept
+// in impact_scan_ins since 25 Sep 2026), the visit is the real one instead:
+// from the scan-in until a sensei removed them, or until the session ran out
+// if nobody did. A removal is trusted up to an hour past the session, so a
+// ninja left on IMPACT's board until close does not stay all evening. A
+// scan-in removed within five minutes is a wrong login and is skipped. Only
+// JR and CREATE ninjas scan in, so everyone else keeps the assumed hour, and a
+// ninja IMPACT has for the day is not counted a second time from the board.
+//
 // Per hour the answer is two numbers:
 //   arrivals — visits that began in that clock hour. A 5:35 arrival is 5-6 PM.
 //   peak     — the most ninjas in the room at once during the hour, read off
@@ -294,7 +303,20 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
   `, range);
 
   const { rows } = await pool.query(`
-    WITH checkins AS (
+    WITH impact AS (
+      SELECT si.student_id, si.session_date,
+             COALESCE(si.student_id::text, 'impact:' || si.impact_user_id) AS who,
+             si.started_at AT TIME ZONE $2 AS t0,
+             LEAST(COALESCE(si.removed_at, si.started_at + si.session_minutes * INTERVAL '1 minute'),
+                   si.started_at + (si.session_minutes + 60) * INTERVAL '1 minute') AT TIME ZONE $2 AS t1,
+             (si.student_id IS NOT NULL AND EXISTS (SELECT 1 FROM student_support ss WHERE ss.student_id = si.student_id)) AS support
+      FROM impact_scan_ins si
+      WHERE ${where.replace(/da\./g, 'si.')}
+        AND si.location_id = ANY($1::int[])
+        AND ($4::text IS NULL OR si.program = $4::text)
+        AND COALESCE(si.removed_at, 'infinity') > si.started_at + INTERVAL '5 minutes'
+    ),
+    checkins AS (
       SELECT da.student_id, da.session_date, da.checked_in_at AT TIME ZONE $2 AS t,
              EXISTS (SELECT 1 FROM student_support ss WHERE ss.student_id = da.student_id) AS support
       FROM daily_assignments da
@@ -302,6 +324,7 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
         AND ($4::text IS NULL OR da.program = $4::text)
         AND (da.checked_in_at AT TIME ZONE $2)::date = da.session_date
         AND ${inScope('da.student_id')}
+        AND NOT EXISTS (SELECT 1 FROM impact i WHERE i.student_id = da.student_id AND i.session_date = da.session_date)
     ),
     raw AS (
       SELECT session_date, BOOL_OR(support) AS support, MIN(t) AS arrived,
@@ -310,6 +333,12 @@ router.get('/checkins-by-hour', requireManager, handle('check-ins by hour', asyn
              session_date + ${openHourSql('session_date', 1)} * INTERVAL '1 hour' AS closes
       FROM checkins
       GROUP BY student_id, session_date
+      UNION ALL
+      SELECT session_date, BOOL_OR(support), MIN(t0), MAX(t1),
+             session_date + ${openHourSql('session_date', 0)} * INTERVAL '1 hour',
+             session_date + ${openHourSql('session_date', 1)} * INTERVAL '1 hour'
+      FROM impact
+      GROUP BY who, session_date
     ),
     visits AS (
       SELECT session_date, support, arrived, opens, closes,

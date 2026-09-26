@@ -235,11 +235,11 @@ function normalizeName(value) {
   return String(value || '').toLowerCase().replace(/^code ninjas\s*/, '').replace(/[^a-z0-9]/g, '');
 }
 
-// Which of the account's centers is this DojoLink location. One center needs
-// no matching; several are matched on name, then on the slug
-// ("cn-ca-yorba-linda"), and anything unclear is left for the caller to refuse.
+// Which of the account's centers is this DojoLink location, matched on name
+// then on the slug ("cn-ca-yorba-linda"). Even an account with one center has
+// to match: a Fullerton director signing in with a Yorba Linda account would
+// otherwise put Yorba Linda's ninjas on Fullerton's board.
 function pickFacility(facilities, locationName) {
-  if (facilities.length === 1) return facilities[0];
   const want = normalizeName(locationName);
   if (!want) return null;
   const hits = facilities.filter(
@@ -292,17 +292,29 @@ function normalizeScanIn(row) {
   };
 }
 
-// Who is in the dojo now: scan-ins nobody has removed or hidden, oldest first.
-async function getNinjasInDojo(accessToken, facilityGuid) {
+// Today's scan-ins at a center, as IMPACT has them: everyone who logged in
+// today, removed or not. Rows a sensei hid from IMPACT's dashboard are left
+// out everywhere, since hiding is how IMPACT marks a scan-in as not a ninja.
+// Raw rows: they carry names and must not leave the server as they are.
+async function getScanIns(accessToken, facilityGuid) {
   const data = await apiGet(
     accessToken,
     `cncommon/api/v1/center/ninjasindojo/${encodeURIComponent(facilityGuid)}/${pacificOffsetMinutes()}`
   );
   const rows = Array.isArray(data && data.scanIns) ? data.scanIns : [];
+  return rows.filter((r) => r && r.key != null && r.dateCreated && !r.hideFromDashboard);
+}
+
+// Who is in the dojo now: nobody has removed them yet. Oldest first.
+function liveNinjas(rows) {
   return rows
-    .filter((r) => r && !r.dateTimeRemoved && !r.hideFromDashboard && r.dateCreated)
+    .filter((r) => !r.dateTimeRemoved)
     .map(normalizeScanIn)
     .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+}
+
+async function getNinjasInDojo(accessToken, facilityGuid) {
+  return liveNinjas(await getScanIns(accessToken, facilityGuid));
 }
 
 module.exports = {
@@ -313,6 +325,8 @@ module.exports = {
   getFacilities,
   pickFacility,
   getNinjasInDojo,
+  getScanIns,
+  liveNinjas,
   normalizeScanIn,
   pacificOffsetMinutes,
   readSettings,
