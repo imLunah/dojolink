@@ -72,17 +72,17 @@ function hours(minutes) {
   return Math.round((minutes / 60) * 10) / 10;
 }
 
-function Avatar({ ninja, size = 68 }) {
+function Avatar({ ninja, size = 68, ground = '#f1f4f9' }) {
   if (ninja.program === 'CREATE' && ninja.belt) {
     return (
-      <span className="flex-shrink-0 rounded-full flex items-center justify-center" style={{ width: size, height: size, backgroundColor: '#f1f4f9' }}>
+      <span className="flex-shrink-0 rounded-full flex items-center justify-center" style={{ width: size, height: size, backgroundColor: ground }}>
         <BeltIcon belt={ninja.belt} size={Math.round(size * 0.76)} />
       </span>
     );
   }
   const logo = PROGRAM_LOGOS[ninja.program];
   if (logo) return <img src={logo} alt="" className="flex-shrink-0 object-contain" style={{ width: size, height: size, transform: 'scale(1.06)' }} />;
-  return <span className="flex-shrink-0 rounded-full" style={{ width: size, height: size, backgroundColor: '#f1f4f9' }} />;
+  return <span className="flex-shrink-0 rounded-full" style={{ width: size, height: size, backgroundColor: ground }} />;
 }
 
 function NinjaCard({ ninja, now, busy, onOpen, onRemove }) {
@@ -281,6 +281,11 @@ function Notice({ title, children }) {
 // with where they are today. Read-only on purpose: IMPACT's own version also
 // checks kids in (through to MyStudio, against their membership) and edits
 // family accounts, and neither belongs on a wall screen.
+// Dark, in the footer's navy: it opens off the footer and reads as part of it.
+const DARK = '#132a52';
+const LINE = 'rgba(255,255,255,0.1)';
+const SOFT = '#9fb0cf';
+
 function AllNinjasDialog({ now, onClose }) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -317,12 +322,12 @@ function AllNinjasDialog({ now, onClose }) {
   }, [search, page]);
 
   const status = (n) => {
-    if (!n.today) return n.hidden ? { text: 'Hidden', color: MUTED } : null;
-    if (n.today.removedAt) return { text: `Left ${clock(new Date(n.today.removedAt))}`, color: MUTED };
+    if (!n.today) return n.hidden ? { text: 'Hidden', color: SOFT } : null;
+    if (n.today.removedAt) return { text: `Left ${clock(new Date(n.today.removedAt))}`, color: SOFT };
     const end = new Date(new Date(n.today.startedAt).getTime() + n.today.sessionMinutes * 60000);
     return end.getTime() <= now
-      ? { text: 'Time up', color: '#b42318' }
-      : { text: `Here until ${clock(end)}`, color: '#15803d' };
+      ? { text: 'Time up', color: '#ff8f8f' }
+      : { text: `Here until ${clock(end)}`, color: '#5ad19a' };
   };
 
   return (
@@ -336,37 +341,37 @@ function AllNinjasDialog({ now, onClose }) {
         aria-modal="true"
         aria-label="All ninjas"
         className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl overflow-hidden font-ninja"
-        style={{ backgroundColor: '#ffffff', boxShadow: '0 20px 50px rgba(15, 30, 60, 0.35)' }}
+        style={{ backgroundColor: DARK, boxShadow: '0 20px 50px rgba(5, 15, 35, 0.55)' }}
       >
-        <div className="flex items-center gap-3 px-5 pt-5 pb-4" style={{ borderBottom: '1px solid #edf1f7' }}>
-          <SearchIcon size={20} aria-hidden style={{ color: MUTED }} />
+        <div className="flex items-center gap-3 px-5 pt-5 pb-4" style={{ borderBottom: `1px solid ${LINE}` }}>
+          <SearchIcon size={20} aria-hidden style={{ color: SOFT }} />
           <input
             ref={inputRef}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search ninjas"
             aria-label="Search ninjas"
-            className="flex-1 min-w-0 bg-transparent text-[18px] font-semibold outline-none"
-            style={{ color: INK }}
+            className="flex-1 min-w-0 bg-transparent dark:hover:bg-transparent text-[18px] font-semibold outline-none placeholder:text-[#7f93b8]"
+            style={{ color: '#ffffff', backgroundColor: 'transparent', border: 0 }}
           />
-          <button type="button" onClick={onClose} aria-label="Close" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ color: MUTED }}>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ color: SOFT }}>
             <XIcon size={22} aria-hidden />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto no-scrollbar">
-          {error && <p className="px-5 py-4 font-semibold" style={{ color: '#b42318' }}>{error}</p>}
+          {error && <p className="px-5 py-4 font-semibold" style={{ color: '#ff8f8f' }}>{error}</p>}
           {items && items.length === 0 && !loading && (
-            <p className="px-5 py-6" style={{ color: MUTED }}>No ninjas match that.</p>
+            <p className="px-5 py-6" style={{ color: SOFT }}>No ninjas match that.</p>
           )}
           <ul>
             {(items || []).map((n, i) => {
               const st = status(n);
               return (
-                <li key={n.id} className="flex items-center gap-3 px-5 py-2.5" style={i ? { borderTop: '1px solid #edf1f7' } : undefined}>
-                  <Avatar ninja={{ program: n.program || (n.belt ? 'CREATE' : null), belt: n.belt }} size={36} />
+                <li key={n.id} className="flex items-center gap-3 px-5 py-2.5" style={i ? { borderTop: `1px solid ${LINE}` } : undefined}>
+                  <Avatar ninja={{ program: n.program || (n.belt ? 'CREATE' : null), belt: n.belt }} size={36} ground="#1f3a69" />
                   <span className="min-w-0">
-                    <span className="block font-bold text-[17px] truncate" style={{ color: INK }}>{n.firstName} {n.lastInitial}</span>
-                    {n.belt && <span className="block text-sm" style={{ color: MUTED }}>{n.belt} Belt</span>}
+                    <span className="block font-bold text-[17px] truncate" style={{ color: '#ffffff' }}>{n.firstName} {n.lastInitial}</span>
+                    {n.belt && <span className="block text-sm" style={{ color: SOFT }}>{n.belt} Belt</span>}
                   </span>
                   {st && <span className="ml-auto text-sm font-semibold whitespace-nowrap" style={{ color: st.color }}>{st.text}</span>}
                 </li>
@@ -374,7 +379,7 @@ function AllNinjasDialog({ now, onClose }) {
             })}
           </ul>
           {loading && (
-            <p className="flex justify-center py-4" style={{ color: MUTED }}>
+            <p className="flex justify-center py-4" style={{ color: SOFT }}>
               <Loader2Icon size={20} className="animate-spin" aria-label="Loading" />
             </p>
           )}
@@ -383,7 +388,7 @@ function AllNinjasDialog({ now, onClose }) {
               type="button"
               onClick={() => setPage((p) => p + 1)}
               className="w-full py-3.5 text-[15px] font-bold"
-              style={{ color: '#2563eb', borderTop: '1px solid #edf1f7' }}
+              style={{ color: '#8fbaff', borderTop: `1px solid ${LINE}` }}
             >
               Show more
             </button>
@@ -612,8 +617,8 @@ export default function LiveNinjasPage() {
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              className="rounded-lg px-5 h-12 text-[18px] font-bold whitespace-nowrap transition-[filter,transform] duration-150 hover:brightness-95 active:scale-[0.98]"
-              style={{ backgroundColor: '#ffffff', color: '#0f2346' }}
+              className="rounded-lg px-5 h-12 text-[18px] font-bold whitespace-nowrap transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98]"
+              style={{ backgroundColor: '#3b82f6', color: '#ffffff' }}
             >
               View All Ninjas
             </button>
