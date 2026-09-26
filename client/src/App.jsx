@@ -37,6 +37,7 @@ const TasksPage = lazy(() => import('./pages/manager/TasksPage'));
 const EventsPage = lazy(() => import('./pages/manager/EventsPage'));
 const EventListingEditorPage = lazy(() => import('./pages/manager/EventListingEditorPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
+const LiveNinjasPage = lazy(() => import('./pages/LiveNinjasPage'));
 const SenseiDashboard = lazy(() => import('./pages/sensei/SenseiDashboard'));
 const SenseiTasksPage = lazy(() => import('./pages/sensei/SenseiTasksPage'));
 const LogProgressPage = lazy(() => import('./pages/sensei/LogProgressPage'));
@@ -166,6 +167,7 @@ export default function App() {
             <Route path="/admin/settings" element={<ProtectedRoute role="manager"><SettingsPage /></ProtectedRoute>} />
 
             {/* Curriculum Roadmap */}
+            <Route path="/live-ninjas" element={<ProtectedRoute role="sensei"><LiveNinjasPage /></ProtectedRoute>} />
             <Route path="/curriculum-roadmap" element={<ProtectedRoute role="sensei"><CurriculumRoadmapPage /></ProtectedRoute>} />
             <Route path="/changelog" element={<ProtectedRoute role="sensei"><ChangelogPage /></ProtectedRoute>} />
             <Route path="/feedback" element={<ProtectedRoute role="sensei"><FeedbackPage /></ProtectedRoute>} />

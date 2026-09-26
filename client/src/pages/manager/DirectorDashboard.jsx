@@ -11,6 +11,7 @@ import {
   CalendarDaysIcon,
   ChevronRightIcon,
   TabletSmartphoneIcon,
+  TimerIcon,
   MilestoneIcon,
 } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
@@ -768,6 +769,19 @@ function KioskCard() {
   );
 }
 
+// IMPACT's Live Ninjas countdown, for anyone at a center whose director has
+// connected IMPACT. Like the kiosk card, tied to the connection rather than
+// the experimental toggle, so the device on the wall finds it.
+function LiveNinjasCard() {
+  return (
+    <Link to="/live-ninjas" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
+      <TimerIcon className="w-5 h-5 flex-shrink-0 text-ninja-muted group-hover:text-ninja-blue transition-colors" strokeWidth={1.9} aria-hidden />
+      <span className="font-ninja font-bold text-ninja-navy text-lg group-hover:text-ninja-blue transition-colors">Live ninjas</span>
+      <ChevronRightIcon className="ml-auto w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />
+    </Link>
+  );
+}
+
 /* ------------------------------------------------------- daily schedule -- */
 
 // Today's classes from MyStudio with the booked ninjas listed under each, the
@@ -927,6 +941,15 @@ export default function DirectorDashboard() {
     return () => { alive = false; };
   }, [isManager, user?.activeLocation?.id]);
 
+  const [impactOn, setImpactOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.get('/impact/status')
+      .then((s) => { if (alive) setImpactOn(Boolean(s?.connected)); })
+      .catch(() => { if (alive) setImpactOn(false); });
+    return () => { alive = false; };
+  }, [user?.activeLocation?.id]);
+
   useEffect(() => {
     let alive = true;
     api.get('/reports/attendance?range=all')
@@ -997,6 +1020,11 @@ export default function DirectorDashboard() {
             {isManager && kioskOn && (
               <motion.div {...fadeUp(2)}>
                 <KioskCard />
+              </motion.div>
+            )}
+            {impactOn && (
+              <motion.div {...fadeUp(2)}>
+                <LiveNinjasCard />
               </motion.div>
             )}
             <motion.div {...fadeUp(2)}>

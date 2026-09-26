@@ -13,6 +13,7 @@ import { CARD } from '../lib/surfaces';
 import useIsDesktop from '../lib/useIsDesktop';
 import { MoonIcon, SunIcon } from '../components/ui/icons';
 import MyStudioConnect, { MyStudioRow } from '../components/manager/MyStudioConnect';
+import ImpactConnect, { ImpactRow } from '../components/manager/ImpactConnect';
 import DeleteAccountCard from '../components/shared/DeleteAccountCard';
 import {
   UserIcon,
@@ -71,17 +72,34 @@ export default function AccountPage() {
     return () => { cancelled = true; };
   }, [isManager, user?.activeLocation?.id]);
 
+  // IMPACT, the same way: belongs to the center, fetched for any director.
+  const [impact, setImpact] = useState(null);
+  const [showImpact, setShowImpact] = useState(false);
+  useEffect(() => {
+    if (!isManager) return;
+    let cancelled = false;
+    api
+      .get('/impact/status')
+      .then((data) => { if (!cancelled) setImpact(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isManager, user?.activeLocation?.id]);
+
   // ?mystudio=1 opens the connection panel straight away, so the board's
   // "connection ran out" notice can lead somewhere instead of describing where
   // to go. The parameter is dropped once used so a refresh does not reopen it.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
-    if (!isManager || searchParams.get('mystudio') !== '1') return;
-    setShowMyStudio(true);
+    if (!isManager) return;
+    const which = searchParams.get('mystudio') === '1' ? 'mystudio' : searchParams.get('impact') === '1' ? 'impact' : null;
+    if (!which) return;
+    if (which === 'mystudio') setShowMyStudio(true);
+    else setShowImpact(true);
     // 'preferences' is the key the Experimental section is registered under.
     // Anything else leaves the settings body rendering nothing behind the panel.
     setSection('preferences');
     searchParams.delete('mystudio');
+    searchParams.delete('impact');
     setSearchParams(searchParams, { replace: true });
   }, [isManager, searchParams, setSearchParams]);
 
@@ -349,6 +367,9 @@ export default function AccountPage() {
                 onOpen={() => setShowMyStudio(true)}
               />
             )}
+            {isManager && !impact?.connected && (
+              <ImpactRow status={impact} onOpen={() => setShowImpact(true)} />
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -377,10 +398,19 @@ export default function AccountPage() {
     </div>
   ) : null;
 
+  // Same rule as MyStudio: once connected it runs for the whole center, so
+  // it gets a card that the experimental switch cannot hide.
+  const impactCard = isManager && impact?.connected ? (
+    <div className={`${CARD} p-5`}>
+      <ImpactRow status={impact} onOpen={() => setShowImpact(true)} className="" />
+    </div>
+  ) : null;
+
   const experimentalCard = (
     <>
       {experimentalPrefs}
       {myStudioCard}
+      {impactCard}
     </>
   );
 
@@ -393,6 +423,15 @@ export default function AccountPage() {
       status={mystudio}
       centerName={user?.activeLocation?.name}
       onChanged={setMystudio}
+    />
+  ) : null;
+
+  const impactPanel = isManager ? (
+    <ImpactConnect
+      isOpen={showImpact}
+      onClose={() => setShowImpact(false)}
+      status={impact}
+      onChanged={setImpact}
     />
   ) : null;
 
@@ -782,6 +821,7 @@ export default function AccountPage() {
           </div>
         </div>
         {myStudioPanel}
+        {impactPanel}
       </Layout>
     );
   }
@@ -809,6 +849,7 @@ export default function AccountPage() {
         {deleteCard}
       </div>
       {myStudioPanel}
+      {impactPanel}
     </Layout>
   );
 }

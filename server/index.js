@@ -173,6 +173,29 @@ const kioskLimiter = rateLimit({
   message: { error: 'Too many requests. Please wait a moment and try again.' },
 });
 app.use('/api/kiosk', kioskLimiter, require('./routes/kiosk'));
+// A board polls every twenty seconds, so a few open at one center sit well
+// under this. Connecting carries a password to IMPACT's sign-in, which locks
+// accounts after repeated failures, so it gets a tight cap of its own.
+const impactLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many IMPACT requests. Wait a moment and try again.' },
+});
+const impactConnectLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many sign-in attempts. Try again in 15 minutes.' },
+});
+app.use('/api/impact/connect', (req, res, next) =>
+  req.method === 'POST' ? impactConnectLimiter(req, res, next) : next()
+);
+app.use('/api/impact', impactLimiter, require('./routes/impact'));
 app.use('/api/mystudio/login', mystudioLoginLimiter);
 app.use('/api/mystudio', mystudioLimiter, require('./routes/mystudio'));
 // Feedback tickets — staff or parent session accepted; try staff first, fall back to parent
