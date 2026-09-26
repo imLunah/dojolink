@@ -774,7 +774,7 @@ function KioskCard() {
 // the experimental toggle, so the device on the wall finds it.
 function LiveNinjasCard() {
   return (
-    <Link to="/live-ninjas" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
+    <Link to="/live-ninjas" target="_blank" rel="noopener" className={`${CARD} group flex items-center gap-3 p-4 hover:border-ninja-blue/50 transition-colors`}>
       <TimerIcon className="w-5 h-5 flex-shrink-0 text-ninja-muted group-hover:text-ninja-blue transition-colors" strokeWidth={1.9} aria-hidden />
       <span className="font-ninja font-bold text-ninja-navy text-lg group-hover:text-ninja-blue transition-colors">Live ninjas</span>
       <ChevronRightIcon className="ml-auto w-5 h-5 text-ninja-muted flex-shrink-0" aria-hidden />

@@ -82,10 +82,12 @@ const KioskPage = lazy(() => import('./pages/KioskPage'));
 
 // Staff chrome that must not appear on a kiosk tab a director opened beside
 // their own session: a family at the screen should see the kiosk and nothing
-// of the account behind it.
+// of the account behind it. The Live Ninjas board is the same kind of screen,
+// a tab left up on the wall, so it goes without the chrome too.
+const WALL_SCREENS = new Set(['/kiosk', '/live-ninjas']);
 function OutsideKiosk({ children }) {
   const { pathname } = useLocation();
-  return pathname === '/kiosk' ? null : children;
+  return WALL_SCREENS.has(pathname) ? null : children;
 }
 
 export default function App() {
