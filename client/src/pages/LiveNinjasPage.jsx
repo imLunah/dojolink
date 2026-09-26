@@ -10,6 +10,7 @@ import {
   MinusIcon,
   PlusIcon,
   Loader2Icon,
+  Undo2Icon,
 } from 'lucide-react';
 import BeltIcon from '../components/ui/BeltIcon';
 import Logo from '../components/ui/Logo';
@@ -79,7 +80,7 @@ function Avatar({ ninja, size = 68 }) {
     );
   }
   const logo = PROGRAM_LOGOS[ninja.program];
-  if (logo) return <img src={logo} alt="" className="flex-shrink-0 object-contain" style={{ width: size + 4, height: size + 4 }} />;
+  if (logo) return <img src={logo} alt="" className="flex-shrink-0 object-contain" style={{ width: size, height: size, transform: 'scale(1.06)' }} />;
   return <span className="flex-shrink-0 rounded-full" style={{ width: size, height: size, backgroundColor: '#f1f4f9' }} />;
 }
 
@@ -275,9 +276,11 @@ function Notice({ title, children }) {
   );
 }
 
-// A dropdown that opens upward off the status bar: Hidden Ninjas and Removed
-// Today. Disabled when empty, as IMPACT's are.
-function BarMenu({ id, label, items, open, onToggle, renderItem }) {
+// A list that opens upward off the status bar: Hidden Ninjas and Removed
+// Today. Disabled when empty, as IMPACT's are. A titled sheet of one-line
+// rows split by hairlines, so twelve removals read as a list rather than
+// twelve boxes.
+function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
   const empty = items.length === 0;
   return (
     <div className="relative">
@@ -294,13 +297,23 @@ function BarMenu({ id, label, items, open, onToggle, renderItem }) {
         <ChevronUpIcon size={18} aria-hidden className={`transition-transform ${open ? '' : 'rotate-180'}`} />
       </button>
       {open && !empty && (
-        <ul
+        <div
           id={id}
-          className="absolute bottom-full right-0 mb-2 w-80 max-h-[50vh] overflow-y-auto rounded-2xl p-2"
+          className="absolute bottom-full right-0 mb-2 w-[22rem] rounded-2xl overflow-hidden font-ninja"
           style={{ backgroundColor: '#ffffff', boxShadow: '0 12px 30px rgba(15, 30, 60, 0.25)' }}
         >
-          {items.map(renderItem)}
-        </ul>
+          <p className="flex items-baseline justify-between px-4 pt-3.5 pb-2.5 text-[13px] font-bold uppercase tracking-wide" style={{ color: MUTED, borderBottom: '1px solid #edf1f7' }}>
+            {title}
+            <span className="tabular-nums">{items.length}</span>
+          </p>
+          <ul className="max-h-[50vh] overflow-y-auto no-scrollbar">
+            {items.map((n, i) => (
+              <li key={n.id} className="flex items-center gap-3 px-4 py-2" style={i ? { borderTop: '1px solid #edf1f7' } : undefined}>
+                {renderItem(n)}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -397,7 +410,6 @@ export default function LiveNinjasPage() {
     </Link>
   ) : null;
   const toggle = (which) => setMenu((m) => (m === which ? null : which));
-  const row = 'flex items-center gap-3 rounded-xl px-3 py-2.5 font-ninja';
 
   return (
     <div
@@ -475,13 +487,15 @@ export default function LiveNinjasPage() {
             items={hidden}
             open={menu === 'hidden'}
             onToggle={() => toggle('hidden')}
+            title="Hidden from the board"
             renderItem={(n) => (
-              <li key={n.id} className={row} style={{ color: INK }}>
-                <span className="font-bold">{n.firstName} {n.lastInitial}</span>
-                <span className="ml-auto text-sm tabular-nums" style={{ color: MUTED }}>
+              <>
+                <Avatar ninja={n} size={34} />
+                <span className="font-bold text-[16px] truncate" style={{ color: INK }}>{n.firstName} {n.lastInitial}</span>
+                <span className="ml-auto text-sm tabular-nums whitespace-nowrap" style={{ color: MUTED }}>
                   {clock(new Date(n.startedAt))} - {clock(endOf(n))}
                 </span>
-              </li>
+              </>
             )}
           />
           <BarMenu
@@ -490,22 +504,26 @@ export default function LiveNinjasPage() {
             items={removed}
             open={menu === 'removed'}
             onToggle={() => toggle('removed')}
+            title="Removed today"
             renderItem={(n) => (
-              <li key={n.id} className={row} style={{ color: INK }}>
-                <span className="min-w-0">
-                  <span className="block font-bold">{n.firstName} {n.lastInitial}</span>
-                  <span className="block text-sm tabular-nums" style={{ color: MUTED }}>Removed {clock(new Date(n.removedAt))}</span>
+              <>
+                <Avatar ninja={n} size={34} />
+                <span className="font-bold text-[16px] truncate" style={{ color: INK }}>{n.firstName} {n.lastInitial}</span>
+                <span className="ml-auto text-sm tabular-nums whitespace-nowrap" style={{ color: MUTED }}>
+                  {clock(new Date(n.removedAt))}
                 </span>
                 <button
                   type="button"
                   onClick={() => addBack(n)}
                   disabled={busyId === n.id}
-                  className="ml-auto rounded-lg px-3 py-1.5 text-sm font-bold disabled:opacity-50"
-                  style={{ backgroundColor: '#e8f0fe', color: '#1d4ed8' }}
+                  aria-label={`Add ${n.firstName} ${n.lastInitial} back to the board`}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 -mr-1.5 text-sm font-bold whitespace-nowrap transition-colors hover:bg-[#eef3fd] disabled:opacity-50"
+                  style={{ color: '#2563eb' }}
                 >
-                  {busyId === n.id ? 'Adding' : 'Add Back'}
+                  {busyId === n.id ? <Loader2Icon size={15} className="animate-spin" aria-hidden /> : <Undo2Icon size={15} strokeWidth={2.5} aria-hidden />}
+                  Add back
                 </button>
-              </li>
+              </>
             )}
           />
         </div>
