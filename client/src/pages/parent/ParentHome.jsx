@@ -486,11 +486,16 @@ function DojoTimer({ here, wide }) {
   const left = Math.ceil((end.getTime() - now) / 60000);
   const over = left <= 0;
   const [bg, ink] = TIMER_TONES[over ? 'over' : left <= 10 ? 'almost' : 'normal'];
-  const at = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  const fmt = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  const at = fmt(end);
+  const start = new Date(here.startedAt);
+  // The check-in range under the count, as IMPACT's card prints it. The
+  // narrow panel has no room for "pm" twice, so it drops the suffix.
+  const bare = (d) => fmt(d).replace(/\s?[ap]m$/, '');
   return (
     <span
       role="img"
-      aria-label={over ? `At the dojo, session ended at ${at}` : `At the dojo, ${left} minutes left, until ${at}`}
+      aria-label={over ? `At the dojo since ${fmt(start)}, session ended at ${at}` : `At the dojo since ${fmt(start)}, ${left} minutes left, until ${at}`}
       className={`absolute inset-y-0 right-0 z-10 w-[112px] flex flex-col items-center justify-center px-1 ${wide ? 'lg:w-[220px]' : ''}`}
       style={{ backgroundColor: bg, color: ink }}
     >
@@ -498,6 +503,14 @@ function DojoTimer({ here, wide }) {
         {String(Math.abs(left)).padStart(2, '0')}
       </span>
       <span className={`font-ninja text-[14px] mt-1.5 whitespace-nowrap ${wide ? 'lg:text-[18px]' : ''}`}>{over ? 'Minutes Over' : 'Minutes Left'}</span>
+      <span className={`font-ninja text-[12px] mt-2 tabular-nums whitespace-nowrap opacity-70 ${wide ? 'lg:text-[15px] lg:mt-3' : ''}`}>
+        {wide ? (
+          <>
+            <span className="lg:hidden">{bare(start)} - {bare(end)}</span>
+            <span className="hidden lg:inline">{fmt(start)} - {at}</span>
+          </>
+        ) : `${bare(start)} - ${bare(end)}`}
+      </span>
     </span>
   );
 }
