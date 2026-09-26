@@ -465,13 +465,37 @@ function sessionTitle(s) {
 // The stacked card keeps the emblem instead of the ninja: at half a column the
 // banner is only as tall as its own lines, and a ninja cropped to the
 // shoulders is worse than no ninja.
-// "At the dojo until 5:46 pm", from IMPACT: the ninja has scanned in at a
-// computer and not been taken off the board. Past the end of the session it
-// says so, because a kid whose time is up is waiting to be picked up.
-function atDojoLine(here) {
+// The minutes panel off IMPACT's Live Ninjas board, for a ninja at a
+// computer right now: the count in big digits, amber in the last ten minutes,
+// red and counting up once the session is over. Same colours as the wall
+// screen, inline hex because it sits on the banner in either theme. Ticks on
+// its own so the rest of the card is not re-rendered every few seconds.
+const TIMER_TONES = { normal: ['#eef2f8', '#1b2a5c'], almost: ['#fbe9d2', '#8a4b0f'], over: ['#fde2e2', '#b42318'] };
+
+function DojoTimer({ here }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
   const end = new Date(here.endsAt);
+  const left = Math.ceil((end.getTime() - now) / 60000);
+  const over = left <= 0;
+  const [bg, ink] = TIMER_TONES[over ? 'over' : left <= 10 ? 'almost' : 'normal'];
   const at = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
-  return end.getTime() > Date.now() ? `At the dojo until ${at}` : `Session ended at ${at}`;
+  return (
+    <span
+      role="img"
+      aria-label={over ? `At the dojo, session ended at ${at}` : `At the dojo, ${left} minutes left, until ${at}`}
+      className="relative flex-shrink-0 w-[92px] rounded-xl flex flex-col items-center justify-center py-2.5 px-1 shadow-[0_6px_16px_rgba(4,10,24,0.22)]"
+      style={{ backgroundColor: bg, color: ink }}
+    >
+      <span className="font-ninja font-black text-[38px] leading-none tabular-nums">
+        {String(Math.abs(left)).padStart(2, '0')}
+      </span>
+      <span className="font-ninja text-[13px] mt-1 whitespace-nowrap">{over ? 'Minutes Over' : 'Minutes Left'}</span>
+    </span>
+  );
 }
 
 function ChildCard({ child, wide = false, here = null }) {
@@ -607,12 +631,6 @@ function ChildCard({ child, wide = false, here = null }) {
               <h2 className={`font-ninja font-extrabold leading-tight mt-1 truncate text-[22px] ${wide ? 'lg:text-[34px] lg:tracking-[-0.03em]' : ''}`}>
                 {child.full_name}
               </h2>
-              {here && (
-                <p className="mt-1.5 flex items-center gap-2 font-ninja text-[14px] font-extrabold">
-                  <span aria-hidden className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#5ad19a' }} />
-                  {atDojoLine(here)}
-                </p>
-              )}
             </div>
             {/* The PROGRAM's mark, not the belt roundel. `Emblem` draws the
                 belt when it is handed one for CREATE, which is right on a
@@ -622,7 +640,13 @@ function ChildCard({ child, wide = false, here = null }) {
                 says anywhere else. Withholding `belt` is what picks the
                 program logo; the wide card still needs `belt` for the ninja's
                 own art. */}
-            {!wide && <Emblem program={heroProgram} size={64} tilt />}
+            {/* While the ninja is at a computer the side holds their timer,
+                IMPACT's panel, in place of the program mark. On the wide card
+                the side is the ninja's own art, so there it drops under the
+                name rather than squeezing it. */}
+            {here ? (
+              <span className={wide ? 'lg:inline-block lg:mt-3' : ''}><DojoTimer here={here} /></span>
+            ) : !wide && <Emblem program={heroProgram} size={64} tilt />}
           </div>
 
           {/* The link, at the foot of the banner rather than in its top corner,
