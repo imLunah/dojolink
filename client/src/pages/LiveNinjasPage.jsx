@@ -11,6 +11,7 @@ import {
   PlusIcon,
   Loader2Icon,
   Undo2Icon,
+  SearchIcon,
 } from 'lucide-react';
 import BeltIcon from '../components/ui/BeltIcon';
 import Logo from '../components/ui/Logo';
@@ -276,6 +277,123 @@ function Notice({ title, children }) {
   );
 }
 
+// "View All Ninjas": every ninja at the center out of IMPACT, searchable, each
+// with where they are today. Read-only on purpose: IMPACT's own version also
+// checks kids in (through to MyStudio, against their membership) and edits
+// family accounts, and neither belongs on a wall screen.
+function AllNinjasDialog({ now, onClose }) {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [items, setItems] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // A new search starts from page one; typing waits for a pause.
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      setLoading(true);
+      setError('');
+      api
+        .get(`/impact/ninjas?search=${encodeURIComponent(search.trim())}&page=${page}`)
+        .then((body) => {
+          if (!alive) return;
+          setItems((prev) => (page === 1 ? body.ninjas : [...(prev || []), ...body.ninjas]));
+          setHasMore(body.hasMore);
+        })
+        .catch((err) => { if (alive) setError(err.message || 'Could not reach IMPACT.'); })
+        .finally(() => { if (alive) setLoading(false); });
+    }, page === 1 ? 250 : 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [search, page]);
+
+  const status = (n) => {
+    if (!n.today) return n.hidden ? { text: 'Hidden', color: MUTED } : null;
+    if (n.today.removedAt) return { text: `Left ${clock(new Date(n.today.removedAt))}`, color: MUTED };
+    const end = new Date(new Date(n.today.startedAt).getTime() + n.today.sessionMinutes * 60000);
+    return end.getTime() <= now
+      ? { text: 'Time up', color: '#b42318' }
+      : { text: `Here until ${clock(end)}`, color: '#15803d' };
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:pt-16"
+      style={{ backgroundColor: 'rgba(15, 30, 60, 0.45)' }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="All ninjas"
+        className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl overflow-hidden font-ninja"
+        style={{ backgroundColor: '#ffffff', boxShadow: '0 20px 50px rgba(15, 30, 60, 0.35)' }}
+      >
+        <div className="flex items-center gap-3 px-5 pt-5 pb-4" style={{ borderBottom: '1px solid #edf1f7' }}>
+          <SearchIcon size={20} aria-hidden style={{ color: MUTED }} />
+          <input
+            ref={inputRef}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search ninjas"
+            aria-label="Search ninjas"
+            className="flex-1 min-w-0 bg-transparent text-[18px] font-semibold outline-none"
+            style={{ color: INK }}
+          />
+          <button type="button" onClick={onClose} aria-label="Close" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ color: MUTED }}>
+            <XIcon size={22} aria-hidden />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto no-scrollbar">
+          {error && <p className="px-5 py-4 font-semibold" style={{ color: '#b42318' }}>{error}</p>}
+          {items && items.length === 0 && !loading && (
+            <p className="px-5 py-6" style={{ color: MUTED }}>No ninjas match that.</p>
+          )}
+          <ul>
+            {(items || []).map((n, i) => {
+              const st = status(n);
+              return (
+                <li key={n.id} className="flex items-center gap-3 px-5 py-2.5" style={i ? { borderTop: '1px solid #edf1f7' } : undefined}>
+                  <Avatar ninja={{ program: n.program || (n.belt ? 'CREATE' : null), belt: n.belt }} size={36} />
+                  <span className="min-w-0">
+                    <span className="block font-bold text-[17px] truncate" style={{ color: INK }}>{n.firstName} {n.lastInitial}</span>
+                    {n.belt && <span className="block text-sm" style={{ color: MUTED }}>{n.belt} Belt</span>}
+                  </span>
+                  {st && <span className="ml-auto text-sm font-semibold whitespace-nowrap" style={{ color: st.color }}>{st.text}</span>}
+                </li>
+              );
+            })}
+          </ul>
+          {loading && (
+            <p className="flex justify-center py-4" style={{ color: MUTED }}>
+              <Loader2Icon size={20} className="animate-spin" aria-label="Loading" />
+            </p>
+          )}
+          {hasMore && !loading && (
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              className="w-full py-3.5 text-[15px] font-bold"
+              style={{ color: '#2563eb', borderTop: '1px solid #edf1f7' }}
+            >
+              Show more
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // A list that opens upward off the status bar: Hidden Ninjas and Removed
 // Today. Disabled when empty, as IMPACT's are. A titled sheet of one-line
 // rows split by hairlines, so twelve removals read as a list rather than
@@ -290,7 +408,7 @@ function BarMenu({ id, label, title, items, open, onToggle, renderItem, color })
         disabled={empty}
         aria-expanded={open}
         aria-controls={id}
-        className="flex items-center gap-3 rounded-lg px-4 h-12 min-w-[14rem] font-ninja text-[18px] font-semibold whitespace-nowrap transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:hover:brightness-100"
+        className="flex items-center gap-3 rounded-lg px-4 h-12 min-w-[12rem] font-ninja text-[18px] font-semibold whitespace-nowrap transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:hover:brightness-100"
         style={{ backgroundColor: color, color: '#ffffff' }}
       >
         {items.length} {label}
@@ -341,6 +459,7 @@ export default function LiveNinjasPage() {
   const [timerFor, setTimerFor] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [menu, setMenu] = useState(null); // 'hidden' | 'removed' | null
+  const [showAll, setShowAll] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const load = useCallback(() => {
@@ -489,6 +608,16 @@ export default function LiveNinjasPage() {
           <Stat Icon={UsersIcon} color="#5ad19a">{ninjas.length} Online</Stat>
           {DIVIDER}
           <Stat Icon={HourglassIcon} color="#f2b14c">{almostDone} Almost Done</Stat>
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="rounded-lg px-5 h-12 text-[18px] font-bold whitespace-nowrap transition-[filter,transform] duration-150 hover:brightness-95 active:scale-[0.98]"
+              style={{ backgroundColor: '#ffffff', color: '#0f2346' }}
+            >
+              View All Ninjas
+            </button>
+          </div>
           <div className="ml-auto flex items-center gap-3">
           <BarMenu
             id="hidden-ninjas"
@@ -540,6 +669,8 @@ export default function LiveNinjasPage() {
           </div>
         </footer>
       )}
+
+      {showAll && <AllNinjasDialog now={now} onClose={() => setShowAll(false)} />}
 
       {timerFor && (
         <TimerDialog

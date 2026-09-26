@@ -375,6 +375,39 @@ async function getNinjasInDojo(accessToken, facilityGuid) {
   return liveNinjas(await getScanIns(accessToken, facilityGuid));
 }
 
+// IMPACT's "View All Ninjas" list: every ninja at the center, searchable.
+// It is a read, though IMPACT sends it as a POST. The upstream rows are
+// families carrying the parent's name and email; only the children leave this
+// function, as first name, last initial, belt and IMPACT's id for them (which
+// is the userGuid on a scan-in, so the page can say who is here today).
+// Paged by family, as IMPACT pages it.
+async function searchNinjas(accessToken, facilityGuid, { search = '', page = 1, pageSize = 40 } = {}) {
+  const res = await timedFetch(`${API}/cncommon/api/v1/center/customersearch`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ facilityGuid, search: String(search).slice(0, 80), pageNum: page, pageSize, sortOrder: 1 }),
+  });
+  if (res.status === 401 || res.status === 403) throw new ImpactAuthError('IMPACT refused the stored sign-in');
+  if (!res.ok) throw new ImpactError(`IMPACT answered ${res.status}`);
+  const data = await res.json();
+  const families = Array.isArray(data && data.customers) ? data.customers : [];
+  const ninjas = families
+    .flatMap((f) => (Array.isArray(f.members) ? f.members : []))
+    .filter((m) => m && m.guid && m.isStudent !== false)
+    .map((m) => {
+      const last = String(m.lastName || '').trim();
+      return {
+        guid: String(m.guid),
+        firstName: String(m.firstName || '').trim(),
+        lastInitial: last ? last[0].toUpperCase() : '',
+        belt: String(m.beltName || '').trim() || null,
+        hidden: Boolean(m.hideFromDashboard),
+      };
+    });
+  const total = Number(data && data.recordCount) || 0;
+  return { ninjas, hasMore: page * pageSize < total };
+}
+
 // Off the board, or back on it. The same body IMPACT's own board sends.
 function setRemoved(accessToken, row, removed) {
   return apiSend(accessToken, 'PUT', 'cncommon/api/v1/center/addorremoveninja', {
@@ -432,6 +465,7 @@ module.exports = {
   liveNinjas,
   boardLists,
   setRemoved,
+  searchNinjas,
   setExtraTime,
   ImpactRefused,
   normalizeScanIn,

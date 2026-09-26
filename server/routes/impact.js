@@ -224,6 +224,56 @@ router.get('/live', requireSensei, async (req, res) => {
   }
 });
 
+// GET /api/impact/ninjas?search=&page= — "View All Ninjas". Read-only: no
+// check-in and no account edits (IMPACT's own version does both). Each ninja
+// is marked with where they are today, from the same scan-in list the board
+// reads.
+router.get('/ninjas', requireSensei, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const conn = await loadConnection(pool, req.session.activeLocationId);
+    if (!conn) return res.status(404).json({ error: 'IMPACT is not connected for this center.' });
+    const page = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), 50);
+    const [found, rows] = await Promise.all([
+      accessTokenFor(pool, conn).then((token) =>
+        impact.searchNinjas(token, conn.facility_guid, { search: req.query.search || '', page })
+      ),
+      readScanIns(pool, conn),
+    ]);
+    const today = new Map();
+    for (const r of rows) {
+      const n = impact.normalizeScanIn(r);
+      const prev = today.get(String(r.userGuid));
+      if (!prev || new Date(n.startedAt) > new Date(prev.startedAt)) today.set(String(r.userGuid), n);
+    }
+    res.json({
+      hasMore: found.hasMore,
+      ninjas: found.ninjas.map(({ guid, ...n }) => {
+        const scan = today.get(guid);
+        return {
+          ...n,
+          id: guid,
+          program: scan ? scan.program : null,
+          today: scan
+            ? {
+                startedAt: scan.startedAt,
+                sessionMinutes: scan.sessionMinutes,
+                removedAt: scan.removedAt,
+                weekMinutes: scan.weekMinutes,
+              }
+            : null,
+        };
+      }),
+    });
+  } catch (err) {
+    if (err instanceof impact.ImpactAuthError) {
+      return res.status(409).json({ error: 'The IMPACT sign-in stopped working. A director needs to sign in again.' });
+    }
+    console.error('IMPACT search failed:', err.message);
+    res.status(502).json({ error: 'Could not reach IMPACT.' });
+  }
+});
+
 // The board's three actions. Each reads the center's list first, so the
 // scan-in must belong to this center, then acts, then answers with the board
 // as IMPACT now has it.
