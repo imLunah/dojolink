@@ -367,7 +367,9 @@ export default function AccountPage() {
                 onOpen={() => setShowMyStudio(true)}
               />
             )}
-            {isManager && !impact?.connected && (
+            {/* Under MyStudio's row wherever that row is: here while MyStudio
+                is unconnected, inside its card once it is. */}
+            {isManager && !mystudio?.connected && !impact?.connected && (
               <ImpactRow status={impact} onOpen={() => setShowImpact(true)} />
             )}
           </motion.div>
@@ -395,12 +397,14 @@ export default function AccountPage() {
         onOpen={() => setShowMyStudio(true)}
         className=""
       />
+      <ImpactRow status={impact} onOpen={() => setShowImpact(true)} />
     </div>
   ) : null;
 
   // Same rule as MyStudio: once connected it runs for the whole center, so
   // it gets a card that the experimental switch cannot hide.
-  const impactCard = isManager && impact?.connected ? (
+  // Only needed when MyStudio has no card for it to sit in.
+  const impactCard = isManager && impact?.connected && !mystudio?.connected ? (
     <div className={`${CARD} p-5`}>
       <ImpactRow status={impact} onOpen={() => setShowImpact(true)} className="" />
     </div>

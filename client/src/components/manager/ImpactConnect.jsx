@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TimerIcon, Trash2Icon, Loader2Icon } from 'lucide-react';
+import { Trash2Icon, Loader2Icon } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { api } from '../../api/client';
@@ -155,6 +155,16 @@ export default function ImpactConnect({ isOpen, onClose, status, onChanged }) {
   );
 }
 
+// IMPACT's own mark, the ninja head from sensei.codeninjas.com, redrawn in
+// currentColor so it themes like every other glyph.
+export function ImpactMark(props) {
+  return (
+    <svg viewBox="0 0 35.03 30.14" fill="currentColor" aria-hidden {...props}>
+      <path d="M16.699,14.747,12.111,14.2a.256.256,0,0,0-.231.411,3.535,3.535,0,0,0,4.917.548.228.228,0,0,0-.1-.414Zm7.873.42a3.536,3.536,0,0,0,4.917-.554.256.256,0,0,0-.231-.417l-4.588.551a.228.228,0,0,0-.1.42Zm10.455-.1c0,8.324-6.418,15.07-14.333,15.07A14.591,14.591,0,0,1,6.515,17.372a5.552,5.552,0,0,1-3.839,3.592A.539.539,0,0,1,1.97,20.523c-.335-3.154,1.1-4.731,2.436-5.507a5.834,5.834,0,0,1-4.3-2.347.487.487,0,0,1,.174-.74c3.044-1.492,5.1-.585,6.3.432A14.552,14.552,0,0,1,20.693,0C28.609,0,35.027,6.747,35.027,15.07ZM28.28,25.814s-11.691,4.631-19-4.807c0,0,2.874,6.667,10.047,7.459a12.312,12.312,0,0,0,8.957-2.652Zm4.7-13.7a92.3,92.3,0,0,1-12.291.712h0a104.351,104.351,0,0,1-12.306-.74,11.831,11.831,0,0,0-.323,2.984h0a16.744,16.744,0,0,0,.332,2.959,120,120,0,0,1,12.3-.569h0c3.653,0,7.858.149,12.266.591h.037a11.8,11.8,0,0,0,.323-2.978h0a16.809,16.809,0,0,0-.335-2.962ZM31.937,9.322S29.063,2.652,21.89,1.863a12.312,12.312,0,0,0-8.96,2.652s11.7-4.625,19.007,4.8Z" />
+    </svg>
+  );
+}
+
 export function ImpactRow({ status, onOpen, className = 'mt-3' }) {
   const connected = status?.connected;
   const expired = connected && status.status === 'expired';
@@ -165,8 +175,12 @@ export function ImpactRow({ status, onOpen, className = 'mt-3' }) {
       className={`${className} w-full flex items-center justify-between rounded-xl border border-ninja-border p-3 text-left transition-[transform,border-color] duration-150 ease-[var(--ease-out)] hover:border-ninja-blue/50 active:scale-[0.98]`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-ninja-blue-ink bg-ninja-blue/10">
-          <TimerIcon width="17" height="17" aria-hidden />
+        {/* A printed badge, so inline hex: the same navy tile in both themes. */}
+        <span
+          className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center"
+          style={{ backgroundColor: '#0b1f3f', color: '#ffffff' }}
+        >
+          <ImpactMark width="22" height="19" />
         </span>
         <div className="min-w-0">
           <p className="text-ninja-navy font-ninja font-semibold text-sm">IMPACT Integration</p>
