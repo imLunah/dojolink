@@ -470,9 +470,13 @@ function sessionTitle(s) {
 // red and counting up once the session is over. Same colours as the wall
 // screen, inline hex because it sits on the banner in either theme. Ticks on
 // its own so the rest of the card is not re-rendered every few seconds.
+//
+// It is the banner's whole right edge, top to bottom, as the panel is on
+// IMPACT's card: flush to the card, no radius of its own (the card's clips
+// it), and on the wide card it takes the ninja's place while they are in.
 const TIMER_TONES = { normal: ['#eef2f8', '#1b2a5c'], almost: ['#fbe9d2', '#8a4b0f'], over: ['#fde2e2', '#b42318'] };
 
-function DojoTimer({ here }) {
+function DojoTimer({ here, wide }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 5000);
@@ -487,13 +491,13 @@ function DojoTimer({ here }) {
     <span
       role="img"
       aria-label={over ? `At the dojo, session ended at ${at}` : `At the dojo, ${left} minutes left, until ${at}`}
-      className="relative flex-shrink-0 w-[92px] rounded-xl flex flex-col items-center justify-center py-2.5 px-1 shadow-[0_6px_16px_rgba(4,10,24,0.22)]"
+      className={`absolute inset-y-0 right-0 z-10 w-[112px] flex flex-col items-center justify-center px-1 ${wide ? 'lg:w-[220px]' : ''}`}
       style={{ backgroundColor: bg, color: ink }}
     >
-      <span className="font-ninja font-black text-[38px] leading-none tabular-nums">
+      <span className={`font-ninja font-black text-[48px] leading-none tabular-nums ${wide ? 'lg:text-[76px]' : ''}`}>
         {String(Math.abs(left)).padStart(2, '0')}
       </span>
-      <span className="font-ninja text-[13px] mt-1 whitespace-nowrap">{over ? 'Minutes Over' : 'Minutes Left'}</span>
+      <span className={`font-ninja text-[14px] mt-1.5 whitespace-nowrap ${wide ? 'lg:text-[18px]' : ''}`}>{over ? 'Minutes Over' : 'Minutes Left'}</span>
     </span>
   );
 }
@@ -602,7 +606,9 @@ function ChildCard({ child, wide = false, here = null }) {
               past the bottom edge so the feet crop rather than land on it, and
               `object-contain object-bottom` keeps the art standing on the
               floor at whatever size fits. */}
-          {wide && (
+          {here && <DojoTimer here={here} wide={wide} />}
+
+          {wide && !here && (
             <motion.span
               aria-hidden
               style={still ? undefined : { x: ninjaX, y: ninjaY }}
@@ -623,7 +629,7 @@ function ChildCard({ child, wide = false, here = null }) {
             </motion.span>
           )}
 
-          <div className={`relative flex items-start justify-between gap-4 ${wide ? 'lg:block lg:pr-[196px]' : ''}`}>
+          <div className={`relative flex items-start justify-between gap-4 ${here ? 'pr-[100px]' : ''} ${wide ? `lg:block ${here ? 'lg:pr-[212px]' : 'lg:pr-[196px]'}` : ''}`}>
             <div className="min-w-0">
               {age != null && age >= 3 && (
                 <p className="font-ninja text-[12px] font-extrabold opacity-85 truncate">Age {age}</p>
@@ -640,20 +646,15 @@ function ChildCard({ child, wide = false, here = null }) {
                 says anywhere else. Withholding `belt` is what picks the
                 program logo; the wide card still needs `belt` for the ninja's
                 own art. */}
-            {/* While the ninja is at a computer the side holds their timer,
-                IMPACT's panel, in place of the program mark. On the wide card
-                the side is the ninja's own art, so there it drops under the
-                name rather than squeezing it. */}
-            {here ? (
-              <span className={wide ? 'lg:inline-block lg:mt-3' : ''}><DojoTimer here={here} /></span>
-            ) : !wide && <Emblem program={heroProgram} size={64} tilt />}
+            {/* While the ninja is at a computer the timer holds the side. */}
+            {!here && !wide && <Emblem program={heroProgram} size={64} tilt />}
           </div>
 
           {/* The link, at the foot of the banner rather than in its top corner,
               which is where the ninja's raised arm is and where the words
               landed across it. Down here it is inside the same padding that
               already keeps the text clear of the art. */}
-          <div className={`relative flex items-end mt-3 ${wide ? 'lg:mt-0 lg:pr-[196px]' : ''}`}>
+          <div className={`relative flex items-end mt-3 ${here ? 'pr-[100px]' : ''} ${wide ? `lg:mt-0 ${here ? 'lg:pr-[212px]' : 'lg:pr-[196px]'}` : ''}`}>
             <span className="ml-auto inline-flex items-center gap-0.5 font-ninja text-[13px] font-extrabold text-white">
               Full profile
               <ChevronRightIcon size={15} strokeWidth={2.6} aria-hidden className="transition-transform duration-200 group-hover:translate-x-0.5" />
