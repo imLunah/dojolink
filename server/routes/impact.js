@@ -14,7 +14,11 @@ const { encryptCookie, isConfigured } = require('../lib/mystudio');
 // and counts down on its own between asks, so a missed answer costs twenty
 // seconds rather than the rest of the afternoon.
 //
-// Read-only upstream. No route here removes a ninja or extends a session.
+// Upstream it does what IMPACT's own board does and nothing more: remove a
+// ninja whose time is up, add one back, and change how long a session runs.
+// The browser names a scan-in by its id; the IMPACT username those requests
+// need is looked up here from the center's own list, so it never reaches the
+// browser, and a scan-in from another center is simply not found.
 // The stored password and tokens never appear in a response from this file.
 
 async function loadConnection(pool, locationId) {
@@ -154,6 +158,16 @@ const liveCache = new Map();
 const RECORD_EVERY_MS = 60 * 1000;
 const recordedAt = new Map();
 
+function liveBody(conn, rows) {
+  return {
+    connected: true,
+    status: 'connected',
+    facilityName: conn.facility_name,
+    fetchedAt: new Date().toISOString(),
+    ...impact.boardLists(rows),
+  };
+}
+
 // Today's scan-ins for a connection, renewing the sign-in if it has to.
 async function readScanIns(pool, conn) {
   const token = await accessTokenFor(pool, conn);
@@ -195,17 +209,10 @@ router.get('/live', requireSensei, async (req, res) => {
         console.error('IMPACT record failed:', err.message);
       });
     }
-    const ninjas = impact.liveNinjas(rows);
     pool
       .query('UPDATE impact_connections SET last_synced_at = now() WHERE id = $1', [conn.id])
       .catch(() => {});
-    const body = {
-      connected: true,
-      status: 'connected',
-      facilityName: conn.facility_name,
-      fetchedAt: new Date().toISOString(),
-      ninjas,
-    };
+    const body = liveBody(conn, rows);
     liveCache.set(locationId, { at: Date.now(), body });
     res.json(body);
   } catch (err) {
@@ -216,6 +223,42 @@ router.get('/live', requireSensei, async (req, res) => {
     res.status(502).json({ error: 'Could not reach IMPACT.' });
   }
 });
+
+// The board's three actions. Each reads the center's list first, so the
+// scan-in must belong to this center, then acts, then answers with the board
+// as IMPACT now has it.
+function boardAction(act) {
+  return async (req, res) => {
+    const pool = req.app.get('db');
+    const locationId = req.session.activeLocationId;
+    try {
+      const conn = await loadConnection(pool, locationId);
+      if (!conn) return res.status(404).json({ error: 'IMPACT is not connected for this center.' });
+      const rows = await readScanIns(pool, conn);
+      const row = rows.find((r) => String(r.key) === String(req.params.id));
+      if (!row) return res.status(404).json({ error: 'That ninja is not on today\'s board.' });
+      await act(await accessTokenFor(pool, conn), row, req.body || {});
+      liveCache.delete(locationId);
+      const fresh = await readScanIns(pool, conn);
+      await recordScanIns(pool, locationId, fresh).catch(() => {});
+      res.json(liveBody(conn, fresh));
+    } catch (err) {
+      if (err instanceof impact.ImpactRefused) return res.status(400).json({ error: err.message });
+      if (err instanceof impact.ImpactAuthError) {
+        return res.status(409).json({ error: 'The IMPACT sign-in stopped working. A director needs to sign in again.' });
+      }
+      console.error('IMPACT board action failed:', err.message);
+      res.status(502).json({ error: 'IMPACT did not take that. Try again.' });
+    }
+  };
+}
+
+router.post('/scan-ins/:id/remove', requireSensei, requireOwnLocation,
+  boardAction((token, row) => impact.setRemoved(token, row, true)));
+router.post('/scan-ins/:id/add-back', requireSensei, requireOwnLocation,
+  boardAction((token, row) => impact.setRemoved(token, row, false)));
+router.post('/scan-ins/:id/time', requireSensei, requireOwnLocation,
+  boardAction((token, row, body) => impact.setExtraTime(token, row, body.extraMinutes)));
 
 // GET /api/impact/capture — the nightly job. Vercel Cron calls it after the
 // centers close and it writes each connected center's whole day, so Reports

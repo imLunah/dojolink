@@ -5,9 +5,14 @@ const crypto = require('crypto');
 // recorded as a "scan-in" with a session length, and the sensei app's Live
 // Ninjas board is a countdown drawn from those scan-ins.
 //
-// This is the only file that talks to IMPACT. It is READ-ONLY: the sensei app
-// can also remove a ninja from the board (addorremoveninja) and extend a
-// session (extendCheckinTime), and neither is called from here.
+// This is the only file that talks to IMPACT. It reads the board and does the
+// three things IMPACT's own board does to it, with the same requests:
+//   - remove a ninja whose time is up, and add them back (addorremoveninja).
+//     IMPACT's own confirm says this "only removes this Ninja from the Ninjas
+//     in the Dojo screen, and not MyStudio or IMPACT".
+//   - lengthen or shorten a session (extendCheckinTime), which moves the time
+//     the ninja's computer signs them out.
+// Nothing here checks a ninja in, edits an account, or touches MyStudio.
 //
 // There is no public API. What follows was read off the live sensei app on
 // 25 Sep 2026 and can change without notice:
@@ -219,6 +224,21 @@ async function apiGet(accessToken, path) {
   return res.json();
 }
 
+async function apiSend(accessToken, method, path, body) {
+  const res = await timedFetch(`${API}/${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401 || res.status === 403) throw new ImpactAuthError('IMPACT refused the stored sign-in');
+  if (!res.ok) throw new ImpactError(`IMPACT answered ${res.status}`);
+  return res.text();
+}
+
 // The account's centers. Personal details on the same record are not kept.
 async function getFacilities(accessToken) {
   const me = await apiGet(accessToken, 'api/personnel');
@@ -280,6 +300,8 @@ function normalizeScanIn(row) {
   const first = String(row.firstName || '').trim();
   const last = String(row.lastName || '').trim();
   const program = String(row.programTypeName || '').trim();
+  const sessionMinutes = toMinutes(row.scanInSessionLength, 60);
+  const defaultMinutes = toMinutes(Number(row.defaultSessionLength) * 60, sessionMinutes);
   return {
     id: String(row.key),
     firstName: first,
@@ -287,34 +309,115 @@ function normalizeScanIn(row) {
     program: /^jr$/i.test(program) ? 'JR' : /^create$/i.test(program) ? 'CREATE' : program || null,
     belt: String(row.beltName || '').trim() || null,
     startedAt: row.dateCreated || null,
-    sessionMinutes: toMinutes(row.scanInSessionLength, 60),
+    sessionMinutes,
+    defaultMinutes,
+    maxExtraMinutes: maxExtension(program),
     weekMinutes: toMinutes(row.totalMinutes, 0),
+    removedAt: row.dateTimeRemoved || null,
   };
 }
 
+// How far past its normal length IMPACT lets a session run, by program. Read
+// off IMPACT's own timer dialog, which refuses anything past these.
+function maxExtension(programType) {
+  switch (String(programType || '').toLowerCase()) {
+    case 'camps':
+    case 'workshops':
+      return 300;
+    case 'clubs':
+      return 420;
+    case 'create':
+    case 'after school program':
+    case 'godot':
+    case 'unity':
+      return 240;
+    case 'academies':
+      return 60;
+    default:
+      return 120;
+  }
+}
+
 // Today's scan-ins at a center, as IMPACT has them: everyone who logged in
-// today, removed or not. Rows a sensei hid from IMPACT's dashboard are left
-// out everywhere, since hiding is how IMPACT marks a scan-in as not a ninja.
-// Raw rows: they carry names and must not leave the server as they are.
+// today, removed or hidden or not. Raw rows: they carry names and IMPACT
+// usernames and must not leave the server as they are.
 async function getScanIns(accessToken, facilityGuid) {
   const data = await apiGet(
     accessToken,
     `cncommon/api/v1/center/ninjasindojo/${encodeURIComponent(facilityGuid)}/${pacificOffsetMinutes()}`
   );
   const rows = Array.isArray(data && data.scanIns) ? data.scanIns : [];
-  return rows.filter((r) => r && r.key != null && r.dateCreated && !r.hideFromDashboard);
+  return rows.filter((r) => r && r.key != null && r.dateCreated);
 }
 
-// Who is in the dojo now: nobody has removed them yet. Oldest first.
+const byStart = (a, b) => new Date(a.startedAt) - new Date(b.startedAt);
+
+// The board in IMPACT's three lists. Hidden is how IMPACT marks an account
+// that is not a ninja at a desk (set on the child's record), so hidden rows
+// never reach the board or the removed list, only their own dropdown.
+function boardLists(rows) {
+  const shown = rows.filter((r) => !r.hideFromDashboard);
+  return {
+    ninjas: shown.filter((r) => !r.dateTimeRemoved).map(normalizeScanIn).sort(byStart),
+    removed: shown
+      .filter((r) => r.dateTimeRemoved)
+      .map(normalizeScanIn)
+      .sort((a, b) => new Date(b.removedAt) - new Date(a.removedAt)),
+    hidden: rows.filter((r) => r.hideFromDashboard && !r.dateTimeRemoved).map(normalizeScanIn).sort(byStart),
+  };
+}
+
 function liveNinjas(rows) {
-  return rows
-    .filter((r) => !r.dateTimeRemoved)
-    .map(normalizeScanIn)
-    .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+  return boardLists(rows).ninjas;
 }
 
 async function getNinjasInDojo(accessToken, facilityGuid) {
   return liveNinjas(await getScanIns(accessToken, facilityGuid));
+}
+
+// Off the board, or back on it. The same body IMPACT's own board sends.
+function setRemoved(accessToken, row, removed) {
+  return apiSend(accessToken, 'PUT', 'cncommon/api/v1/center/addorremoveninja', {
+    scanId: row.key,
+    removeNinja: removed,
+    ...(removed ? { dateTimeRemoved: new Date().toISOString() } : {}),
+  });
+}
+
+class ImpactRefused extends ImpactError {
+  constructor(message) {
+    super(message);
+    this.name = 'ImpactRefused';
+  }
+}
+
+// Set a session's extra time to `extraMinutes` past its normal length, the
+// way IMPACT's timer dialog does: never below zero, never past the program's
+// cap, never to a sign-out time already gone. Returns nothing; the board is
+// read again afterwards.
+async function setExtraTime(accessToken, row, extraMinutes) {
+  const extra = Math.round(Number(extraMinutes));
+  const n = normalizeScanIn(row);
+  const current = Math.max(0, n.sessionMinutes - n.defaultMinutes);
+  if (!Number.isFinite(extra) || extra < 0) throw new ImpactRefused('That is less than the normal session.');
+  if (extra > n.maxExtraMinutes) throw new ImpactRefused(`Sessions can run at most ${n.maxExtraMinutes} minutes over.`);
+  if (extra === current) throw new ImpactRefused('That is the time the session already has.');
+  const logout = new Date(new Date(row.dateCreated).getTime() + (n.defaultMinutes + extra) * 60000);
+  if (logout <= new Date()) throw new ImpactRefused('That sign-out time has already passed.');
+
+  const added = extra - current;
+  await apiSend(accessToken, 'POST', 'functions/api/extendCheckinTime', {
+    scanKey: row.key,
+    userName: row.userName,
+    checkinType: row.programTypeName,
+    timeExtended: extra,
+    logoutTime: logout.toISOString(),
+    defaultSessionMins: n.defaultMinutes,
+    actionType: added < 0 ? 'reduce' : 'extend',
+    ...(added < 0 ? { reducedMinutes: -added } : { addedMinutes: added }),
+    facilityId: null,
+    component: 'timer',
+  });
 }
 
 module.exports = {
@@ -327,6 +430,10 @@ module.exports = {
   getNinjasInDojo,
   getScanIns,
   liveNinjas,
+  boardLists,
+  setRemoved,
+  setExtraTime,
+  ImpactRefused,
   normalizeScanIn,
   pacificOffsetMinutes,
   readSettings,

@@ -29,7 +29,8 @@ function minutesOf(value) {
 }
 
 async function recordScanIns(pool, locationId, rows) {
-  const usable = rows.filter((r) => r.userGuid && !Number.isNaN(new Date(r.dateCreated).getTime()));
+  // Hidden accounts are not ninjas at a desk (IMPACT's own meaning of hidden).
+  const usable = rows.filter((r) => r.userGuid && !r.hideFromDashboard && !Number.isNaN(new Date(r.dateCreated).getTime()));
   if (!usable.length) return 0;
 
   const userIds = [...new Set(usable.map((r) => String(r.userGuid)))];
