@@ -4,6 +4,8 @@ import {
   ChevronLeftIcon,
   ChevronUpIcon,
   MapPinIcon,
+  UsersIcon,
+  HourglassIcon,
   XIcon,
   MinusIcon,
   PlusIcon,
@@ -278,7 +280,7 @@ function Notice({ title, children }) {
 // Today. Disabled when empty, as IMPACT's are. A titled sheet of one-line
 // rows split by hairlines, so twelve removals read as a list rather than
 // twelve boxes.
-function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
+function BarMenu({ id, label, title, items, open, onToggle, renderItem, color }) {
   const empty = items.length === 0;
   return (
     <div className="relative">
@@ -288,12 +290,11 @@ function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
         disabled={empty}
         aria-expanded={open}
         aria-controls={id}
-        className="flex items-center gap-3 rounded-lg pl-4 pr-3 h-12 min-w-[13rem] font-ninja text-[16px] whitespace-nowrap transition-colors disabled:opacity-45"
-        style={{ backgroundColor: open ? '#27477d' : '#1b3563', color: '#ffffff' }}
+        className="flex items-center gap-3 rounded-lg px-4 h-12 min-w-[14rem] font-ninja text-[18px] font-semibold whitespace-nowrap transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:hover:brightness-100"
+        style={{ backgroundColor: color, color: '#ffffff' }}
       >
-        <span className="font-black tabular-nums">{items.length}</span>
-        <span className="font-semibold" style={{ color: '#c9d6ee' }}>{label}</span>
-        <ChevronUpIcon size={18} aria-hidden className={`ml-auto transition-transform ${open ? '' : 'rotate-180'}`} style={{ color: '#9fb0cf' }} />
+        {items.length} {label}
+        <ChevronUpIcon size={20} aria-hidden className={`ml-auto transition-transform ${open ? '' : 'rotate-180'}`} />
       </button>
       {open && !empty && (
         <div
@@ -301,9 +302,8 @@ function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
           className="absolute bottom-full right-0 mb-3 w-[22rem] rounded-2xl overflow-hidden font-ninja"
           style={{ backgroundColor: '#ffffff', boxShadow: '0 12px 30px rgba(15, 30, 60, 0.25)' }}
         >
-          <p className="flex items-baseline justify-between px-4 pt-3.5 pb-2.5 text-[13px] font-bold uppercase tracking-wide" style={{ color: MUTED, borderBottom: '1px solid #edf1f7' }}>
+          <p className="px-4 pt-3.5 pb-2.5 text-[16px] font-bold" style={{ color: INK, borderBottom: '1px solid #edf1f7' }}>
             {title}
-            <span className="tabular-nums">{items.length}</span>
           </p>
           <ul className="max-h-[50vh] overflow-y-auto no-scrollbar">
             {items.map((n, i) => (
@@ -319,13 +319,14 @@ function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
 }
 
 // IMPACT's footer, cleaned up: one navy bar across the whole bottom with the
-// center and its two numbers on the left, the two lists on the right.
-function Stat({ value, label, color }) {
+// center and its two counts on the left, the two lists on the right. The
+// counts read as one line each ("6 Online"), in the colour IMPACT gives them.
+function Stat({ Icon, children, color }) {
   return (
-    <div className="flex flex-col leading-none">
-      <span className="font-black text-[28px] tabular-nums" style={{ color }}>{value}</span>
-      <span className="mt-1.5 text-[12px] font-bold uppercase tracking-wider" style={{ color: '#9fb0cf' }}>{label}</span>
-    </div>
+    <span className="flex items-center gap-2 text-[20px] font-semibold whitespace-nowrap" style={{ color }}>
+      <Icon size={22} aria-hidden />
+      {children}
+    </span>
   );
 }
 
@@ -485,14 +486,14 @@ export default function LiveNinjasPage() {
             </span>
           </div>
           {DIVIDER}
-          <div className="flex items-center gap-8">
-            <Stat value={ninjas.length} label="In the dojo" color="#5ad19a" />
-            <Stat value={almostDone} label="Almost done" color="#f2b14c" />
-          </div>
+          <Stat Icon={UsersIcon} color="#5ad19a">{ninjas.length} Online</Stat>
+          {DIVIDER}
+          <Stat Icon={HourglassIcon} color="#f2b14c">{almostDone} Almost Done</Stat>
           <div className="ml-auto flex items-center gap-3">
           <BarMenu
             id="hidden-ninjas"
             label="Hidden Ninjas"
+            color="#46536b"
             items={hidden}
             open={menu === 'hidden'}
             onToggle={() => toggle('hidden')}
@@ -510,6 +511,7 @@ export default function LiveNinjasPage() {
           <BarMenu
             id="removed-today"
             label="Removed Today"
+            color="#3b82f6"
             items={removed}
             open={menu === 'removed'}
             onToggle={() => toggle('removed')}
