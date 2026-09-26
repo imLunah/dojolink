@@ -499,6 +499,18 @@ function DojoTimer({ here, wide }) {
       className={`absolute inset-y-0 right-0 z-10 w-[112px] flex flex-col items-center justify-center px-1 ${wide ? 'lg:w-[220px]' : ''}`}
       style={{ backgroundColor: bg, color: ink }}
     >
+      {/* The panel's left edge bows out into the banner rather than meeting
+          it on a straight cut. A path stretched to the panel's height:
+          preserveAspectRatio="none" is fine here, it is a single curve with
+          nothing round in it to distort. */}
+      <svg
+        aria-hidden
+        viewBox="0 0 40 100"
+        preserveAspectRatio="none"
+        className={`absolute inset-y-0 right-[calc(100%-1px)] h-full w-[25px] ${wide ? 'lg:w-[41px]' : ''}`}
+      >
+        <path d="M40,0 C12,26 12,74 40,100 Z" fill={bg} />
+      </svg>
       <span className={`font-ninja font-black text-[48px] leading-none tabular-nums ${wide ? 'lg:text-[76px]' : ''}`}>
         {String(Math.abs(left)).padStart(2, '0')}
       </span>
@@ -642,7 +654,7 @@ function ChildCard({ child, wide = false, here = null }) {
             </motion.span>
           )}
 
-          <div className={`relative flex items-start justify-between gap-4 ${here ? 'pr-[100px]' : ''} ${wide ? `lg:block ${here ? 'lg:pr-[212px]' : 'lg:pr-[196px]'}` : ''}`}>
+          <div className={`relative flex items-start justify-between gap-4 ${here ? 'pr-[124px]' : ''} ${wide ? `lg:block ${here ? 'lg:pr-[236px]' : 'lg:pr-[196px]'}` : ''}`}>
             <div className="min-w-0">
               {age != null && age >= 3 && (
                 <p className="font-ninja text-[12px] font-extrabold opacity-85 truncate">Age {age}</p>
@@ -667,7 +679,7 @@ function ChildCard({ child, wide = false, here = null }) {
               which is where the ninja's raised arm is and where the words
               landed across it. Down here it is inside the same padding that
               already keeps the text clear of the art. */}
-          <div className={`relative flex items-end mt-3 ${here ? 'pr-[100px]' : ''} ${wide ? `lg:mt-0 ${here ? 'lg:pr-[212px]' : 'lg:pr-[196px]'}` : ''}`}>
+          <div className={`relative flex items-end mt-3 ${here ? 'pr-[124px]' : ''} ${wide ? `lg:mt-0 ${here ? 'lg:pr-[236px]' : 'lg:pr-[196px]'}` : ''}`}>
             <span className="ml-auto inline-flex items-center gap-0.5 font-ninja text-[13px] font-extrabold text-white">
               Full profile
               <ChevronRightIcon size={15} strokeWidth={2.6} aria-hidden className="transition-transform duration-200 group-hover:translate-x-0.5" />
