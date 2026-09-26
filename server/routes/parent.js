@@ -7,6 +7,7 @@ const router = express.Router();
 const NINJA_TONES = ['light', 'medium', 'dark'];
 const { requireParent } = require('../middleware/auth');
 const { stickerRarity } = require('../lib/stickerRarity');
+const { familyAtDojo } = require('../lib/impactPresence');
 const { DELETION_REASONS, cleanDetails } = require('../lib/deleteStaffUser');
 
 const loginLimiter = rateLimit({
@@ -586,6 +587,26 @@ router.get('/students', requireParent, async (req, res) => {
   } catch (err) {
     console.error('Parent students error:', err);
     res.status(500).json({ error: 'Failed to load students' });
+  }
+});
+
+// GET /api/parent/at-dojo — which of this family's ninjas are at a desk right
+// now, from IMPACT's board, and until when. { atDojo: { [studentId]:
+// { startedAt, endsAt } } }. Only this family's active ninjas at this center
+// are ever looked up; an unconnected center or an IMPACT outage is simply {}.
+router.get('/at-dojo', requireParent, async (req, res) => {
+  const pool = req.app.get('db');
+  try {
+    const { rows } = await pool.query(`
+      SELECT s.id FROM students s
+      WHERE LOWER(s.parent_email) = LOWER($1) AND s.active = true
+        AND EXISTS (SELECT 1 FROM student_locations sl WHERE sl.student_id = s.id AND sl.location_id = $2)
+    `, [req.session.parentEmail, req.session.parentLocationId]);
+    const atDojo = await familyAtDojo(pool, req.session.parentLocationId, rows.map((r) => r.id));
+    res.json({ atDojo });
+  } catch (err) {
+    console.error('Parent at-dojo error:', err.message);
+    res.json({ atDojo: {} });
   }
 });
 

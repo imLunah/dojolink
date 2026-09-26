@@ -128,4 +128,4 @@ async function recordScanIns(pool, locationId, rows) {
   return usable.length;
 }
 
-module.exports = { recordScanIns, dojoBelts };
+module.exports = { recordScanIns, dojoBelts, matchStudents };

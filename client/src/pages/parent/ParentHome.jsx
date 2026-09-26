@@ -14,6 +14,7 @@ import { fmtDay, fmtLongDay, calcAge } from '../../lib/parentProgress';
 import { ninjaSrc } from '../../utils/ninjas';
 import { hoursFor, slotsFor, fmtHour } from '../../lib/centerHours';
 import { ymd, listingHook, HOUSE, WASH, PLATE } from '../../lib/eventListing';
+import useLiveRefresh from '../../lib/useLiveRefresh';
 
 // Home: the family at a glance.
 //
@@ -464,7 +465,16 @@ function sessionTitle(s) {
 // The stacked card keeps the emblem instead of the ninja: at half a column the
 // banner is only as tall as its own lines, and a ninja cropped to the
 // shoulders is worse than no ninja.
-function ChildCard({ child, wide = false }) {
+// "At the dojo until 5:46 pm", from IMPACT: the ninja has scanned in at a
+// computer and not been taken off the board. Past the end of the session it
+// says so, because a kid whose time is up is waiting to be picked up.
+function atDojoLine(here) {
+  const end = new Date(here.endsAt);
+  const at = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  return end.getTime() > Date.now() ? `At the dojo until ${at}` : `Session ended at ${at}`;
+}
+
+function ChildCard({ child, wide = false, here = null }) {
   const programs = child.programs || [];
   const sessions = child.recent_sessions || [];
   const clubs = child.recent_clubs || [];
@@ -597,6 +607,12 @@ function ChildCard({ child, wide = false }) {
               <h2 className={`font-ninja font-extrabold leading-tight mt-1 truncate text-[22px] ${wide ? 'lg:text-[34px] lg:tracking-[-0.03em]' : ''}`}>
                 {child.full_name}
               </h2>
+              {here && (
+                <p className="mt-1.5 flex items-center gap-2 font-ninja text-[14px] font-extrabold">
+                  <span aria-hidden className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#5ad19a' }} />
+                  {atDojoLine(here)}
+                </p>
+              )}
             </div>
             {/* The PROGRAM's mark, not the belt roundel. `Emblem` draws the
                 belt when it is handed one for CREATE, which is right on a
@@ -659,6 +675,15 @@ export default function ParentHome() {
     return () => { alive = false; };
   }, []);
 
+  // Which ninjas are at a computer right now, per IMPACT. Polled while the
+  // page is open and visible; an empty answer just leaves the line off.
+  const [atDojo, setAtDojo] = useState({});
+  const loadAtDojo = () => {
+    api.get('/parent/at-dojo').then((r) => setAtDojo(r?.atDojo || {})).catch(() => {});
+  };
+  useEffect(loadAtDojo, []);
+  useLiveRefresh(loadAtDojo, { intervalMs: 30000 });
+
   // Every ninja on the family, always. The switcher that used to filter this
   // to one of them is gone: Home draws a card per ninja, so it was a control
   // for hiding something already on the screen.
@@ -688,7 +713,7 @@ export default function ParentHome() {
             <>
               <LiveSchedule center={parent?.centerName} />
               <div className={`grid grid-cols-1 gap-4 ${visible.length > 1 ? 'lg:grid-cols-2' : ''}`}>
-                {visible.map((c) => <ChildCard key={c.id} child={c} wide={visible.length === 1} />)}
+                {visible.map((c) => <ChildCard key={c.id} child={c} wide={visible.length === 1} here={atDojo[c.id] || null} />)}
               </div>
             </>
           )}

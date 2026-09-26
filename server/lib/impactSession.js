@@ -101,4 +101,18 @@ async function accessTokenFor(pool, conn, { force = false } = {}) {
   return decryptCookie(renewed.access_token);
 }
 
-module.exports = { accessTokenFor };
+// Today's scan-ins for a connection, renewing the sign-in if it has to.
+async function readScanIns(pool, conn) {
+  const token = await accessTokenFor(pool, conn);
+  try {
+    return await impact.getScanIns(token, conn.facility_guid);
+  } catch (err) {
+    // A token IMPACT turned away before its stated expiry: renew once and
+    // ask again before calling the connection dead. Only the read gets this
+    // second go; a refused password never does.
+    if (!(err instanceof impact.ImpactAuthError)) throw err;
+    return impact.getScanIns(await accessTokenFor(pool, conn, { force: true }), conn.facility_guid);
+  }
+}
+
+module.exports = { accessTokenFor, readScanIns };
