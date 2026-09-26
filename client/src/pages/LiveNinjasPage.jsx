@@ -4,8 +4,6 @@ import {
   ChevronLeftIcon,
   ChevronUpIcon,
   MapPinIcon,
-  UsersIcon,
-  HourglassIcon,
   XIcon,
   MinusIcon,
   PlusIcon,
@@ -290,16 +288,17 @@ function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
         disabled={empty}
         aria-expanded={open}
         aria-controls={id}
-        className="flex items-center gap-1.5 rounded-full px-4 py-3 font-ninja text-[16px] font-semibold whitespace-nowrap disabled:opacity-50"
-        style={{ backgroundColor: '#ffffff', color: INK, boxShadow: SHADOW }}
+        className="flex items-center gap-3 rounded-lg pl-4 pr-3 h-12 min-w-[13rem] font-ninja text-[16px] whitespace-nowrap transition-colors disabled:opacity-45"
+        style={{ backgroundColor: open ? '#27477d' : '#1b3563', color: '#ffffff' }}
       >
-        {items.length} {label}
-        <ChevronUpIcon size={18} aria-hidden className={`transition-transform ${open ? '' : 'rotate-180'}`} />
+        <span className="font-black tabular-nums">{items.length}</span>
+        <span className="font-semibold" style={{ color: '#c9d6ee' }}>{label}</span>
+        <ChevronUpIcon size={18} aria-hidden className={`ml-auto transition-transform ${open ? '' : 'rotate-180'}`} style={{ color: '#9fb0cf' }} />
       </button>
       {open && !empty && (
         <div
           id={id}
-          className="absolute bottom-full right-0 mb-2 w-[22rem] rounded-2xl overflow-hidden font-ninja"
+          className="absolute bottom-full right-0 mb-3 w-[22rem] rounded-2xl overflow-hidden font-ninja"
           style={{ backgroundColor: '#ffffff', boxShadow: '0 12px 30px rgba(15, 30, 60, 0.25)' }}
         >
           <p className="flex items-baseline justify-between px-4 pt-3.5 pb-2.5 text-[13px] font-bold uppercase tracking-wide" style={{ color: MUTED, borderBottom: '1px solid #edf1f7' }}>
@@ -319,22 +318,18 @@ function BarMenu({ id, label, title, items, open, onToggle, renderItem }) {
   );
 }
 
-function StatusBar({ location, online, almostDone }) {
-  const item = 'flex items-center gap-2 whitespace-nowrap';
-  const bar = <span style={{ color: '#c3cde0' }}>|</span>;
+// IMPACT's footer, cleaned up: one navy bar across the whole bottom with the
+// center and its two numbers on the left, the two lists on the right.
+function Stat({ value, label, color }) {
   return (
-    <div
-      className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 rounded-full px-6 py-3 font-ninja text-[17px] font-semibold"
-      style={{ backgroundColor: '#ffffff', color: INK, boxShadow: SHADOW }}
-    >
-      <span className={item}><MapPinIcon size={20} style={{ color: BLUE }} aria-hidden />{location}</span>
-      {bar}
-      <span className={item}><UsersIcon size={20} style={{ color: BLUE }} aria-hidden />{online} Online</span>
-      {bar}
-      <span className={item}><HourglassIcon size={20} style={{ color: '#e08a1e' }} aria-hidden />{almostDone} Session Almost Done</span>
+    <div className="flex flex-col leading-none">
+      <span className="font-black text-[28px] tabular-nums" style={{ color }}>{value}</span>
+      <span className="mt-1.5 text-[12px] font-bold uppercase tracking-wider" style={{ color: '#9fb0cf' }}>{label}</span>
     </div>
   );
 }
+
+const DIVIDER = <span aria-hidden className="self-stretch w-px my-5" style={{ backgroundColor: 'rgba(255,255,255,0.14)' }} />;
 
 export default function LiveNinjasPage() {
   const { user } = useAuth();
@@ -453,7 +448,7 @@ export default function LiveNinjasPage() {
         </svg>
       </header>
 
-      <main className="relative px-4 sm:px-6 pb-32">
+      <main className="relative px-4 sm:px-6 pb-36">
         {actionError && (
           <p className="mx-auto mb-5 max-w-lg rounded-xl px-4 py-3 text-center font-ninja font-semibold" style={{ backgroundColor: '#ffffff', color: '#b42318', boxShadow: SHADOW }}>
             {actionError}
@@ -479,8 +474,22 @@ export default function LiveNinjasPage() {
       </main>
 
       {live && (
-        <div className="fixed bottom-5 inset-x-0 z-20 flex flex-wrap items-center justify-center gap-3 px-4">
-          <StatusBar location={data.facilityName || user?.activeLocation?.name} online={ninjas.length} almostDone={almostDone} />
+        <footer
+          className="fixed bottom-0 inset-x-0 z-20 flex items-stretch gap-6 px-6 sm:px-8 h-[84px] font-ninja"
+          style={{ backgroundColor: '#0f2346', boxShadow: '0 -8px 24px rgba(15, 35, 70, 0.18)' }}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <MapPinIcon size={22} aria-hidden style={{ color: '#9fb0cf' }} />
+            <span className="font-extrabold text-[22px] truncate" style={{ color: '#ffffff' }}>
+              {data.facilityName || user?.activeLocation?.name}
+            </span>
+          </div>
+          {DIVIDER}
+          <div className="flex items-center gap-8">
+            <Stat value={ninjas.length} label="In the dojo" color="#5ad19a" />
+            <Stat value={almostDone} label="Almost done" color="#f2b14c" />
+          </div>
+          <div className="ml-auto flex items-center gap-3">
           <BarMenu
             id="hidden-ninjas"
             label="Hidden Ninjas"
@@ -526,7 +535,8 @@ export default function LiveNinjasPage() {
               </>
             )}
           />
-        </div>
+          </div>
+        </footer>
       )}
 
       {timerFor && (
